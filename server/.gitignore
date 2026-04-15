@@ -1,0 +1,10 @@
+# Environment variables
+.env
+.env.local
+
+# Prisma generated client
+src/generated/
+
+# Build output
+dist/
+*.tsbuildinfo

@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum QuestionCategory {
+  QUANT
+  DILR
+  VARC
+}
+
+enum QuestionSource {
+  MANUAL
+  AI
+}
+
+model User {
+  id          String   @id @default(uuid())
+  firebaseUid String   @unique @map("firebase_uid")
+  email       String   @unique
+  displayName String?  @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  role        String   @default("user")
+  eloRating   Int      @default(1200) @map("elo_rating")
+  gamesPlayed Int      @default(0) @map("games_played")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  practiceAnswers PracticeAnswer[]
+
+  @@index([eloRating])
+  @@map("users")
+}
+
+model Question {
+  id            String           @id @default(uuid())
+  category      QuestionCategory
+  subTopic      String?          @map("sub_topic")
+  difficulty    Int              @default(3)
+  text          String
+  options       Json
+  correctAnswer Int              @map("correct_answer")
+  explanation   String
+  source        QuestionSource   @default(MANUAL)
+  isVerified    Boolean          @default(false) @map("is_verified")
+  timesServed   Int              @default(0) @map("times_served")
+  timesCorrect  Int              @default(0) @map("times_correct")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  practiceAnswers PracticeAnswer[]
+
+  @@index([category, difficulty])
+  @@index([isVerified, category])
+  @@map("questions")
+}
+
+model PracticeAnswer {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  questionId     String   @map("question_id")
+  selectedAnswer Int      @map("selected_answer")
+  isCorrect      Boolean  @map("is_correct")
+  timeTakenMs    Int      @map("time_taken_ms")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id])
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@index([userId, questionId])
+  @@map("practice_answers")
+}
