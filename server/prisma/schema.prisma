@@ -32,6 +32,9 @@ model User {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   practiceAnswers PracticeAnswer[]
+  matchesAsPlayer1 Match[]        @relation("MatchPlayer1")
+  matchesAsPlayer2 Match[]        @relation("MatchPlayer2")
+  matchAnswers    MatchAnswer[]
 
   @@index([eloRating])
   @@map("users")
@@ -54,6 +57,7 @@ model Question {
   updatedAt     DateTime         @updatedAt @map("updated_at")
 
   practiceAnswers PracticeAnswer[]
+  matchAnswers    MatchAnswer[]
 
   @@index([category, difficulty])
   @@index([isVerified, category])
@@ -74,4 +78,45 @@ model PracticeAnswer {
 
   @@index([userId, questionId])
   @@map("practice_answers")
+}
+
+model Match {
+  id              String   @id
+  player1Id       String   @map("player1_id")
+  player2Id       String   @map("player2_id")
+  winnerId        String?  @map("winner_id")
+  isDraw          Boolean  @map("is_draw")
+  player1Score    Int      @map("player1_score")
+  player2Score    Int      @map("player2_score")
+  player1Answered Int      @map("player1_answered")
+  player2Answered Int      @map("player2_answered")
+  totalQuestions  Int      @map("total_questions")
+  durationSeconds Int      @map("duration_seconds")
+  finishedAt      DateTime @map("finished_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  player1 User         @relation("MatchPlayer1", fields: [player1Id], references: [id])
+  player2 User         @relation("MatchPlayer2", fields: [player2Id], references: [id])
+  answers MatchAnswer[]
+
+  @@index([player1Id])
+  @@index([player2Id])
+  @@map("matches")
+}
+
+model MatchAnswer {
+  id             String  @id @default(uuid())
+  matchId        String  @map("match_id")
+  userId         String  @map("user_id")
+  questionId     String  @map("question_id")
+  selectedAnswer Int     @map("selected_answer")
+  isCorrect      Boolean @map("is_correct")
+  timeTakenMs    Int     @map("time_taken_ms")
+
+  match    Match    @relation(fields: [matchId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@index([matchId, userId])
+  @@map("match_answers")
 }

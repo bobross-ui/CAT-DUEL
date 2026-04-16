@@ -9,6 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginScreen() {
@@ -17,6 +19,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const handleEmailSignIn = async () => {
     if (!email || !password) {
@@ -26,9 +29,15 @@ export default function LoginScreen() {
     setError('');
     setLoading(true);
     try {
-      await signInWithEmail(email, password);
-    } catch {
-      setError('Invalid email or password.');
+      if (isRegistering) {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmail(email, password);
+      }
+    } catch (err: any) {
+      if (err.code === 'auth/email-already-in-use') setError('Email already registered. Sign in instead.');
+      else if (err.code === 'auth/weak-password') setError('Password must be at least 6 characters.');
+      else setError(isRegistering ? 'Registration failed.' : 'Invalid email or password.');
     } finally {
       setLoading(false);
     }
@@ -46,7 +55,7 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Text style={styles.title}>CAT Duel</Text>
-      <Text style={styles.subtitle}>Sign in to compete</Text>
+      <Text style={styles.subtitle}>{isRegistering ? 'Create an account' : 'Sign in to compete'}</Text>
 
       <TextInput
         style={styles.input}
@@ -67,12 +76,22 @@ export default function LoginScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <TouchableOpacity style={styles.button} onPress={handleEmailSignIn} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
+        {loading
+          ? <ActivityIndicator color="#fff" />
+          : <Text style={styles.buttonText}>{isRegistering ? 'Register' : 'Sign In'}</Text>}
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={loading}>
-        <Text style={styles.googleButtonText}>Continue with Google</Text>
+      <TouchableOpacity onPress={() => { setIsRegistering(r => !r); setError(''); }}>
+        <Text style={styles.toggleText}>
+          {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}
+        </Text>
       </TouchableOpacity>
+
+      {!isRegistering && (
+        <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={loading}>
+          <Text style={styles.googleButtonText}>Continue with Google</Text>
+        </TouchableOpacity>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -121,6 +140,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  toggleText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 12,
+    textDecorationLine: 'underline',
   },
   googleButton: {
     borderWidth: 1,

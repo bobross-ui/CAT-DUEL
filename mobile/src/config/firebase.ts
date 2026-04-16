@@ -1,7 +1,7 @@
+import { Platform } from 'react-native';
 import { initializeApp } from 'firebase/app';
-import { initializeAuth } from 'firebase/auth';
-// @ts-ignore: getReactNativePersistence exists in the RN bundle 
-// but is often missing from public TypeScript definitions.
+import { initializeAuth, browserLocalPersistence, indexedDBLocalPersistence } from 'firebase/auth';
+// @ts-ignore: getReactNativePersistence exists in the RN bundle
 import { getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -16,6 +16,8 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
+const persistence = Platform.OS === 'web'
+  ? [indexedDBLocalPersistence, browserLocalPersistence]
+  : getReactNativePersistence(AsyncStorage);
+
+export const auth = initializeAuth(app, { persistence });

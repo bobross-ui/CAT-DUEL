@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const redirectUri = makeRedirectUri({ useProxy: true });
+  const redirectUri = makeRedirectUri();
 
   const [, response, promptAsync] = Google.useAuthRequest({
     clientId: WEB_CLIENT_ID,
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
-    await promptAsync({ useProxy: true });
+    await promptAsync();
   };
 
   const signOut = async () => {

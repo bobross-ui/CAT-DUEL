@@ -60,6 +60,10 @@ export default function ProfileScreen({ navigation }: Props) {
         </View>
       </View>
 
+      <TouchableOpacity style={styles.duelButton} onPress={() => navigation.navigate('Matchmaking')}>
+        <Text style={styles.duelButtonText}>Find Duel</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.practiceButton} onPress={() => navigation.navigate('PracticeHome')}>
         <Text style={styles.practiceButtonText}>Practice</Text>
       </TouchableOpacity>
@@ -114,8 +118,22 @@ const styles = StyleSheet.create({
     color: '#e53e3e',
     fontSize: 16,
   },
-  practiceButton: {
+  duelButton: {
     backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  duelButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  practiceButton: {
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#1a1a1a',
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
@@ -124,7 +142,7 @@ const styles = StyleSheet.create({
   practiceButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
+    color: '#1a1a1a',
   },
   signOutButton: {
     borderWidth: 1,
