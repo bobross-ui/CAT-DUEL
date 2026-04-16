@@ -14,11 +14,17 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   try {
     const decoded = await admin.auth().verifyIdToken(token);
 
-    const user = await prisma.user.upsert({
-      where: { firebaseUid: decoded.uid },
-      update: { email: decoded.email ?? '', displayName: decoded.name ?? null, avatarUrl: decoded.picture ?? null },
-      create: { firebaseUid: decoded.uid, email: decoded.email ?? '', displayName: decoded.name ?? null, avatarUrl: decoded.picture ?? null },
-    });
+    let user = await prisma.user.findUnique({ where: { firebaseUid: decoded.uid } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          firebaseUid: decoded.uid,
+          email: decoded.email ?? '',
+          displayName: decoded.name ?? null,
+          avatarUrl: decoded.picture ?? null,
+        },
+      });
+    }
 
     req.user = user;
     next();

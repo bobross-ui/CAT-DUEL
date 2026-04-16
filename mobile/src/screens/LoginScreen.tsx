@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,6 +17,7 @@ export default function LoginScreen() {
   const { signInWithEmail, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
@@ -26,11 +27,16 @@ export default function LoginScreen() {
       setError('Please enter email and password.');
       return;
     }
+    if (isRegistering && !displayName.trim()) {
+      setError('Please enter a display name.');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
       if (isRegistering) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(newUser, { displayName: displayName.trim() });
       } else {
         await signInWithEmail(email, password);
       }
@@ -57,6 +63,15 @@ export default function LoginScreen() {
       <Text style={styles.title}>CAT Duel</Text>
       <Text style={styles.subtitle}>{isRegistering ? 'Create an account' : 'Sign in to compete'}</Text>
 
+      {isRegistering && (
+        <TextInput
+          style={styles.input}
+          placeholder="Display Name"
+          value={displayName}
+          onChangeText={setDisplayName}
+          autoCapitalize="words"
+        />
+      )}
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -81,7 +96,7 @@ export default function LoginScreen() {
           : <Text style={styles.buttonText}>{isRegistering ? 'Register' : 'Sign In'}</Text>}
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => { setIsRegistering(r => !r); setError(''); }}>
+      <TouchableOpacity onPress={() => { setIsRegistering(r => !r); setError(''); setDisplayName(''); }}>
         <Text style={styles.toggleText}>
           {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}
         </Text>

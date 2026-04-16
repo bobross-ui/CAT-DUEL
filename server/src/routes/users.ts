@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Prisma } from '../generated/prisma/client';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
@@ -11,14 +12,24 @@ const updateProfileSchema = z.object({
   avatarUrl: z.string().url().optional(),
 });
 
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', authMiddleware, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user) {
       res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
       return;
     }
-    res.json({ success: true, data: user });
+    const isOwnProfile = req.user.id === user.id;
+    const publicData = {
+      id: user.id,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      eloRating: user.eloRating,
+      gamesPlayed: user.gamesPlayed,
+      createdAt: user.createdAt,
+      ...(isOwnProfile && { email: user.email }),
+    };
+    res.json({ success: true, data: publicData });
   } catch (err) {
     next(err);
   }
@@ -32,6 +43,10 @@ router.patch('/me', authMiddleware, validate(updateProfileSchema), async (req, r
     });
     res.json({ success: true, data: user });
   } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      res.status(409).json({ success: false, error: { code: 'DISPLAY_NAME_TAKEN', message: 'That display name is already taken.' } });
+      return;
+    }
     next(err);
   }
 });

@@ -33,7 +33,7 @@ export type GamePlayer = { userId: string; elo: number };
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const QUESTION_COUNT = 20;
-const GAME_DURATION_SECONDS = 600;
+const GAME_DURATION_SECONDS = 120; // TODO: restore to 600 after testing
 const COUNTDOWN_SECONDS = 3;
 
 // In-memory timer maps. Both are lost on server restart; active games in Redis
@@ -163,18 +163,18 @@ async function startCountdown(
 
     current.status = 'ACTIVE';
     current.startedAt = Date.now();
-    await saveGameState(current);
 
-    const firstQuestion = await getQuestionForClient(current.questionIds[0]);
+    const [firstQuestion] = await Promise.all([
+      getQuestionForClient(current.questionIds[0]),
+      saveGameState(current),
+    ]);
 
+    // Send start + first question in one event so mobile never has a blank ACTIVE state
     gameNs.to(gameId).emit('game:start', {
       duration: current.durationSeconds,
       totalQuestions: current.questionIds.length,
-    });
-    gameNs.to(gameId).emit('game:question', {
-      question: firstQuestion,
+      firstQuestion,
       questionNumber: 1,
-      totalQuestions: current.questionIds.length,
     });
 
     startGameTimer(gameId, current.durationSeconds, gameNs);
@@ -191,8 +191,8 @@ function startGameTimer(
   const interval = setInterval(() => {
     remaining -= 1;
 
-    // Broadcast every 10s, and every 1s in the last 30s
-    if (remaining <= 30 || remaining % 10 === 0) {
+    // Sync clients every 10s — client ticks locally between syncs
+    if (remaining % 10 === 0) {
       gameNs.to(gameId).emit('game:timer', { remaining });
     }
 
@@ -249,9 +249,8 @@ async function handleAnswer(
   state[progressKey] += 1;
   if (isCorrect) state[scoreKey] += 1;
 
-  await saveGameState(state);
-
-  // Tell the answering player the result (correct answer revealed here)
+  // Emit to both players immediately — score is already computed in memory,
+  // no need to wait for the Redis write before notifying clients
   socket.emit('answer:result', {
     questionId,
     isCorrect,
@@ -259,15 +258,20 @@ async function handleAnswer(
     yourScore: state[scoreKey],
   });
 
-  // Tell the opponent the updated score — not which question or answer
   socket.to(gameId).emit('opponent:scored', {
-    opponentScore: state[scoreKey], // opponent's view: "my opponent's score"
+    opponentScore: state[scoreKey],
   });
 
-  // Send next question to the answering player if there are more
+  // Persist state and fetch next question in parallel
   const newProgress = state[progressKey];
-  if (newProgress < state.questionIds.length) {
-    const nextQuestion = await getQuestionForClient(state.questionIds[newProgress]);
+  const [nextQuestion] = await Promise.all([
+    newProgress < state.questionIds.length
+      ? getQuestionForClient(state.questionIds[newProgress])
+      : Promise.resolve(null),
+    saveGameState(state),
+  ]);
+
+  if (nextQuestion) {
     socket.emit('game:question', {
       question: nextQuestion,
       questionNumber: newProgress + 1,
@@ -331,7 +335,11 @@ export async function endGame(
     durationSeconds: state.durationSeconds,
   };
 
-  gameNs.to(gameId).emit('game:finished', results);
+  // Emit individually so each client receives their own Postgres userId for winner comparison
+  const sockets = await gameNs.in(gameId).fetchSockets();
+  for (const s of sockets) {
+    s.emit('game:finished', { ...results, currentUserId: s.data.user.id });
+  }
 
   // Clean up active game markers
   await redis.del(

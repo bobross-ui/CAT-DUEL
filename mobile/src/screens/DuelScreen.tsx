@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, BackHandler, Animated,
+  ScrollView, Alert, BackHandler, Animated, Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Socket } from 'socket.io-client';
@@ -66,6 +66,7 @@ export default function DuelScreen({ route, navigation }: Props) {
   const socketRef = useRef<Socket | null>(null);
   const questionStartTime = useRef(Date.now());
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Score animations
   const yourScoreScale = useRef(new Animated.Value(1)).current;
@@ -112,19 +113,32 @@ export default function DuelScreen({ route, navigation }: Props) {
         }, 1000);
       });
 
-      socket.on('game:start', ({ duration, totalQuestions }: { duration: number; totalQuestions: number }) => {
+      socket.on('game:start', ({ duration, totalQuestions, firstQuestion, questionNumber }: { duration: number; totalQuestions: number; firstQuestion: ClientQuestion; questionNumber: number }) => {
         if (!mounted) return;
         if (countdownIntervalRef.current) {
           clearInterval(countdownIntervalRef.current);
           countdownIntervalRef.current = null;
         }
+        questionStartTime.current = Date.now();
         setDuelState((prev) => ({
           ...prev,
           phase: 'ACTIVE',
           duration,
           timeRemaining: duration,
           totalQuestions,
+          currentQuestion: firstQuestion,
+          questionNumber,
+          selectedAnswer: null,
+          showFeedback: false,
         }));
+        // Local tick — server syncs every 10s to correct drift
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = setInterval(() => {
+          setDuelState((prev) => {
+            if (prev.timeRemaining <= 0) return prev;
+            return { ...prev, timeRemaining: prev.timeRemaining - 1 };
+          });
+        }, 1000);
       });
 
       socket.on('game:question', ({ question, questionNumber, totalQuestions }: { question: ClientQuestion; questionNumber: number; totalQuestions: number }) => {
@@ -154,10 +168,13 @@ export default function DuelScreen({ route, navigation }: Props) {
 
       socket.on('opponent:scored', ({ opponentScore }: { opponentScore: number }) => {
         if (!mounted) return;
-        animateScore(opponentScoreScale);
-        setDuelState((prev) => ({ ...prev, opponentScore }));
+        setDuelState((prev) => {
+          if (prev.opponentScore !== opponentScore) animateScore(opponentScoreScale);
+          return { ...prev, opponentScore };
+        });
       });
 
+      // Server sync every 10s — corrects any local drift
       socket.on('game:timer', ({ remaining }: { remaining: number }) => {
         if (!mounted) return;
         setDuelState((prev) => ({ ...prev, timeRemaining: remaining }));
@@ -200,7 +217,7 @@ export default function DuelScreen({ route, navigation }: Props) {
         socket.disconnect();
         navigation.replace('DuelResults', {
           results,
-          userId: user!.uid,
+          userId: results.currentUserId,
           opponent,
         });
       });
@@ -218,6 +235,7 @@ export default function DuelScreen({ route, navigation }: Props) {
     return () => {
       mounted = false;
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
@@ -252,22 +270,25 @@ export default function DuelScreen({ route, navigation }: Props) {
       navigation.replace('Profile');
       return;
     }
-    Alert.alert(
-      'Quit Duel?',
-      'You will forfeit this match and your opponent will win.',
-      [
-        { text: 'Stay', style: 'cancel' },
-        {
-          text: 'Quit',
-          style: 'destructive',
-          onPress: () => {
-            socketRef.current?.emit('game:forfeit', { gameId });
-            socketRef.current?.disconnect();
-            navigation.replace('Profile');
-          },
-        },
-      ],
-    );
+    const doQuit = () => {
+      socketRef.current?.emit('game:forfeit', { gameId });
+      socketRef.current?.disconnect();
+      navigation.replace('Profile');
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm('Quit Duel? You will forfeit this match and your opponent will win.')) {
+        doQuit();
+      }
+    } else {
+      Alert.alert(
+        'Quit Duel?',
+        'You will forfeit this match and your opponent will win.',
+        [
+          { text: 'Stay', style: 'cancel' },
+          { text: 'Quit', style: 'destructive', onPress: doQuit },
+        ],
+      );
+    }
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────────

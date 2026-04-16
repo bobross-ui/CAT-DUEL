@@ -50,7 +50,7 @@ export async function createMatch(
     redis.get(`socket:mm:${player2.userId}`),
   ]);
 
-  const matchData = { gameId, duration: 600 };
+  const matchData = { gameId, duration: 120 }; // TODO: restore to 600 after testing
 
   if (socket1) {
     matchmakingNs.to(socket1).emit('match:found', {

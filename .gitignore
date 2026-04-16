@@ -31,6 +31,7 @@ npm-debug.log*
 
 # ── Planning & internal docs (not for repo) ───────────────────────────────────
 PROGRESS.md
+CAT_Duel*.md
 CAT_Duel_High_Level_Plan.md
 CAT_Duel_Phase1_Foundation_Auth.md
 CAT_Duel_Phase2_Question_Engine.md

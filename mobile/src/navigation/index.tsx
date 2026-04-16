@@ -20,6 +20,7 @@ export type GameFinishedPayload = {
   gameId: string;
   winnerId: string | null;
   isDraw: boolean;
+  currentUserId: string; // Postgres UUID for this specific player, injected by server on emit
   player1: { userId: string; score: number; questionsAnswered: number };
   player2: { userId: string; score: number; questionsAnswered: number };
   totalQuestions: number;
