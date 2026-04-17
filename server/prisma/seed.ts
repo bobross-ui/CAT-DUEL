@@ -17,6 +17,46 @@ async function main() {
   });
   console.log('Seeded user:', user.email);
 
+  // Seed leaderboard dummy users (for testing leaderboard / around-me)
+  const dummyUsers = [
+    { n: '01', displayName: 'Arjun Sharma',    elo: 1950, tier: 'DIAMOND'  },
+    { n: '02', displayName: 'Priya Nair',      elo: 1870, tier: 'PLATINUM' },
+    { n: '03', displayName: 'Rohit Verma',     elo: 1780, tier: 'PLATINUM' },
+    { n: '04', displayName: 'Sneha Patel',     elo: 1720, tier: 'PLATINUM' },
+    { n: '05', displayName: 'Kiran Reddy',     elo: 1650, tier: 'GOLD'     },
+    { n: '06', displayName: 'Amit Gupta',      elo: 1580, tier: 'GOLD'     },
+    { n: '07', displayName: 'Divya Iyer',      elo: 1500, tier: 'GOLD'     },
+    { n: '08', displayName: 'Raj Malhotra',    elo: 1420, tier: 'GOLD'     },
+    { n: '09', displayName: 'Meera Joshi',     elo: 1350, tier: 'GOLD'     },
+    { n: '10', displayName: 'Vikram Singh',    elo: 1280, tier: 'SILVER'   },
+    { n: '11', displayName: 'Ananya Bose',     elo: 1230, tier: 'SILVER'   },
+    { n: '12', displayName: 'Suresh Kumar',    elo: 1180, tier: 'SILVER'   },
+    { n: '13', displayName: 'Pooja Mehta',     elo: 1100, tier: 'SILVER'   },
+    { n: '14', displayName: 'Nikhil Rao',      elo: 1040, tier: 'SILVER'   },
+    { n: '15', displayName: 'Riya Desai',      elo:  950, tier: 'BRONZE'   },
+    { n: '16', displayName: 'Tarun Agarwal',   elo:  880, tier: 'BRONZE'   },
+    { n: '17', displayName: 'Simran Kaur',     elo:  800, tier: 'BRONZE'   },
+    { n: '18', displayName: 'Harsh Jain',      elo:  720, tier: 'BRONZE'   },
+    { n: '19', displayName: 'Kavya Nambiar',   elo:  650, tier: 'BRONZE'   },
+    { n: '20', displayName: 'Pranav Shetty',   elo:  580, tier: 'BRONZE'   },
+  ];
+
+  for (const u of dummyUsers) {
+    await prisma.user.upsert({
+      where: { email: `dummy${u.n}@catduel.com` },
+      update: {},
+      create: {
+        firebaseUid: `dummy-firebase-uid-${u.n}`,
+        email: `dummy${u.n}@catduel.com`,
+        displayName: u.displayName,
+        eloRating: u.elo,
+        rankTier: u.tier as any,
+        gamesPlayed: 10, // above the 5-game threshold to appear on leaderboard
+      },
+    });
+  }
+  console.log(`Seeded ${dummyUsers.length} dummy leaderboard users`);
+
   // Seed sample questions
   const questions = [
     // ── QUANT ──────────────────────────────────────────────────────────────

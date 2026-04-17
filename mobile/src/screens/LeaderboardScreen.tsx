@@ -11,7 +11,7 @@ import TierBadge from '../components/TierBadge';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Leaderboard'>;
 
-type Tab = 'global' | 'tier';
+type Tab = 'global' | 'around' | 'tier';
 const TIERS = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
 
 interface LeaderboardEntry {
@@ -67,6 +67,7 @@ export default function LeaderboardScreen({ navigation }: Props) {
     try {
       let res;
       if (tab === 'global') res = await leaderboardService.getGlobal();
+      else if (tab === 'around') res = await leaderboardService.getAroundMe();
       else res = await leaderboardService.getTier(tier);
       setData(res.data.data);
     } catch {
@@ -115,6 +116,14 @@ export default function LeaderboardScreen({ navigation }: Props) {
         >
           <Text style={[styles.tabText, activeTab === 'global' && styles.tabTextActive]}>
             Global
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'around' && styles.tabActive]}
+          onPress={() => switchTab('around')}
+        >
+          <Text style={[styles.tabText, activeTab === 'around' && styles.tabTextActive]}>
+            Around Me
           </Text>
         </TouchableOpacity>
         <TouchableOpacity

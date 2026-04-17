@@ -90,6 +90,43 @@ export async function getGlobalLeaderboard(currentUserId: string): Promise<Leade
   return { entries: withFlag, currentUserRank, totalRanked };
 }
 
+export async function getAroundMeLeaderboard(userId: string): Promise<LeaderboardResponse> {
+  const userRank = await getUserGlobalRank(userId);
+
+  if (userRank == null) {
+    const response = await getGlobalLeaderboard(userId);
+    return { ...response, entries: response.entries.slice(0, 10) };
+  }
+
+  const startRank = Math.max(1, userRank - 5);
+  const skip = startRank - 1;
+
+  const rows = await prisma.user.findMany({
+    where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK } },
+    orderBy: [{ eloRating: 'desc' }, { createdAt: 'asc' }],
+    skip,
+    take: 10,
+    select: {
+      id: true, displayName: true, avatarUrl: true,
+      eloRating: true, rankTier: true, gamesPlayed: true,
+    },
+  });
+
+  const entries = rows.map((u, i) => ({
+    rank: startRank + i,
+    userId: u.id,
+    displayName: u.displayName ?? 'Anonymous',
+    avatarUrl: u.avatarUrl,
+    eloRating: u.eloRating,
+    rankTier: u.rankTier as RankTier,
+    gamesPlayed: u.gamesPlayed,
+    isCurrentUser: u.id === userId,
+  }));
+
+  const totalRanked = await prisma.user.count({ where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK } } });
+  return { entries, currentUserRank: userRank, totalRanked };
+}
+
 export async function getTierLeaderboard(tier: RankTier, userId: string): Promise<LeaderboardResponse> {
   const cacheKey = `leaderboard:tier:${tier}:top100`;
   let entries: LeaderboardEntry[];
@@ -124,10 +161,30 @@ export async function getTierLeaderboard(tier: RankTier, userId: string): Promis
 
   const withFlag = entries.map(e => ({ ...e, isCurrentUser: e.userId === userId }));
 
-  const [currentUserRank, totalRanked] = await Promise.all([
-    getUserGlobalRank(userId),
-    prisma.user.count({ where: { rankTier: tier, gamesPlayed: { gte: MIN_GAMES_TO_RANK } } }),
-  ]);
+  const totalRanked = await prisma.user.count({
+    where: { rankTier: tier, gamesPlayed: { gte: MIN_GAMES_TO_RANK } },
+  });
+
+  // Rank within this tier only
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { eloRating: true, gamesPlayed: true, createdAt: true, rankTier: true },
+  });
+
+  let currentUserRank: number | null = null;
+  if (user && user.rankTier === tier && user.gamesPlayed >= MIN_GAMES_TO_RANK) {
+    const higherInTier = await prisma.user.count({
+      where: {
+        rankTier: tier,
+        gamesPlayed: { gte: MIN_GAMES_TO_RANK },
+        OR: [
+          { eloRating: { gt: user.eloRating } },
+          { AND: [{ eloRating: user.eloRating }, { createdAt: { lt: user.createdAt } }] },
+        ],
+      },
+    });
+    currentUserRank = higherInTier + 1;
+  }
 
   return { entries: withFlag, currentUserRank, totalRanked };
 }
