@@ -125,6 +125,10 @@ export default function ProfileScreen({ navigation }: Props) {
           <Text style={styles.practiceButtonText}>Practice</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.practiceButton} onPress={() => navigation.navigate('Leaderboard')}>
+          <Text style={styles.practiceButtonText}>Leaderboard</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.signOutButton} onPress={signOut}>
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>

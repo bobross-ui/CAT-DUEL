@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
-import { getGlobalLeaderboard, getAroundMeLeaderboard, getTierLeaderboard } from '../services/leaderboard';
+import { getGlobalLeaderboard, getTierLeaderboard } from '../services/leaderboard';
 import { RankTier } from '../services/elo';
 
 const router = Router();
@@ -9,13 +9,6 @@ const VALID_TIERS = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
 router.get('/global', authMiddleware, async (req, res, next) => {
   try {
     const data = await getGlobalLeaderboard(req.user.id);
-    res.json({ success: true, data });
-  } catch (e) { next(e); }
-});
-
-router.get('/around-me', authMiddleware, async (req, res, next) => {
-  try {
-    const data = await getAroundMeLeaderboard(req.user.id);
     res.json({ success: true, data });
   } catch (e) { next(e); }
 });

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import api from '../services/api';
+import EloChangeCard from '../components/EloChangeCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DuelResults'>;
 
@@ -48,6 +49,20 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={[styles.outcomeLabel, { color: outcomeColor }]}>{outcomeLabel}</Text>
+
+      {results.isForfeit && (
+        <View style={styles.forfeitBanner}>
+          <Text style={styles.forfeitText}>Opponent forfeited the match</Text>
+        </View>
+      )}
+
+      <EloChangeCard
+        eloBefore={yours.eloBefore}
+        eloAfter={yours.eloAfter}
+        eloDelta={yours.eloDelta}
+        tierChanged={yours.tierChanged}
+        newTier={yours.newTier}
+      />
 
       <View style={styles.scoreRow}>
         <View style={styles.scoreBlock}>
@@ -202,4 +217,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryButtonText: { fontSize: 16, fontWeight: '600', color: '#1a1a1a' },
+  forfeitBanner: {
+    backgroundColor: '#fef9c3',
+    borderWidth: 1,
+    borderColor: '#fde047',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginBottom: 16,
+    width: '100%',
+    alignItems: 'center',
+  },
+  forfeitText: { fontSize: 13, fontWeight: '600', color: '#854d0e' },
 });

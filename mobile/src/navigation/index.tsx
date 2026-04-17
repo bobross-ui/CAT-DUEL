@@ -8,6 +8,7 @@ import PracticeSummaryScreen from '../screens/PracticeSummaryScreen';
 import MatchmakingScreen from '../screens/MatchmakingScreen';
 import DuelScreen from '../screens/DuelScreen';
 import DuelResultsScreen from '../screens/DuelResultsScreen';
+import LeaderboardScreen from '../screens/LeaderboardScreen';
 
 export type OpponentInfo = {
   userId: string;
@@ -16,13 +17,25 @@ export type OpponentInfo = {
   eloRating: number;
 };
 
+type PlayerResult = {
+  userId: string;
+  score: number;
+  questionsAnswered: number;
+  eloBefore: number;
+  eloAfter: number;
+  eloDelta: number;
+  newTier: string;
+  tierChanged: boolean;
+};
+
 export type GameFinishedPayload = {
   gameId: string;
   winnerId: string | null;
   isDraw: boolean;
+  isForfeit: boolean;
   currentUserId: string; // Postgres UUID for this specific player, injected by server on emit
-  player1: { userId: string; score: number; questionsAnswered: number };
-  player2: { userId: string; score: number; questionsAnswered: number };
+  player1: PlayerResult;
+  player2: PlayerResult;
   totalQuestions: number;
   durationSeconds: number;
 };
@@ -36,6 +49,7 @@ export type RootStackParamList = {
   Matchmaking: undefined;
   Duel: { gameId: string; opponent: OpponentInfo };
   DuelResults: { results: GameFinishedPayload; userId: string; opponent: OpponentInfo };
+  Leaderboard: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -60,6 +74,7 @@ export default function RootNavigator() {
             options={{ gestureEnabled: false }} // Prevent swipe-back during duel
           />
           <Stack.Screen name="DuelResults" component={DuelResultsScreen} />
+          <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
         </>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} />
