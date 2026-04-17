@@ -1,27 +1,46 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { Theme, lightTheme, darkTheme } from './themes';
+
+type Preference = 'system' | 'light' | 'dark';
 
 interface ThemeContextValue {
   theme: Theme;
   mode: 'light' | 'dark';
-  setOverride: (mode: 'light' | 'dark' | null) => void;
+  preference: Preference;
+  setPreference: (p: Preference) => void;
 }
+
+const STORE_KEY = 'theme_pref';
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: lightTheme,
   mode: 'light',
-  setOverride: () => {},
+  preference: 'system',
+  setPreference: () => {},
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const systemScheme = useColorScheme();
-  const [override, setOverride] = useState<'light' | 'dark' | null>(null);
-  const mode = override ?? systemScheme ?? 'light';
+  const system = useColorScheme();
+  const [preference, setPref] = useState<Preference>('system');
+
+  useEffect(() => {
+    SecureStore.getItemAsync(STORE_KEY).then((v) => {
+      if (v === 'light' || v === 'dark' || v === 'system') setPref(v);
+    });
+  }, []);
+
+  const setPreference = (p: Preference) => {
+    setPref(p);
+    SecureStore.setItemAsync(STORE_KEY, p);
+  };
+
+  const mode = preference === 'system' ? (system ?? 'light') : preference;
   const theme = mode === 'dark' ? darkTheme : lightTheme;
 
   return (
-    <ThemeContext.Provider value={{ theme, mode, setOverride }}>
+    <ThemeContext.Provider value={{ theme, mode, preference, setPreference }}>
       {children}
     </ThemeContext.Provider>
   );

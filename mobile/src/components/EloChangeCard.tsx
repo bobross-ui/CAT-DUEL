@@ -1,8 +1,10 @@
 import { useRef, useEffect, useState } from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Animated, StyleSheet } from 'react-native';
 import TierBadge from './TierBadge';
+import Text from './Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { ELO_TIERS } from '../constants';
+import { radii } from '../theme/tokens';
 
 interface Props {
   eloBefore: number;
@@ -19,7 +21,7 @@ export default function EloChangeCard({ eloBefore, eloAfter, eloDelta, tierChang
 
   const tierObj = ELO_TIERS.find(t => eloBefore >= t.min && eloBefore <= t.max) ?? ELO_TIERS[0];
   const tierBefore = tierObj.name.toUpperCase();
-  const deltaColor = eloDelta > 0 ? theme.success : eloDelta < 0 ? theme.danger : theme.textMuted;
+  const deltaColor = eloDelta > 0 ? theme.accent : eloDelta < 0 ? theme.coral : theme.ink3;
   const deltaSign = eloDelta > 0 ? '+' : '';
 
   useEffect(() => {
@@ -38,13 +40,15 @@ export default function EloChangeCard({ eloBefore, eloAfter, eloDelta, tierChang
   }, []);
 
   return (
-    <View style={[styles.card, { borderColor: theme.border }]}>
+    <View style={[styles.card, { borderColor: theme.line }]}>
       <View style={styles.eloRow}>
-        <Text style={[styles.eloBefore, { color: theme.textMuted }]}>{eloBefore}</Text>
-        <Text style={[styles.arrow, { color: theme.textMuted }]}>→</Text>
-        <Text style={[styles.eloAfter, { color: theme.text }]}>{displayElo}</Text>
+        <Text.Serif preset="scoreLg" color={theme.ink3}>{eloBefore}</Text.Serif>
+        <Text.Sans preset="body" color={theme.ink3}>→</Text.Sans>
+        <Text.Serif preset="scoreLg" color={theme.ink}>{displayElo}</Text.Serif>
         <View style={[styles.deltaPill, { backgroundColor: deltaColor }]}>
-          <Text style={styles.deltaText}>{deltaSign}{eloDelta}</Text>
+          <Text.Mono preset="chipLabel" color="#FFFFFF" style={{ fontSize: 14 }}>
+            {deltaSign}{eloDelta}
+          </Text.Mono>
         </View>
       </View>
 
@@ -52,9 +56,9 @@ export default function EloChangeCard({ eloBefore, eloAfter, eloDelta, tierChang
         {tierChanged ? (
           <>
             <TierBadge tier={tierBefore} />
-            <Text style={[styles.promotionText, { color: eloDelta > 0 ? theme.success : theme.danger }]}>
+            <Text.Mono preset="chipLabel" color={eloDelta > 0 ? theme.accent : theme.coral}>
               {eloDelta > 0 ? '▲ PROMOTED!' : '▼ Demoted'}
-            </Text>
+            </Text.Mono>
             <TierBadge tier={newTier} highlighted />
           </>
         ) : (
@@ -68,8 +72,8 @@ export default function EloChangeCard({ eloBefore, eloAfter, eloDelta, tierChang
 const styles = StyleSheet.create({
   card: {
     width: '100%',
-    borderWidth: 1.5,
-    borderRadius: 16,
+    borderWidth: 1,
+    borderRadius: radii.xl,
     padding: 20,
     marginBottom: 20,
     alignItems: 'center',
@@ -80,35 +84,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  eloBefore: {
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  arrow: {
-    fontSize: 18,
-  },
-  eloAfter: {
-    fontSize: 28,
-    fontWeight: '800',
-  },
   deltaPill: {
-    borderRadius: 99,
+    borderRadius: radii.pill,
     paddingHorizontal: 10,
     paddingVertical: 4,
-  },
-  deltaText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
   },
   tierRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-  },
-  promotionText: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.5,
   },
 });

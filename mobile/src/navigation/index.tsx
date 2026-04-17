@@ -11,6 +11,7 @@ import DuelResultsScreen from '../screens/DuelResultsScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import MatchHistoryScreen from '../screens/MatchHistoryScreen';
 import MatchDetailScreen from '../screens/MatchDetailScreen';
+import DebugScreen from '../screens/DebugScreen';
 
 export type OpponentInfo = {
   userId: string;
@@ -54,6 +55,7 @@ export type RootStackParamList = {
   Leaderboard: { userTier: string };
   MatchHistory: undefined;
   MatchDetail: { matchId: string; opponentName: string | null };
+  Debug: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -81,6 +83,7 @@ export default function RootNavigator() {
           <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
           <Stack.Screen name="MatchHistory" component={MatchHistoryScreen} />
           <Stack.Screen name="MatchDetail" component={MatchDetailScreen} />
+          <Stack.Screen name="Debug" component={DebugScreen} />
         </>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} />

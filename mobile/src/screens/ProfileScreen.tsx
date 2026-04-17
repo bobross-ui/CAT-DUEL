@@ -193,6 +193,12 @@ export default function ProfileScreen({ navigation }: Props) {
           style={styles.buttonSpacing}
         />
         <Button
+          label="Design System"
+          variant="ghost"
+          onPress={() => navigation.navigate('Debug')}
+          style={styles.buttonSpacing}
+        />
+        <Button
           label="Sign Out"
           variant="ghost"
           onPress={signOut}

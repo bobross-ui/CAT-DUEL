@@ -1,10 +1,13 @@
-import { TouchableOpacity, Text, ActivityIndicator, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import { useRef } from 'react';
+import { Animated, Pressable, ActivityIndicator, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
+import Text from './Text';
+import { radii } from '../theme/tokens';
 
 interface ButtonProps {
   label: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'ghost' | 'dark' | 'coral' | 'secondary';
   loading?: boolean;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -19,58 +22,64 @@ export default function Button({
   style,
 }: ButtonProps) {
   const { theme } = useTheme();
+  const scale = useRef(new Animated.Value(1)).current;
   const isDisabled = disabled || loading;
 
-  const containerStyle = [
-    styles.base,
-    variant === 'primary' && {
-      backgroundColor: isDisabled ? theme.textMuted : theme.primary,
-    },
-    variant === 'secondary' && {
-      borderWidth: 1.5,
-      borderColor: isDisabled ? theme.border : theme.border,
-      backgroundColor: 'transparent',
-    },
-    variant === 'ghost' && {
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: 'transparent',
-    },
-    style,
-  ];
+  const onPressIn = () => {
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
+  };
+  const onPressOut = () => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+  };
 
-  const textColor =
-    variant === 'primary'
-      ? theme.primaryFg
-      : isDisabled
-      ? theme.textMuted
-      : theme.text;
+  const bgColor = (() => {
+    if (isDisabled) return theme.ink4;
+    switch (variant) {
+      case 'primary': return theme.accent;
+      case 'dark':    return theme.ink;
+      case 'coral':   return theme.coral;
+      case 'ghost': case 'secondary': return 'transparent';
+    }
+  })();
+
+  const textColor = (() => {
+    if (isDisabled) return theme.ink3;
+    switch (variant) {
+      case 'primary': return '#FFFFFF';
+      case 'dark':    return theme.bg;
+      case 'coral':   return '#FFFFFF';
+      case 'ghost': case 'secondary': return theme.ink2;
+    }
+  })();
+
+  const borderStyle = (variant === 'ghost' || variant === 'secondary')
+    ? { borderWidth: 1, borderColor: theme.line }
+    : undefined;
 
   return (
-    <TouchableOpacity
-      style={containerStyle}
-      onPress={onPress}
-      disabled={isDisabled}
-      activeOpacity={0.75}
-    >
-      {loading ? (
-        <ActivityIndicator color={textColor} />
-      ) : (
-        <Text style={[styles.label, { color: textColor }]}>{label}</Text>
-      )}
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        style={[styles.base, { backgroundColor: bgColor }, borderStyle, style]}
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        disabled={isDisabled}
+      >
+        {loading ? (
+          <ActivityIndicator color={textColor} />
+        ) : (
+          <Text.Sans preset="bodyMed" color={textColor}>{label}</Text.Sans>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 12,
+    borderRadius: radii.lg,
     paddingVertical: 15,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '700',
   },
 });

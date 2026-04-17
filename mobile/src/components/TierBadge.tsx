@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet } from 'react-native';
-import { useTheme } from '../theme/ThemeProvider';
+import { View, StyleSheet } from 'react-native';
+import Text from './Text';
+import { tierColors, radii } from '../theme/tokens';
 
 interface Props {
   tier: string;
@@ -8,9 +9,8 @@ interface Props {
 }
 
 export default function TierBadge({ tier, small = false, highlighted = false }: Props) {
-  const { theme } = useTheme();
-  const tierKey = tier.toLowerCase() as keyof typeof theme;
-  const color = (theme[tierKey] as string) ?? theme.textMuted;
+  const key = tier.toUpperCase() as keyof typeof tierColors;
+  const color = tierColors[key] ?? tierColors.BRONZE;
 
   return (
     <View style={[
@@ -19,9 +19,13 @@ export default function TierBadge({ tier, small = false, highlighted = false }: 
       small && styles.small,
       highlighted && { borderWidth: 2 },
     ]}>
-      <Text style={[styles.text, { color }, small && styles.smallText]}>
-        {tier}
-      </Text>
+      <Text.Mono
+        preset="chipLabel"
+        color={color}
+        style={[!small && styles.text, small && styles.smallText]}
+      >
+        {tier.toUpperCase()}
+      </Text.Mono>
     </View>
   );
 }
@@ -29,7 +33,7 @@ export default function TierBadge({ tier, small = false, highlighted = false }: 
 const styles = StyleSheet.create({
   badge: {
     borderWidth: 1,
-    borderRadius: 99,
+    borderRadius: radii.pill,
     paddingHorizontal: 10,
     paddingVertical: 3,
   },
@@ -39,8 +43,6 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
   },
   smallText: {
     fontSize: 10,
