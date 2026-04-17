@@ -16,6 +16,6 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: cd server && npx prisma generate
+      - run: cd server && DATABASE_URL=postgresql://localhost/dummy npx prisma generate
       - run: npm run lint
       - run: npm run type-check
