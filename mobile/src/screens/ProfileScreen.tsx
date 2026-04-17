@@ -8,6 +8,8 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { RootStackParamList } from '../navigation';
 import TierBadge from '../components/TierBadge';
+import Button from '../components/Button';
+import { useTheme } from '../theme/ThemeProvider';
 import { ELO_TIERS, getTier } from '../constants';
 
 interface UserProfile {
@@ -20,6 +22,7 @@ interface UserProfile {
 }
 
 function TierProgressBar({ eloRating }: { eloRating: number; rankTier: string }) {
+  const { theme } = useTheme();
   const tier = getTier(eloRating);
   const isDiamond = tier.max === Infinity;
   const progress = isDiamond ? 1 : (eloRating - tier.min) / (tier.max - tier.min + 1);
@@ -28,14 +31,14 @@ function TierProgressBar({ eloRating }: { eloRating: number; rankTier: string })
   return (
     <View style={progressStyles.container}>
       <View style={progressStyles.labelRow}>
-        <Text style={progressStyles.label}>
+        <Text style={[progressStyles.label, { color: theme.textMuted }]}>
           {isDiamond ? 'Max Rank' : `${eloRating} / ${tier.max + 1} to ${nextTier?.name}`}
         </Text>
         <Text style={[progressStyles.pct, { color: tier.color }]}>
           {isDiamond ? '100%' : `${Math.round(progress * 100)}%`}
         </Text>
       </View>
-      <View style={progressStyles.track}>
+      <View style={[progressStyles.track, { backgroundColor: theme.surfaceHighlight }]}>
         <View style={[
           progressStyles.fill,
           { width: `${Math.round(progress * 100)}%` as `${number}%`, backgroundColor: tier.color },
@@ -48,14 +51,9 @@ function TierProgressBar({ eloRating }: { eloRating: number; rankTier: string })
 const progressStyles = StyleSheet.create({
   container: { width: '100%', marginBottom: 32 },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  label: { fontSize: 12, color: '#999' },
+  label: { fontSize: 12 },
   pct: { fontSize: 12, fontWeight: '700' },
-  track: {
-    height: 6,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 99,
-    overflow: 'hidden',
-  },
+  track: { height: 6, borderRadius: 99, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 99 },
 });
 
@@ -63,12 +61,12 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
 export default function ProfileScreen({ navigation }: Props) {
   const { signOut } = useAuth();
+  const { theme } = useTheme();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
-  // Edit modal state
   const [editVisible, setEditVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -121,16 +119,16 @@ export default function ProfileScreen({ navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
+      <View style={[styles.centered, { backgroundColor: theme.bg }]}>
+        <ActivityIndicator size="large" color={theme.text} />
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.error}>{error}</Text>
+      <View style={[styles.centered, { backgroundColor: theme.bg }]}>
+        <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>
       </View>
     );
   }
@@ -138,13 +136,17 @@ export default function ProfileScreen({ navigation }: Props) {
   return (
     <>
       <ScrollView
+        style={{ backgroundColor: theme.bg }}
         contentContainerStyle={styles.container}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.nameRow}>
-          <Text style={styles.title}>{profile?.displayName ?? 'Anonymous'}</Text>
-          <TouchableOpacity onPress={openEdit} style={styles.editButton}>
-            <Text style={styles.editButtonText}>Edit</Text>
+          <Text style={[styles.title, { color: theme.text }]}>{profile?.displayName ?? 'Anonymous'}</Text>
+          <TouchableOpacity
+            onPress={openEdit}
+            style={[styles.editButton, { borderColor: theme.border }]}
+          >
+            <Text style={[styles.editButtonText, { color: theme.textSecondary }]}>Edit</Text>
           </TouchableOpacity>
         </View>
         {profile && (
@@ -152,72 +154,84 @@ export default function ProfileScreen({ navigation }: Props) {
             <TierBadge tier={profile.rankTier} />
           </View>
         )}
-        <Text style={styles.email}>{profile?.email}</Text>
+        <Text style={[styles.email, { color: theme.textSecondary }]}>{profile?.email}</Text>
 
         <View style={styles.statsRow}>
           <View style={styles.stat}>
-            <Text style={styles.statValue}>{profile?.eloRating}</Text>
-            <Text style={styles.statLabel}>Elo Rating</Text>
+            <Text style={[styles.statValue, { color: theme.text }]}>{profile?.eloRating}</Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Elo Rating</Text>
           </View>
           <View style={styles.stat}>
-            <Text style={styles.statValue}>{profile?.gamesPlayed}</Text>
-            <Text style={styles.statLabel}>Games Played</Text>
+            <Text style={[styles.statValue, { color: theme.text }]}>{profile?.gamesPlayed}</Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Games Played</Text>
           </View>
         </View>
 
         {profile && <TierProgressBar eloRating={profile.eloRating} rankTier={profile.rankTier} />}
 
-        <TouchableOpacity style={styles.duelButton} onPress={() => navigation.navigate('Matchmaking')}>
-          <Text style={styles.duelButtonText}>Find Duel</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.practiceButton} onPress={() => navigation.navigate('PracticeHome')}>
-          <Text style={styles.practiceButtonText}>Practice</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.practiceButton} onPress={() => navigation.navigate('Leaderboard', { userTier: profile?.rankTier ?? 'SILVER' })}>
-          <Text style={styles.practiceButtonText}>Leaderboard</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.practiceButton} onPress={() => navigation.navigate('MatchHistory')}>
-          <Text style={styles.practiceButtonText}>Match History</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.signOutButton} onPress={signOut}>
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
+        <Button
+          label="Find Duel"
+          onPress={() => navigation.navigate('Matchmaking')}
+          style={styles.buttonSpacing}
+        />
+        <Button
+          label="Practice"
+          variant="secondary"
+          onPress={() => navigation.navigate('PracticeHome')}
+          style={styles.buttonSpacing}
+        />
+        <Button
+          label="Leaderboard"
+          variant="secondary"
+          onPress={() => navigation.navigate('Leaderboard', { userTier: profile?.rankTier ?? 'SILVER' })}
+          style={styles.buttonSpacing}
+        />
+        <Button
+          label="Match History"
+          variant="secondary"
+          onPress={() => navigation.navigate('MatchHistory')}
+          style={styles.buttonSpacing}
+        />
+        <Button
+          label="Sign Out"
+          variant="ghost"
+          onPress={signOut}
+          style={styles.buttonSpacing}
+        />
       </ScrollView>
 
       <Modal visible={editVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Display Name</Text>
+          <View style={[styles.modalCard, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Edit Display Name</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, {
+                borderColor: theme.border,
+                color: theme.text,
+                backgroundColor: theme.surface,
+              }]}
               value={editName}
               onChangeText={setEditName}
               autoCapitalize="words"
               autoFocus
               maxLength={50}
+              placeholderTextColor={theme.textMuted}
             />
-            {editError ? <Text style={styles.modalError}>{editError}</Text> : null}
+            {editError ? <Text style={[styles.modalError, { color: theme.danger }]}>{editError}</Text> : null}
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancel}
+              <Button
+                label="Cancel"
+                variant="ghost"
                 onPress={() => setEditVisible(false)}
                 disabled={saving}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalSave}
+                style={styles.modalActionBtn}
+              />
+              <Button
+                label="Save"
                 onPress={saveDisplayName}
-                disabled={saving}
-              >
-                {saving
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={styles.modalSaveText}>Save</Text>}
-              </TouchableOpacity>
+                loading={saving}
+                style={styles.modalActionBtn}
+              />
             </View>
           </View>
         </View>
@@ -233,7 +247,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   container: {
-    backgroundColor: '#fff',
     paddingHorizontal: 32,
     paddingTop: 80,
     paddingBottom: 40,
@@ -253,16 +266,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#ddd',
   },
   editButtonText: {
     fontSize: 13,
-    color: '#666',
     fontWeight: '600',
   },
   email: {
     fontSize: 16,
-    color: '#666',
     marginBottom: 40,
   },
   tierBadgeRow: {
@@ -282,52 +292,14 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 14,
-    color: '#666',
     marginTop: 4,
   },
   error: {
-    color: '#e53e3e',
     fontSize: 16,
   },
-  duelButton: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
+  buttonSpacing: {
     marginBottom: 12,
   },
-  duelButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  practiceButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1.5,
-    borderColor: '#1a1a1a',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  practiceButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1a1a1a',
-  },
-  signOutButton: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  signOutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
-  },
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -336,7 +308,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   modalCard: {
-    backgroundColor: '#fff',
+    borderWidth: 1,
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -345,11 +317,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 16,
-    color: '#1a1a1a',
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -357,7 +327,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalError: {
-    color: '#e53e3e',
     fontSize: 13,
     marginBottom: 8,
   },
@@ -366,29 +335,7 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 8,
   },
-  modalCancel: {
+  modalActionBtn: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  modalCancelText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#666',
-  },
-  modalSave: {
-    flex: 1,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  modalSaveText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#fff',
   },
 });

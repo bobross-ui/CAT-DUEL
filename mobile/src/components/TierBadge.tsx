@@ -1,13 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS } from '../constants';
-
-const TIER_COLOR_MAP: Record<string, string> = {
-  BRONZE: COLORS.bronze,
-  SILVER: COLORS.silver,
-  GOLD: COLORS.gold,
-  PLATINUM: COLORS.platinum,
-  DIAMOND: COLORS.diamond,
-};
+import { useTheme } from '../theme/ThemeProvider';
 
 interface Props {
   tier: string;
@@ -16,7 +8,10 @@ interface Props {
 }
 
 export default function TierBadge({ tier, small = false, highlighted = false }: Props) {
-  const color = TIER_COLOR_MAP[tier] ?? COLORS.bronze;
+  const { theme } = useTheme();
+  const tierKey = tier.toLowerCase() as keyof typeof theme;
+  const color = (theme[tierKey] as string) ?? theme.textMuted;
+
   return (
     <View style={[
       styles.badge,

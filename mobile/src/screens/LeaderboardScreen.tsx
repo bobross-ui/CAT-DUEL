@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation';
 import { leaderboardService } from '../services/leaderboard';
 import TierBadge from '../components/TierBadge';
+import { useTheme } from '../theme/ThemeProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Leaderboard'>;
 
@@ -39,23 +40,29 @@ function getMedal(rank: number) {
 }
 
 function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
+  const { theme } = useTheme();
   const medal = getMedal(entry.rank);
   return (
-    <View style={[styles.row, entry.isCurrentUser && styles.rowHighlighted]}>
-      <Text style={styles.rank}>{medal ?? `#${entry.rank}`}</Text>
+    <View style={[
+      styles.row,
+      { borderBottomColor: theme.borderLight },
+      entry.isCurrentUser && { backgroundColor: theme.surfaceHighlight },
+    ]}>
+      <Text style={[styles.rank, { color: theme.text }]}>{medal ?? `#${entry.rank}`}</Text>
       <View style={styles.nameCol}>
-        <Text style={styles.name} numberOfLines={1}>
+        <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
           {entry.displayName}
           {entry.isCurrentUser ? '  (You)' : ''}
         </Text>
         <TierBadge tier={entry.rankTier} small />
       </View>
-      <Text style={styles.elo}>{entry.eloRating}</Text>
+      <Text style={[styles.elo, { color: theme.text }]}>{entry.eloRating}</Text>
     </View>
   );
 }
 
 export default function LeaderboardScreen({ route, navigation }: Props) {
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>('global');
   const [selectedTier, setSelectedTier] = useState(route.params.userTier);
   const [tierPickerVisible, setTierPickerVisible] = useState(false);
@@ -99,67 +106,57 @@ export default function LeaderboardScreen({ route, navigation }: Props) {
     : null;
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={styles.backText}>←</Text>
+          <Text style={[styles.backText, { color: theme.text }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Leaderboard</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Leaderboard</Text>
       </View>
 
-      {/* Tabs */}
       <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'global' && styles.tabActive]}
-          onPress={() => switchTab('global')}
-        >
-          <Text style={[styles.tabText, activeTab === 'global' && styles.tabTextActive]}>
-            Global
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'around' && styles.tabActive]}
-          onPress={() => switchTab('around')}
-        >
-          <Text style={[styles.tabText, activeTab === 'around' && styles.tabTextActive]}>
-            Around Me
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'tier' && styles.tabActive]}
-          onPress={() => {
-            if (activeTab !== 'tier') switchTab('tier');
-            else setTierPickerVisible(true);
-          }}
-        >
-          <Text style={[styles.tabText, activeTab === 'tier' && styles.tabTextActive]}>
-            {activeTab === 'tier' ? selectedTier : 'By Tier'} ▾
-          </Text>
-        </TouchableOpacity>
+        {(['global', 'around', 'tier'] as Tab[]).map((tab) => {
+          const isActive = activeTab === tab;
+          const label = tab === 'global' ? 'Global' : tab === 'around' ? 'Around Me'
+            : isActive ? `${selectedTier} ▾` : 'By Tier ▾';
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[
+                styles.tab,
+                { backgroundColor: isActive ? theme.primary : theme.surfaceHighlight },
+              ]}
+              onPress={() => {
+                if (tab !== activeTab) switchTab(tab);
+                else if (tab === 'tier') setTierPickerVisible(true);
+              }}
+            >
+              <Text style={[styles.tabText, { color: isActive ? theme.primaryFg : theme.textSecondary }]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {/* Your rank banner */}
       {data?.currentUserRank != null && (
-        <View style={styles.rankBanner}>
-          <Text style={styles.rankBannerText}>
+        <View style={[styles.rankBanner, { backgroundColor: theme.successBg }]}>
+          <Text style={[styles.rankBannerText, { color: theme.successText }]}>
             Your rank: #{data.currentUserRank} of {data.totalRanked}
           </Text>
         </View>
       )}
 
-      {/* Unranked nudge */}
       {data != null && data.currentUserRank == null && gamesNeeded != null && gamesNeeded > 0 && (
-        <View style={styles.unrankedBanner}>
-          <Text style={styles.unrankedText}>
+        <View style={[styles.unrankedBanner, { backgroundColor: theme.warningBg }]}>
+          <Text style={[styles.unrankedText, { color: theme.warningText }]}>
             Play {gamesNeeded} more match{gamesNeeded !== 1 ? 'es' : ''} to join the leaderboard
           </Text>
         </View>
       )}
 
-      {/* List */}
       {loading ? (
-        <ActivityIndicator style={styles.loader} size="large" color="#1a1a1a" />
+        <ActivityIndicator style={styles.loader} size="large" color={theme.text} />
       ) : (
         <FlatList
           data={data?.entries ?? []}
@@ -168,27 +165,31 @@ export default function LeaderboardScreen({ route, navigation }: Props) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>No players ranked yet.</Text>
-              <Text style={styles.emptySubText}>Play 5 matches to join the leaderboard.</Text>
+              <Text style={[styles.emptyText, { color: theme.text }]}>No players ranked yet.</Text>
+              <Text style={[styles.emptySubText, { color: theme.textSecondary }]}>
+                Play 5 matches to join the leaderboard.
+              </Text>
             </View>
           }
           contentContainerStyle={styles.list}
         />
       )}
 
-      {/* Tier picker modal */}
       <Modal visible={tierPickerVisible} transparent animationType="fade">
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setTierPickerVisible(false)}
         >
-          <View style={styles.tierPicker}>
-            <Text style={styles.tierPickerTitle}>Select Tier</Text>
+          <View style={[styles.tierPicker, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+            <Text style={[styles.tierPickerTitle, { color: theme.text }]}>Select Tier</Text>
             {TIERS.map((tier) => (
               <TouchableOpacity
                 key={tier}
-                style={[styles.tierOption, selectedTier === tier && styles.tierOptionActive]}
+                style={[
+                  styles.tierOption,
+                  selectedTier === tier && { backgroundColor: theme.surfaceHighlight },
+                ]}
                 onPress={() => {
                   setSelectedTier(tier);
                   setActiveTab('tier');
@@ -207,7 +208,7 @@ export default function LeaderboardScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -217,8 +218,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   backButton: { padding: 4 },
-  backText: { fontSize: 24, color: '#1a1a1a' },
-  title: { fontSize: 22, fontWeight: '800', color: '#1a1a1a' },
+  backText: { fontSize: 24 },
+  title: { fontSize: 22, fontWeight: '800' },
   tabs: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -230,29 +231,24 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     alignItems: 'center',
-    backgroundColor: '#f3f4f6',
   },
-  tabActive: { backgroundColor: '#1a1a1a' },
-  tabText: { fontSize: 12, fontWeight: '600', color: '#666' },
-  tabTextActive: { color: '#fff' },
+  tabText: { fontSize: 12, fontWeight: '600' },
   rankBanner: {
     marginHorizontal: 20,
     marginBottom: 8,
-    backgroundColor: '#f0fdf4',
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
-  rankBannerText: { fontSize: 13, fontWeight: '600', color: '#15803d' },
+  rankBannerText: { fontSize: 13, fontWeight: '600' },
   unrankedBanner: {
     marginHorizontal: 20,
     marginBottom: 8,
-    backgroundColor: '#fef9c3',
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
-  unrankedText: { fontSize: 13, fontWeight: '600', color: '#854d0e' },
+  unrankedText: { fontSize: 13, fontWeight: '600' },
   loader: { flex: 1, marginTop: 60 },
   list: { paddingHorizontal: 20, paddingBottom: 40 },
   row: {
@@ -260,17 +256,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
     gap: 12,
   },
-  rowHighlighted: { backgroundColor: '#fafafa', marginHorizontal: -20, paddingHorizontal: 20 },
-  rank: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', width: 36 },
+  rank: { fontSize: 16, fontWeight: '700', width: 36 },
   nameCol: { flex: 1, gap: 4 },
-  name: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
-  elo: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
+  name: { fontSize: 15, fontWeight: '600' },
+  elo: { fontSize: 16, fontWeight: '700' },
   empty: { alignItems: 'center', paddingTop: 60, gap: 8 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#1a1a1a' },
-  emptySubText: { fontSize: 14, color: '#888' },
+  emptyText: { fontSize: 16, fontWeight: '600' },
+  emptySubText: { fontSize: 14 },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -278,13 +272,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tierPicker: {
-    backgroundColor: '#fff',
+    borderWidth: 1,
     borderRadius: 16,
     padding: 24,
     width: 260,
     gap: 10,
   },
-  tierPickerTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', marginBottom: 4 },
+  tierPickerTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
   tierOption: { padding: 8, borderRadius: 8, alignItems: 'flex-start' },
-  tierOptionActive: { backgroundColor: '#f3f4f6' },
 });

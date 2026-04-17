@@ -4,11 +4,14 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Socket } from 'socket.io-client';
 import { RootStackParamList } from '../navigation';
 import { createMatchmakingSocket } from '../services/socket';
+import { useTheme } from '../theme/ThemeProvider';
+import Button from '../components/Button';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Matchmaking'>;
 type Phase = 'IDLE' | 'SEARCHING' | 'FOUND';
 
 export default function MatchmakingScreen({ navigation }: Props) {
+  const { theme } = useTheme();
   const [phase, setPhase] = useState<Phase>('IDLE');
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -49,11 +52,10 @@ export default function MatchmakingScreen({ navigation }: Props) {
         socket.on('match:found', ({ gameId, opponent }: { gameId: string; opponent: { userId: string; displayName: string | null; avatarUrl: string | null; eloRating: number } }) => {
           if (!mounted) return;
           setPhase('FOUND');
-          // Disconnect matchmaking socket before navigating
           socket.disconnect();
           navigation.replace('Duel', { gameId, opponent });
         });
-      } catch (err) {
+      } catch {
         if (!mounted) return;
         setError('Could not connect. Is the server running?');
       }
@@ -79,40 +81,38 @@ export default function MatchmakingScreen({ navigation }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Text style={styles.backText}>← Back</Text>
+        <Text style={[styles.backText, { color: theme.textSecondary }]}>← Back</Text>
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <Text style={styles.title}>Find a Duel</Text>
-        <Text style={styles.subtitle}>Get matched with a player near your Elo rating</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Find a Duel</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+          Get matched with a player near your Elo rating
+        </Text>
 
         {phase === 'IDLE' && (
-          <TouchableOpacity style={styles.primaryButton} onPress={handleFindMatch}>
-            <Text style={styles.primaryButtonText}>Find Match</Text>
-          </TouchableOpacity>
+          <Button label="Find Match" onPress={handleFindMatch} style={styles.findButton} />
         )}
 
         {phase === 'SEARCHING' && (
           <View style={styles.searchingContainer}>
-            <ActivityIndicator size="large" color="#1a1a1a" style={styles.spinner} />
-            <Text style={styles.searchingText}>Searching for an opponent...</Text>
-            <Text style={styles.searchingHint}>Range widens after 30 seconds</Text>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
+            <ActivityIndicator size="large" color={theme.text} style={styles.spinner} />
+            <Text style={[styles.searchingText, { color: theme.text }]}>Searching for an opponent...</Text>
+            <Text style={[styles.searchingHint, { color: theme.textMuted }]}>Range widens after 30 seconds</Text>
+            <Button label="Cancel" variant="secondary" onPress={handleCancel} style={styles.cancelButton} />
           </View>
         )}
 
         {phase === 'FOUND' && (
           <View style={styles.searchingContainer}>
-            <ActivityIndicator size="large" color="#16a34a" style={styles.spinner} />
-            <Text style={styles.searchingText}>Match found! Loading duel...</Text>
+            <ActivityIndicator size="large" color={theme.success} style={styles.spinner} />
+            <Text style={[styles.searchingText, { color: theme.text }]}>Match found! Loading duel...</Text>
           </View>
         )}
 
-        {error && <Text style={styles.errorText}>{error}</Text>}
+        {error && <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>}
       </View>
     </View>
   );
@@ -121,12 +121,11 @@ export default function MatchmakingScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     paddingHorizontal: 24,
     paddingTop: 60,
   },
   backButton: { marginBottom: 32 },
-  backText: { fontSize: 16, color: '#666' },
+  backText: { fontSize: 16 },
   content: {
     flex: 1,
     justifyContent: 'center',
@@ -141,34 +140,21 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 15,
-    color: '#666',
     marginBottom: 48,
     textAlign: 'center',
     lineHeight: 22,
   },
-  primaryButton: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    paddingVertical: 16,
+  findButton: {
     paddingHorizontal: 48,
-    alignItems: 'center',
+    minWidth: 200,
   },
-  primaryButtonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
   searchingContainer: { alignItems: 'center' },
   spinner: { marginBottom: 20 },
   searchingText: { fontSize: 17, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
-  searchingHint: { fontSize: 13, color: '#999', marginBottom: 32 },
-  cancelButton: {
-    borderWidth: 1.5,
-    borderColor: '#e5e5e5',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-  },
-  cancelButtonText: { fontSize: 15, fontWeight: '600', color: '#666' },
+  searchingHint: { fontSize: 13, marginBottom: 32 },
+  cancelButton: { paddingHorizontal: 32 },
   errorText: {
     marginTop: 24,
-    color: '#dc2626',
     fontSize: 14,
     textAlign: 'center',
   },

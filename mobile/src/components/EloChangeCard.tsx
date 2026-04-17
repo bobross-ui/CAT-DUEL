@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState } from 'react';
 import { View, Text, Animated, StyleSheet } from 'react-native';
 import TierBadge from './TierBadge';
-import { getTier } from '../constants';
+import { useTheme } from '../theme/ThemeProvider';
+import { ELO_TIERS } from '../constants';
 
 interface Props {
   eloBefore: number;
@@ -12,11 +13,13 @@ interface Props {
 }
 
 export default function EloChangeCard({ eloBefore, eloAfter, eloDelta, tierChanged, newTier }: Props) {
+  const { theme } = useTheme();
   const animatedValue = useRef(new Animated.Value(eloBefore)).current;
   const [displayElo, setDisplayElo] = useState(eloBefore);
 
-  const tierBefore = getTier(eloBefore).name.toUpperCase();
-  const deltaColor = eloDelta > 0 ? '#16a34a' : eloDelta < 0 ? '#dc2626' : '#9ca3af';
+  const tierObj = ELO_TIERS.find(t => eloBefore >= t.min && eloBefore <= t.max) ?? ELO_TIERS[0];
+  const tierBefore = tierObj.name.toUpperCase();
+  const deltaColor = eloDelta > 0 ? theme.success : eloDelta < 0 ? theme.danger : theme.textMuted;
   const deltaSign = eloDelta > 0 ? '+' : '';
 
   useEffect(() => {
@@ -35,11 +38,11 @@ export default function EloChangeCard({ eloBefore, eloAfter, eloDelta, tierChang
   }, []);
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { borderColor: theme.border }]}>
       <View style={styles.eloRow}>
-        <Text style={styles.eloBefore}>{eloBefore}</Text>
-        <Text style={styles.arrow}>→</Text>
-        <Text style={styles.eloAfter}>{displayElo}</Text>
+        <Text style={[styles.eloBefore, { color: theme.textMuted }]}>{eloBefore}</Text>
+        <Text style={[styles.arrow, { color: theme.textMuted }]}>→</Text>
+        <Text style={[styles.eloAfter, { color: theme.text }]}>{displayElo}</Text>
         <View style={[styles.deltaPill, { backgroundColor: deltaColor }]}>
           <Text style={styles.deltaText}>{deltaSign}{eloDelta}</Text>
         </View>
@@ -49,7 +52,7 @@ export default function EloChangeCard({ eloBefore, eloAfter, eloDelta, tierChang
         {tierChanged ? (
           <>
             <TierBadge tier={tierBefore} />
-            <Text style={[styles.promotionText, { color: eloDelta > 0 ? '#16a34a' : '#dc2626' }]}>
+            <Text style={[styles.promotionText, { color: eloDelta > 0 ? theme.success : theme.danger }]}>
               {eloDelta > 0 ? '▲ PROMOTED!' : '▼ Demoted'}
             </Text>
             <TierBadge tier={newTier} highlighted />
@@ -66,7 +69,6 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     borderWidth: 1.5,
-    borderColor: '#e5e5e5',
     borderRadius: 16,
     padding: 20,
     marginBottom: 20,
@@ -81,16 +83,13 @@ const styles = StyleSheet.create({
   eloBefore: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#9ca3af',
   },
   arrow: {
     fontSize: 18,
-    color: '#9ca3af',
   },
   eloAfter: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#1a1a1a',
   },
   deltaPill: {
     borderRadius: 99,

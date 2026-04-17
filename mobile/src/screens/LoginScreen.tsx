@@ -2,18 +2,20 @@ import { useState } from 'react';
 import {
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  View,
 } from 'react-native';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../theme/ThemeProvider';
+import Button from '../components/Button';
 
 export default function LoginScreen() {
   const { signInWithEmail, signInWithGoogle } = useAuth();
+  const { theme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -59,54 +61,71 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Text style={styles.title}>CAT Duel</Text>
-      <Text style={styles.subtitle}>{isRegistering ? 'Create an account' : 'Sign in to compete'}</Text>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: theme.bg }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <Text style={[styles.title, { color: theme.text }]}>CAT Duel</Text>
+      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+        {isRegistering ? 'Create an account' : 'Sign in to compete'}
+      </Text>
 
       {isRegistering && (
         <TextInput
-          style={styles.input}
+          style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.bg }]}
           placeholder="Display Name"
+          placeholderTextColor={theme.textMuted}
           value={displayName}
           onChangeText={setDisplayName}
           autoCapitalize="words"
         />
       )}
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.bg }]}
         placeholder="Email"
+        placeholderTextColor={theme.textMuted}
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
       />
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.bg }]}
         placeholder="Password"
+        placeholderTextColor={theme.textMuted}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
 
-      <TouchableOpacity style={styles.button} onPress={handleEmailSignIn} disabled={loading}>
-        {loading
-          ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.buttonText}>{isRegistering ? 'Register' : 'Sign In'}</Text>}
-      </TouchableOpacity>
+      <Button
+        label={isRegistering ? 'Register' : 'Sign In'}
+        onPress={handleEmailSignIn}
+        loading={loading}
+        style={styles.buttonSpacing}
+      />
 
-      <TouchableOpacity onPress={() => { setIsRegistering(r => !r); setError(''); setDisplayName(''); }}>
-        <Text style={styles.toggleText}>
-          {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}
-        </Text>
-      </TouchableOpacity>
+      <Text
+        style={[styles.toggleText, { color: theme.textSecondary }]}
+        onPress={() => { setIsRegistering(r => !r); setError(''); setDisplayName(''); }}
+      >
+        {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}
+      </Text>
 
       {!isRegistering && (
-        <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={loading}>
-          <Text style={styles.googleButtonText}>Continue with Google</Text>
-        </TouchableOpacity>
+        <Button
+          label="Continue with Google"
+          variant="secondary"
+          onPress={handleGoogleSignIn}
+          disabled={loading}
+          style={styles.buttonSpacing}
+        />
       )}
+
+      {/* Bottom spacer so keyboard avoid doesn't crush content */}
+      <View style={{ height: 1 }} />
     </KeyboardAvoidingView>
   );
 }
@@ -114,7 +133,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
@@ -126,13 +144,11 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
     marginBottom: 40,
     textAlign: 'center',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -140,39 +156,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   error: {
-    color: '#e53e3e',
     fontSize: 14,
     marginBottom: 12,
   },
-  button: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
+  buttonSpacing: {
     marginBottom: 12,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   toggleText: {
     fontSize: 14,
-    color: '#666',
     textAlign: 'center',
     marginBottom: 12,
     textDecorationLine: 'underline',
-  },
-  googleButton: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  googleButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
   },
 });

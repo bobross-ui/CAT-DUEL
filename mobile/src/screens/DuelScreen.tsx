@@ -8,6 +8,9 @@ import { Socket } from 'socket.io-client';
 import { RootStackParamList, GameFinishedPayload } from '../navigation';
 import { createGameSocket } from '../services/socket';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../theme/ThemeProvider';
+import Avatar from '../components/Avatar';
+import Button from '../components/Button';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Duel'>;
 
@@ -61,6 +64,7 @@ function formatTime(seconds: number): string {
 export default function DuelScreen({ route, navigation }: Props) {
   const { gameId, opponent } = route.params;
   const { user } = useAuth();
+  const { theme } = useTheme();
 
   const [duelState, setDuelState] = useState<DuelState>(INITIAL_STATE);
   const socketRef = useRef<Socket | null>(null);
@@ -68,7 +72,6 @@ export default function DuelScreen({ route, navigation }: Props) {
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Score animations
   const yourScoreScale = useRef(new Animated.Value(1)).current;
   const opponentScoreScale = useRef(new Animated.Value(1)).current;
 
@@ -79,8 +82,6 @@ export default function DuelScreen({ route, navigation }: Props) {
     ]).start();
   }
 
-  // ── Socket setup ──────────────────────────────────────────────────────────────
-
   useEffect(() => {
     let mounted = true;
 
@@ -89,8 +90,6 @@ export default function DuelScreen({ route, navigation }: Props) {
       if (!mounted) { socket.disconnect(); return; }
       socketRef.current = socket;
 
-      // On connect (initial and reconnect), always join the game room.
-      // Server sends game:sync if already ACTIVE, starts countdown if WAITING.
       socket.on('connect', () => {
         socket.emit('game:join', { gameId });
       });
@@ -99,7 +98,6 @@ export default function DuelScreen({ route, navigation }: Props) {
         if (!mounted) return;
         setDuelState((prev) => ({ ...prev, phase: 'COUNTDOWN', countdownSeconds: seconds }));
 
-        // Tick down visually — server drives the real timing
         let remaining = seconds;
         if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
         countdownIntervalRef.current = setInterval(() => {
@@ -131,7 +129,6 @@ export default function DuelScreen({ route, navigation }: Props) {
           selectedAnswer: null,
           showFeedback: false,
         }));
-        // Local tick — server syncs every 10s to correct drift
         if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = setInterval(() => {
           setDuelState((prev) => {
@@ -174,27 +171,16 @@ export default function DuelScreen({ route, navigation }: Props) {
         });
       });
 
-      // Server sync every 10s — corrects any local drift
       socket.on('game:timer', ({ remaining }: { remaining: number }) => {
         if (!mounted) return;
         setDuelState((prev) => ({ ...prev, timeRemaining: remaining }));
       });
 
-      // Reconnection: server sends full current state
       socket.on('game:sync', ({
-        yourScore,
-        opponentScore,
-        timeRemaining,
-        currentQuestion,
-        questionNumber,
-        totalQuestions,
+        yourScore, opponentScore, timeRemaining, currentQuestion, questionNumber, totalQuestions,
       }: {
-        yourScore: number;
-        opponentScore: number;
-        timeRemaining: number;
-        currentQuestion: ClientQuestion;
-        questionNumber: number;
-        totalQuestions: number;
+        yourScore: number; opponentScore: number; timeRemaining: number;
+        currentQuestion: ClientQuestion; questionNumber: number; totalQuestions: number;
       }) => {
         if (!mounted) return;
         questionStartTime.current = Date.now();
@@ -215,11 +201,7 @@ export default function DuelScreen({ route, navigation }: Props) {
       socket.on('game:finished', (results: GameFinishedPayload) => {
         if (!mounted) return;
         socket.disconnect();
-        navigation.replace('DuelResults', {
-          results,
-          userId: results.currentUserId,
-          opponent,
-        });
+        navigation.replace('DuelResults', { results, userId: results.currentUserId, opponent });
       });
 
       socket.on('game:error', ({ message }: { message: string }) => {
@@ -241,8 +223,6 @@ export default function DuelScreen({ route, navigation }: Props) {
     };
   }, [gameId]);
 
-  // ── Hardware back button (Android) ────────────────────────────────────────────
-
   useEffect(() => {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
       handleQuit();
@@ -250,8 +230,6 @@ export default function DuelScreen({ route, navigation }: Props) {
     });
     return () => handler.remove();
   }, [duelState.phase]);
-
-  // ── Actions ───────────────────────────────────────────────────────────────────
 
   function submitAnswer() {
     if (duelState.selectedAnswer === null || !duelState.currentQuestion) return;
@@ -261,7 +239,6 @@ export default function DuelScreen({ route, navigation }: Props) {
       selectedAnswer: duelState.selectedAnswer,
       timeTakenMs: Date.now() - questionStartTime.current,
     });
-    // Disable further selections while waiting for answer:result
     setDuelState((prev) => ({ ...prev, selectedAnswer: prev.selectedAnswer }));
   }
 
@@ -291,24 +268,18 @@ export default function DuelScreen({ route, navigation }: Props) {
     }
   }
 
-  // ── Render helpers ────────────────────────────────────────────────────────────
-
   const isTimerCritical = duelState.timeRemaining <= 60;
 
   function renderPrematch() {
     return (
       <View style={styles.centered}>
-        <Text style={styles.matchFoundTitle}>Match Found!</Text>
-        <View style={styles.opponentCard}>
-          <View style={styles.avatarPlaceholder}>
-            <Text style={styles.avatarInitial}>
-              {(opponent.displayName ?? 'O').charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <Text style={styles.opponentName}>{opponent.displayName ?? 'Opponent'}</Text>
-          <Text style={styles.opponentElo}>Elo: {opponent.eloRating}</Text>
+        <Text style={[styles.matchFoundTitle, { color: theme.text }]}>Match Found!</Text>
+        <View style={[styles.opponentCard, { borderColor: theme.border }]}>
+          <Avatar name={opponent.displayName ?? 'O'} size="lg" />
+          <Text style={[styles.opponentName, { color: theme.text }]}>{opponent.displayName ?? 'Opponent'}</Text>
+          <Text style={[styles.opponentElo, { color: theme.textSecondary }]}>Elo: {opponent.eloRating}</Text>
         </View>
-        <Text style={styles.preparingText}>Connecting to game room...</Text>
+        <Text style={[styles.preparingText, { color: theme.textMuted }]}>Connecting to game room...</Text>
       </View>
     );
   }
@@ -316,8 +287,8 @@ export default function DuelScreen({ route, navigation }: Props) {
   function renderCountdown() {
     return (
       <View style={styles.centered}>
-        <Text style={styles.countdownLabel}>Get ready!</Text>
-        <Text style={styles.countdownNumber}>{duelState.countdownSeconds}</Text>
+        <Text style={[styles.countdownLabel, { color: theme.textSecondary }]}>Get ready!</Text>
+        <Text style={[styles.countdownNumber, { color: theme.text }]}>{duelState.countdownSeconds}</Text>
       </View>
     );
   }
@@ -326,56 +297,50 @@ export default function DuelScreen({ route, navigation }: Props) {
     const { currentQuestion, questionNumber, totalQuestions, selectedAnswer, showFeedback, lastAnswerCorrect } = duelState;
     if (!currentQuestion) return null;
 
-    const feedbackBorderColor = lastAnswerCorrect ? '#16a34a' : '#dc2626';
+    const feedbackBorderColor = lastAnswerCorrect ? theme.success : theme.danger;
 
     return (
       <>
-        {/* Score header */}
-        <View style={styles.scoreHeader}>
+        <View style={[styles.scoreHeader, { borderBottomColor: theme.borderLight }]}>
           <View style={styles.playerBlock}>
-            <View style={styles.avatarSmall}>
-              <Text style={styles.avatarSmallText}>
-                {(user?.displayName ?? 'Y').charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <Text style={styles.playerLabel}>You</Text>
-            <Animated.Text style={[styles.scoreValue, { transform: [{ scale: yourScoreScale }] }]}>
+            <Avatar name={user?.displayName ?? 'Y'} size="sm" />
+            <Text style={[styles.playerLabel, { color: theme.textMuted }]}>You</Text>
+            <Animated.Text style={[styles.scoreValue, { color: theme.text, transform: [{ scale: yourScoreScale }] }]}>
               {duelState.yourScore}
             </Animated.Text>
           </View>
 
           <View style={styles.timerBlock}>
-            <Text style={[styles.timerText, isTimerCritical && styles.timerCritical]}>
+            <Text style={[styles.timerText, { color: isTimerCritical ? theme.danger : theme.text }]}>
               {formatTime(duelState.timeRemaining)}
             </Text>
           </View>
 
           <View style={styles.playerBlock}>
-            <View style={styles.avatarSmall}>
-              <Text style={styles.avatarSmallText}>
-                {(opponent.displayName ?? 'O').charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <Text style={styles.playerLabel}>{opponent.displayName ?? 'Opp'}</Text>
-            <Animated.Text style={[styles.scoreValue, { transform: [{ scale: opponentScoreScale }] }]}>
+            <Avatar name={opponent.displayName ?? 'O'} size="sm" />
+            <Text style={[styles.playerLabel, { color: theme.textMuted }]}>{opponent.displayName ?? 'Opp'}</Text>
+            <Animated.Text style={[styles.scoreValue, { color: theme.text, transform: [{ scale: opponentScoreScale }] }]}>
               {duelState.opponentScore}
             </Animated.Text>
           </View>
         </View>
 
-        {/* Question card */}
         <ScrollView
           style={[styles.questionCard, showFeedback && { borderColor: feedbackBorderColor, borderWidth: 2 }]}
           contentContainerStyle={styles.questionCardContent}
         >
           <View style={styles.questionMeta}>
-            <Text style={styles.questionNumber}>Q {questionNumber} of {totalQuestions}</Text>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryBadgeText}>{currentQuestion.category}</Text>
+            <Text style={[styles.questionNumber, { color: theme.textMuted }]}>
+              Q {questionNumber} of {totalQuestions}
+            </Text>
+            <View style={[styles.categoryBadge, { backgroundColor: theme.surfaceHighlight }]}>
+              <Text style={[styles.categoryBadgeText, { color: theme.textSecondary }]}>
+                {currentQuestion.category}
+              </Text>
             </View>
           </View>
 
-          <Text style={styles.questionText}>{currentQuestion.text}</Text>
+          <Text style={[styles.questionText, { color: theme.text }]}>{currentQuestion.text}</Text>
 
           <View style={styles.optionsContainer}>
             {(currentQuestion.options as string[]).map((option, index) => {
@@ -383,17 +348,23 @@ export default function DuelScreen({ route, navigation }: Props) {
               return (
                 <TouchableOpacity
                   key={index}
-                  style={[styles.option, isSelected && styles.optionSelected]}
+                  style={[
+                    styles.option,
+                    {
+                      borderColor: isSelected ? theme.text : theme.border,
+                      backgroundColor: isSelected ? theme.surfaceHighlight : theme.bg,
+                    },
+                  ]}
                   onPress={() => !showFeedback && setDuelState((prev) => ({
                     ...prev,
                     selectedAnswer: prev.selectedAnswer === index ? null : index,
                   }))}
                   disabled={showFeedback}
                 >
-                  <Text style={[styles.optionIndex, isSelected && styles.optionIndexSelected]}>
+                  <Text style={[styles.optionIndex, { color: isSelected ? theme.text : theme.textMuted }]}>
                     {String.fromCharCode(65 + index)}.
                   </Text>
-                  <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                  <Text style={[styles.optionText, { color: isSelected ? theme.text : theme.textSecondary }]}>
                     {option}
                   </Text>
                 </TouchableOpacity>
@@ -402,30 +373,24 @@ export default function DuelScreen({ route, navigation }: Props) {
           </View>
         </ScrollView>
 
-        {/* Submit */}
         {!showFeedback && (
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={[styles.submitButton, selectedAnswer === null && styles.submitButtonDisabled]}
+          <View style={[styles.footer, { borderTopColor: theme.borderLight }]}>
+            <Button
+              label="Submit Answer"
               onPress={submitAnswer}
               disabled={selectedAnswer === null}
-            >
-              <Text style={styles.submitButtonText}>Submit Answer</Text>
-            </TouchableOpacity>
+            />
           </View>
         )}
       </>
     );
   }
 
-  // ── Main render ────────────────────────────────────────────────────────────────
-
   return (
-    <View style={styles.container}>
-      {/* Quit button — always visible except on prematch */}
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {duelState.phase !== 'PREMATCH' && (
         <TouchableOpacity style={styles.quitButton} onPress={handleQuit}>
-          <Text style={styles.quitText}>Quit</Text>
+          <Text style={[styles.quitText, { color: theme.textMuted }]}>Quit</Text>
         </TouchableOpacity>
       )}
 
@@ -437,43 +402,29 @@ export default function DuelScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
 
-  // Quit
   quitButton: { position: 'absolute', top: 52, right: 20, zIndex: 10, padding: 8 },
-  quitText: { fontSize: 14, color: '#999', fontWeight: '600' },
+  quitText: { fontSize: 14, fontWeight: '600' },
 
-  // Prematch
-  matchFoundTitle: { fontSize: 32, fontWeight: '800', marginBottom: 32, color: '#1a1a1a' },
+  matchFoundTitle: { fontSize: 32, fontWeight: '800', marginBottom: 32 },
   opponentCard: {
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#e5e5e5',
     borderRadius: 16,
     padding: 24,
     width: '80%',
     marginBottom: 32,
+    gap: 8,
   },
-  avatarPlaceholder: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  avatarInitial: { fontSize: 28, fontWeight: '700', color: '#fff' },
-  opponentName: { fontSize: 20, fontWeight: '700', marginBottom: 4 },
-  opponentElo: { fontSize: 14, color: '#666' },
-  preparingText: { fontSize: 14, color: '#999' },
+  opponentName: { fontSize: 20, fontWeight: '700' },
+  opponentElo: { fontSize: 14 },
+  preparingText: { fontSize: 14 },
 
-  // Countdown
-  countdownLabel: { fontSize: 18, color: '#666', marginBottom: 16, fontWeight: '500' },
-  countdownNumber: { fontSize: 96, fontWeight: '800', color: '#1a1a1a', lineHeight: 100 },
+  countdownLabel: { fontSize: 18, marginBottom: 16, fontWeight: '500' },
+  countdownNumber: { fontSize: 96, fontWeight: '800', lineHeight: 100 },
 
-  // Score header
   scoreHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -481,32 +432,18 @@ const styles = StyleSheet.create({
     paddingTop: 52,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
-  playerBlock: { flex: 1, alignItems: 'center' },
-  avatarSmall: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  avatarSmallText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  playerLabel: { fontSize: 12, color: '#999', marginBottom: 2 },
-  scoreValue: { fontSize: 28, fontWeight: '800', color: '#1a1a1a' },
+  playerBlock: { flex: 1, alignItems: 'center', gap: 4 },
+  playerLabel: { fontSize: 12 },
+  scoreValue: { fontSize: 28, fontWeight: '800' },
 
   timerBlock: { flex: 1, alignItems: 'center' },
   timerText: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1a1a1a',
     fontVariant: ['tabular-nums'],
   },
-  timerCritical: { color: '#dc2626' },
 
-  // Question card
   questionCard: { flex: 1 },
   questionCardContent: { padding: 20, paddingBottom: 32 },
   questionMeta: {
@@ -515,19 +452,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  questionNumber: { fontSize: 13, fontWeight: '600', color: '#999' },
+  questionNumber: { fontSize: 13, fontWeight: '600' },
   categoryBadge: {
-    backgroundColor: '#f5f5f5',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  categoryBadgeText: { fontSize: 12, fontWeight: '700', color: '#555' },
+  categoryBadgeText: { fontSize: 12, fontWeight: '700' },
   questionText: {
     fontSize: 17,
     fontWeight: '500',
     lineHeight: 26,
-    color: '#1a1a1a',
     marginBottom: 24,
   },
   optionsContainer: { gap: 10 },
@@ -536,28 +471,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
     borderWidth: 1.5,
-    borderColor: '#e5e5e5',
     borderRadius: 12,
     padding: 14,
   },
-  optionSelected: { borderColor: '#1a1a1a', backgroundColor: '#f5f5f5' },
-  optionIndex: { fontSize: 15, fontWeight: '700', color: '#bbb', width: 20 },
-  optionIndexSelected: { color: '#1a1a1a' },
-  optionText: { fontSize: 15, color: '#444', flex: 1, lineHeight: 22 },
-  optionTextSelected: { color: '#1a1a1a', fontWeight: '500' },
+  optionIndex: { fontSize: 15, fontWeight: '700', width: 20 },
+  optionText: { fontSize: 15, flex: 1, lineHeight: 22 },
 
-  // Footer
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
   },
-  submitButton: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  submitButtonDisabled: { backgroundColor: '#ccc' },
-  submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

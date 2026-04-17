@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation';
 import api from '../services/api';
 import TierBadge from '../components/TierBadge';
+import { useTheme } from '../theme/ThemeProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MatchHistory'>;
 
@@ -39,10 +40,8 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-const OUTCOME_COLOR = { WIN: '#16a34a', LOSS: '#dc2626', DRAW: '#f59e0b' };
-const OUTCOME_BG   = { WIN: '#dcfce7', LOSS: '#fee2e2', DRAW: '#fef9c3' };
-
 export default function MatchHistoryScreen({ navigation }: Props) {
+  const { theme } = useTheme();
   const [entries, setEntries] = useState<MatchEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,50 +79,56 @@ export default function MatchHistoryScreen({ navigation }: Props) {
     setLoadingMore(false);
   }, [fetchPage, loadingMore, page, totalPages]);
 
+  // Map outcome to theme semantic colors
+  const outcomeColor = (outcome: 'WIN' | 'LOSS' | 'DRAW') =>
+    outcome === 'WIN' ? theme.success : outcome === 'LOSS' ? theme.danger : theme.warning;
+  const outcomeBg = (outcome: 'WIN' | 'LOSS' | 'DRAW') =>
+    outcome === 'WIN' ? theme.successBg : outcome === 'LOSS' ? theme.dangerBg : theme.warningBg;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={styles.backText}>←</Text>
+          <Text style={[styles.backText, { color: theme.text }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Match History</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Match History</Text>
       </View>
 
       {loading ? (
-        <ActivityIndicator style={styles.loader} size="large" color="#1a1a1a" />
+        <ActivityIndicator style={styles.loader} size="large" color={theme.text} />
       ) : (
         <FlatList
           data={entries}
           keyExtractor={(item) => item.matchId}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.row}
+              style={[styles.row, { borderBottomColor: theme.borderLight }]}
               onPress={() => navigation.navigate('MatchDetail', {
                 matchId: item.matchId,
                 opponentName: item.opponent.displayName,
               })}
             >
-              <View style={[styles.outcomePill, { backgroundColor: OUTCOME_BG[item.outcome] }]}>
-                <Text style={[styles.outcomeText, { color: OUTCOME_COLOR[item.outcome] }]}>
+              <View style={[styles.outcomePill, { backgroundColor: outcomeBg(item.outcome) }]}>
+                <Text style={[styles.outcomeText, { color: outcomeColor(item.outcome) }]}>
                   {item.outcome}
                 </Text>
               </View>
               <View style={styles.matchInfo}>
                 <View style={styles.opponentRow}>
-                  <Text style={styles.opponentName} numberOfLines={1}>
+                  <Text style={[styles.opponentName, { color: theme.text }]} numberOfLines={1}>
                     {item.opponent.displayName ?? 'Anonymous'}
                   </Text>
                   <TierBadge tier={item.opponent.rankTier} small />
                 </View>
-                <Text style={styles.matchMeta}>
+                <Text style={[styles.matchMeta, { color: theme.textMuted }]}>
                   {formatDate(item.finishedAt)} · {formatDuration(item.durationSeconds)}
                   {item.status === 'forfeited' ? ' · Forfeit' : ''}
                 </Text>
               </View>
               <View style={styles.rightCol}>
-                <Text style={styles.score}>{item.yourScore}–{item.opponentScore}</Text>
+                <Text style={[styles.score, { color: theme.text }]}>{item.yourScore}–{item.opponentScore}</Text>
                 <Text style={[styles.eloDelta, {
-                  color: item.yourEloChange > 0 ? '#16a34a' : item.yourEloChange < 0 ? '#dc2626' : '#9ca3af',
+                  color: item.yourEloChange > 0 ? theme.success : item.yourEloChange < 0 ? theme.danger : theme.textMuted,
                 }]}>
                   {item.yourEloChange > 0 ? '+' : ''}{item.yourEloChange}
                 </Text>
@@ -134,12 +139,14 @@ export default function MatchHistoryScreen({ navigation }: Props) {
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
           ListFooterComponent={loadingMore
-            ? <ActivityIndicator style={styles.footerLoader} color="#999" />
+            ? <ActivityIndicator style={styles.footerLoader} color={theme.textMuted} />
             : null}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>No matches yet.</Text>
-              <Text style={styles.emptySubText}>Play your first duel to see history here.</Text>
+              <Text style={[styles.emptyText, { color: theme.text }]}>No matches yet.</Text>
+              <Text style={[styles.emptySubText, { color: theme.textSecondary }]}>
+                Play your first duel to see history here.
+              </Text>
             </View>
           }
           contentContainerStyle={styles.list}
@@ -150,7 +157,7 @@ export default function MatchHistoryScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -160,8 +167,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   backButton: { padding: 4 },
-  backText: { fontSize: 24, color: '#1a1a1a' },
-  title: { fontSize: 22, fontWeight: '800', color: '#1a1a1a' },
+  backText: { fontSize: 24 },
+  title: { fontSize: 22, fontWeight: '800' },
   loader: { flex: 1, marginTop: 60 },
   list: { paddingBottom: 40 },
   row: {
@@ -170,7 +177,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
     gap: 12,
   },
   outcomePill: {
@@ -182,13 +188,13 @@ const styles = StyleSheet.create({
   outcomeText: { fontSize: 11, fontWeight: '800' },
   matchInfo: { flex: 1, gap: 4 },
   opponentRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  opponentName: { fontSize: 15, fontWeight: '600', color: '#1a1a1a', flexShrink: 1 },
-  matchMeta: { fontSize: 12, color: '#999' },
+  opponentName: { fontSize: 15, fontWeight: '600', flexShrink: 1 },
+  matchMeta: { fontSize: 12 },
   rightCol: { alignItems: 'flex-end', gap: 2 },
-  score: { fontSize: 15, fontWeight: '700', color: '#1a1a1a' },
+  score: { fontSize: 15, fontWeight: '700' },
   eloDelta: { fontSize: 13, fontWeight: '600' },
   footerLoader: { paddingVertical: 16 },
   empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#1a1a1a' },
-  emptySubText: { fontSize: 14, color: '#888' },
+  emptyText: { fontSize: 16, fontWeight: '600' },
+  emptySubText: { fontSize: 14 },
 });

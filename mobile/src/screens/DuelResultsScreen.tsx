@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import api from '../services/api';
 import EloChangeCard from '../components/EloChangeCard';
+import Button from '../components/Button';
+import { useTheme } from '../theme/ThemeProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DuelResults'>;
 
@@ -25,6 +27,7 @@ interface AnswerDetail {
 
 export default function DuelResultsScreen({ route, navigation }: Props) {
   const { results, userId, opponent } = route.params;
+  const { theme } = useTheme();
 
   const isPlayer1 = results.player1.userId === userId;
   const yours = isPlayer1 ? results.player1 : results.player2;
@@ -33,7 +36,7 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
   const youWon = results.winnerId === userId;
   const isDraw = results.isDraw;
   const outcomeLabel = isDraw ? 'Draw!' : youWon ? 'You Won!' : 'You Lost';
-  const outcomeColor = isDraw ? '#f59e0b' : youWon ? '#16a34a' : '#dc2626';
+  const outcomeColor = isDraw ? theme.warning : youWon ? theme.success : theme.danger;
 
   const [answers, setAnswers] = useState<AnswerDetail[]>([]);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
@@ -42,17 +45,17 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
     api
       .get(`/games/${results.gameId}`)
       .then((res) => setAnswers(res.data.data.answers ?? []))
-      .catch(() => {/* non-critical — breakdown just won't show */})
+      .catch(() => {})
       .finally(() => setLoadingBreakdown(false));
   }, [results.gameId]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView style={{ backgroundColor: theme.bg }} contentContainerStyle={styles.container}>
       <Text style={[styles.outcomeLabel, { color: outcomeColor }]}>{outcomeLabel}</Text>
 
       {results.isForfeit && (
-        <View style={styles.forfeitBanner}>
-          <Text style={styles.forfeitText}>Opponent forfeited the match</Text>
+        <View style={[styles.forfeitBanner, { backgroundColor: theme.warningBg, borderColor: theme.warningBorder }]}>
+          <Text style={[styles.forfeitText, { color: theme.warningText }]}>Opponent forfeited the match</Text>
         </View>
       )}
 
@@ -64,36 +67,45 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
         newTier={yours.newTier}
       />
 
-      <View style={styles.scoreRow}>
+      <View style={[styles.scoreRow, { borderColor: theme.border }]}>
         <View style={styles.scoreBlock}>
-          <Text style={styles.scoreName}>You</Text>
-          <Text style={styles.scoreNumber}>{yours.score}</Text>
-          <Text style={styles.scoreAnswered}>{yours.questionsAnswered} answered</Text>
+          <Text style={[styles.scoreName, { color: theme.textMuted }]}>You</Text>
+          <Text style={[styles.scoreNumber, { color: theme.text }]}>{yours.score}</Text>
+          <Text style={[styles.scoreAnswered, { color: theme.textMuted }]}>{yours.questionsAnswered} answered</Text>
         </View>
-        <Text style={styles.scoreSep}>—</Text>
+        <Text style={[styles.scoreSep, { color: theme.border }]}>—</Text>
         <View style={styles.scoreBlock}>
-          <Text style={styles.scoreName}>{opponent.displayName ?? 'Opponent'}</Text>
-          <Text style={styles.scoreNumber}>{theirs.score}</Text>
-          <Text style={styles.scoreAnswered}>{theirs.questionsAnswered} answered</Text>
+          <Text style={[styles.scoreName, { color: theme.textMuted }]}>{opponent.displayName ?? 'Opponent'}</Text>
+          <Text style={[styles.scoreNumber, { color: theme.text }]}>{theirs.score}</Text>
+          <Text style={[styles.scoreAnswered, { color: theme.textMuted }]}>{theirs.questionsAnswered} answered</Text>
         </View>
       </View>
 
-      {/* Per-question breakdown */}
       {loadingBreakdown ? (
-        <ActivityIndicator style={styles.loader} color="#999" />
+        <ActivityIndicator style={styles.loader} color={theme.textMuted} />
       ) : answers.length > 0 ? (
         <View style={styles.breakdown}>
-          <Text style={styles.breakdownTitle}>Your Answers</Text>
+          <Text style={[styles.breakdownTitle, { color: theme.text }]}>Your Answers</Text>
           {answers.map((a, idx) => (
-            <View key={a.id} style={[styles.answerCard, a.isCorrect ? styles.answerCorrect : styles.answerWrong]}>
+            <View key={a.id} style={[
+              styles.answerCard,
+              { borderColor: a.isCorrect ? theme.successBorder : theme.dangerBorder,
+                backgroundColor: a.isCorrect ? theme.successBg : theme.dangerBg },
+            ]}>
               <View style={styles.answerHeader}>
-                <Text style={styles.answerNumber}>Q{idx + 1}</Text>
-                <Text style={styles.answerCategory}>{a.question.category}</Text>
-                <Text style={[styles.answerBadge, a.isCorrect ? styles.badgeCorrect : styles.badgeWrong]}>
+                <Text style={[styles.answerNumber, { color: theme.textSecondary }]}>Q{idx + 1}</Text>
+                <Text style={[styles.answerCategory, { color: theme.textMuted, backgroundColor: theme.surfaceHighlight }]}>
+                  {a.question.category}
+                </Text>
+                <Text style={[
+                  styles.answerBadge,
+                  { backgroundColor: a.isCorrect ? theme.successBg : theme.dangerBg,
+                    color: a.isCorrect ? theme.successText : theme.dangerText },
+                ]}>
                   {a.isCorrect ? 'Correct' : 'Wrong'}
                 </Text>
               </View>
-              <Text style={styles.questionText}>{a.question.text}</Text>
+              <Text style={[styles.questionText, { color: theme.text }]}>{a.question.text}</Text>
               <View style={styles.optionsGrid}>
                 {(a.question.options as string[]).map((opt, i) => {
                   const isSelected = i === a.selectedAnswer;
@@ -103,14 +115,16 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
                       key={i}
                       style={[
                         styles.optionRow,
-                        isCorrectOpt && styles.optionRowCorrect,
-                        isSelected && !isCorrectOpt && styles.optionRowWrong,
+                        { backgroundColor: theme.surface },
+                        isCorrectOpt && { backgroundColor: theme.successBg },
+                        isSelected && !isCorrectOpt && { backgroundColor: theme.dangerBg },
                       ]}
                     >
                       <Text style={[
                         styles.optionText,
-                        isCorrectOpt && styles.optionTextCorrect,
-                        isSelected && !isCorrectOpt && styles.optionTextWrong,
+                        { color: theme.textSecondary },
+                        isCorrectOpt && { color: theme.successText, fontWeight: '600' },
+                        isSelected && !isCorrectOpt && { color: theme.dangerText, fontWeight: '600' },
                       ]}>
                         {String.fromCharCode(65 + i)}. {opt}
                       </Text>
@@ -118,27 +132,16 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
                   );
                 })}
               </View>
-              <Text style={styles.explanationLabel}>Explanation</Text>
-              <Text style={styles.explanationText}>{a.question.explanation}</Text>
+              <Text style={[styles.explanationLabel, { color: theme.textMuted }]}>Explanation</Text>
+              <Text style={[styles.explanationText, { color: theme.textSecondary }]}>{a.question.explanation}</Text>
             </View>
           ))}
         </View>
       ) : null}
 
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => navigation.replace('Matchmaking')}
-        >
-          <Text style={styles.primaryButtonText}>Play Again</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={() => navigation.replace('Profile')}
-        >
-          <Text style={styles.secondaryButtonText}>Back to Home</Text>
-        </TouchableOpacity>
+        <Button label="Play Again" onPress={() => navigation.replace('Matchmaking')} style={styles.buttonSpacing} />
+        <Button label="Back to Home" variant="secondary" onPress={() => navigation.replace('Profile')} />
       </View>
     </ScrollView>
   );
@@ -146,7 +149,6 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
     paddingHorizontal: 20,
     paddingTop: 80,
     paddingBottom: 48,
@@ -163,64 +165,39 @@ const styles = StyleSheet.create({
     gap: 24,
     marginBottom: 32,
     borderWidth: 1.5,
-    borderColor: '#e5e5e5',
     borderRadius: 16,
     padding: 28,
     width: '100%',
     justifyContent: 'center',
   },
   scoreBlock: { alignItems: 'center', flex: 1 },
-  scoreName: { fontSize: 14, color: '#999', fontWeight: '600', marginBottom: 8 },
-  scoreNumber: { fontSize: 48, fontWeight: '800', color: '#1a1a1a', lineHeight: 52 },
-  scoreAnswered: { fontSize: 12, color: '#aaa', marginTop: 4 },
-  scoreSep: { fontSize: 24, color: '#ddd', fontWeight: '300' },
+  scoreName: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  scoreNumber: { fontSize: 48, fontWeight: '800', lineHeight: 52 },
+  scoreAnswered: { fontSize: 12, marginTop: 4 },
+  scoreSep: { fontSize: 24, fontWeight: '300' },
   loader: { marginVertical: 32 },
   breakdown: { width: '100%', marginBottom: 24 },
-  breakdownTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a', marginBottom: 16 },
+  breakdownTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
   answerCard: {
     borderRadius: 12,
     borderWidth: 1.5,
     padding: 16,
     marginBottom: 16,
   },
-  answerCorrect: { borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' },
-  answerWrong: { borderColor: '#fecaca', backgroundColor: '#fff5f5' },
   answerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
-  answerNumber: { fontSize: 12, fontWeight: '700', color: '#666' },
-  answerCategory: { fontSize: 11, color: '#888', backgroundColor: '#f3f4f6', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99 },
+  answerNumber: { fontSize: 12, fontWeight: '700' },
+  answerCategory: { fontSize: 11, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99 },
   answerBadge: { marginLeft: 'auto', fontSize: 12, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 99 },
-  badgeCorrect: { backgroundColor: '#dcfce7', color: '#15803d' },
-  badgeWrong: { backgroundColor: '#fee2e2', color: '#b91c1c' },
-  questionText: { fontSize: 14, color: '#1a1a1a', lineHeight: 20, marginBottom: 12 },
+  questionText: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
   optionsGrid: { gap: 6, marginBottom: 12 },
-  optionRow: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#f9fafb' },
-  optionRowCorrect: { backgroundColor: '#dcfce7' },
-  optionRowWrong: { backgroundColor: '#fee2e2' },
-  optionText: { fontSize: 13, color: '#444' },
-  optionTextCorrect: { color: '#15803d', fontWeight: '600' },
-  optionTextWrong: { color: '#b91c1c', fontWeight: '600' },
-  explanationLabel: { fontSize: 12, fontWeight: '700', color: '#888', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  explanationText: { fontSize: 13, color: '#555', lineHeight: 18 },
+  optionRow: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  optionText: { fontSize: 13 },
+  explanationLabel: { fontSize: 12, fontWeight: '700', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
+  explanationText: { fontSize: 13, lineHeight: 18 },
   actions: { width: '100%', gap: 12, marginTop: 8 },
-  primaryButton: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  secondaryButton: {
-    borderWidth: 1.5,
-    borderColor: '#e5e5e5',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  secondaryButtonText: { fontSize: 16, fontWeight: '600', color: '#1a1a1a' },
+  buttonSpacing: { marginBottom: 0 },
   forfeitBanner: {
-    backgroundColor: '#fef9c3',
     borderWidth: 1,
-    borderColor: '#fde047',
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -228,5 +205,5 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  forfeitText: { fontSize: 13, fontWeight: '600', color: '#854d0e' },
+  forfeitText: { fontSize: 13, fontWeight: '600' },
 });
