@@ -51,7 +51,7 @@ export type RootStackParamList = {
   Matchmaking: undefined;
   Duel: { gameId: string; opponent: OpponentInfo };
   DuelResults: { results: GameFinishedPayload; userId: string; opponent: OpponentInfo };
-  Leaderboard: undefined;
+  Leaderboard: { userTier: string };
   MatchHistory: undefined;
   MatchDetail: { matchId: string; opponentName: string | null };
 };

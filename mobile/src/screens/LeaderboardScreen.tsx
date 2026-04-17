@@ -55,9 +55,9 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
   );
 }
 
-export default function LeaderboardScreen({ navigation }: Props) {
+export default function LeaderboardScreen({ route, navigation }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('global');
-  const [selectedTier, setSelectedTier] = useState('SILVER');
+  const [selectedTier, setSelectedTier] = useState(route.params.userTier);
   const [tierPickerVisible, setTierPickerVisible] = useState(false);
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,7 +94,7 @@ export default function LeaderboardScreen({ navigation }: Props) {
     setData(null);
   }
 
-  const gamesNeeded = data?.currentUserRank == null
+  const gamesNeeded = activeTab !== 'tier' && data?.currentUserRank == null
     ? 5 - (data?.entries.find(e => e.isCurrentUser)?.gamesPlayed ?? 0)
     : null;
 

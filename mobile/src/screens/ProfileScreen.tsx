@@ -7,6 +7,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { RootStackParamList } from '../navigation';
+import TierBadge from '../components/TierBadge';
+import { ELO_TIERS, getTier } from '../constants';
 
 interface UserProfile {
   id: string;
@@ -14,7 +16,48 @@ interface UserProfile {
   displayName: string | null;
   eloRating: number;
   gamesPlayed: number;
+  rankTier: string;
 }
+
+function TierProgressBar({ eloRating, rankTier }: { eloRating: number; rankTier: string }) {
+  const tier = getTier(eloRating);
+  const isDiamond = tier.max === Infinity;
+  const progress = isDiamond ? 1 : (eloRating - tier.min) / (tier.max - tier.min + 1);
+  const nextTier = isDiamond ? null : ELO_TIERS[ELO_TIERS.indexOf(tier) + 1];
+
+  return (
+    <View style={progressStyles.container}>
+      <View style={progressStyles.labelRow}>
+        <Text style={progressStyles.label}>
+          {isDiamond ? 'Max Rank' : `${eloRating} / ${tier.max + 1} to ${nextTier?.name}`}
+        </Text>
+        <Text style={[progressStyles.pct, { color: tier.color }]}>
+          {isDiamond ? '100%' : `${Math.round(progress * 100)}%`}
+        </Text>
+      </View>
+      <View style={progressStyles.track}>
+        <View style={[
+          progressStyles.fill,
+          { width: `${Math.round(progress * 100)}%` as any, backgroundColor: tier.color },
+        ]} />
+      </View>
+    </View>
+  );
+}
+
+const progressStyles = StyleSheet.create({
+  container: { width: '100%', marginBottom: 32 },
+  labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  label: { fontSize: 12, color: '#999' },
+  pct: { fontSize: 12, fontWeight: '700' },
+  track: {
+    height: 6,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 99,
+    overflow: 'hidden',
+  },
+  fill: { height: '100%', borderRadius: 99 },
+});
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
@@ -104,6 +147,11 @@ export default function ProfileScreen({ navigation }: Props) {
             <Text style={styles.editButtonText}>Edit</Text>
           </TouchableOpacity>
         </View>
+        {profile && (
+          <View style={styles.tierBadgeRow}>
+            <TierBadge tier={profile.rankTier} />
+          </View>
+        )}
         <Text style={styles.email}>{profile?.email}</Text>
 
         <View style={styles.statsRow}>
@@ -117,6 +165,8 @@ export default function ProfileScreen({ navigation }: Props) {
           </View>
         </View>
 
+        {profile && <TierProgressBar eloRating={profile.eloRating} rankTier={profile.rankTier} />}
+
         <TouchableOpacity style={styles.duelButton} onPress={() => navigation.navigate('Matchmaking')}>
           <Text style={styles.duelButtonText}>Find Duel</Text>
         </TouchableOpacity>
@@ -125,7 +175,7 @@ export default function ProfileScreen({ navigation }: Props) {
           <Text style={styles.practiceButtonText}>Practice</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.practiceButton} onPress={() => navigation.navigate('Leaderboard')}>
+        <TouchableOpacity style={styles.practiceButton} onPress={() => navigation.navigate('Leaderboard', { userTier: profile?.rankTier ?? 'SILVER' })}>
           <Text style={styles.practiceButtonText}>Leaderboard</Text>
         </TouchableOpacity>
 
@@ -215,10 +265,13 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 40,
   },
+  tierBadgeRow: {
+    marginBottom: 24,
+  },
   statsRow: {
     flexDirection: 'row',
     gap: 24,
-    marginBottom: 48,
+    marginBottom: 16,
   },
   stat: {
     alignItems: 'center',
