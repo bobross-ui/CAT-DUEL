@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import { initializeApp } from 'firebase/app';
 import { initializeAuth, browserLocalPersistence, indexedDBLocalPersistence } from 'firebase/auth';
-// @ts-ignore: getReactNativePersistence exists in the RN bundle
+// @ts-expect-error: getReactNativePersistence exists in the RN bundle
 import { getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

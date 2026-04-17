@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  View,
   Text,
   TextInput,
   TouchableOpacity,
@@ -40,9 +39,10 @@ export default function LoginScreen() {
       } else {
         await signInWithEmail(email, password);
       }
-    } catch (err: any) {
-      if (err.code === 'auth/email-already-in-use') setError('Email already registered. Sign in instead.');
-      else if (err.code === 'auth/weak-password') setError('Password must be at least 6 characters.');
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'auth/email-already-in-use') setError('Email already registered. Sign in instead.');
+      else if (code === 'auth/weak-password') setError('Password must be at least 6 characters.');
       else setError(isRegistering ? 'Registration failed.' : 'Invalid email or password.');
     } finally {
       setLoading(false);

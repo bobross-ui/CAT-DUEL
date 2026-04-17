@@ -39,6 +39,57 @@ async function main() {
     { n: '18', displayName: 'Harsh Jain',      elo:  720, tier: 'BRONZE'   },
     { n: '19', displayName: 'Kavya Nambiar',   elo:  650, tier: 'BRONZE'   },
     { n: '20', displayName: 'Pranav Shetty',   elo:  580, tier: 'BRONZE'   },
+    // 50 additional users
+    { n: '21', displayName: 'Aditya Menon',    elo: 1980, tier: 'DIAMOND'  },
+    { n: '22', displayName: 'Shruti Pillai',   elo: 1960, tier: 'DIAMOND'  },
+    { n: '23', displayName: 'Kunal Saxena',    elo: 1930, tier: 'DIAMOND'  },
+    { n: '24', displayName: 'Nandita Rao',     elo: 1910, tier: 'DIAMOND'  },
+    { n: '25', displayName: 'Ishaan Thakur',   elo: 1890, tier: 'PLATINUM' },
+    { n: '26', displayName: 'Deepika Nair',    elo: 1860, tier: 'PLATINUM' },
+    { n: '27', displayName: 'Siddharth Das',   elo: 1840, tier: 'PLATINUM' },
+    { n: '28', displayName: 'Tanvi Kulkarni',  elo: 1810, tier: 'PLATINUM' },
+    { n: '29', displayName: 'Varun Mishra',    elo: 1790, tier: 'PLATINUM' },
+    { n: '30', displayName: 'Pallavi Ghosh',   elo: 1760, tier: 'PLATINUM' },
+    { n: '31', displayName: 'Abhishek Tiwari', elo: 1740, tier: 'PLATINUM' },
+    { n: '32', displayName: 'Richa Pandey',    elo: 1710, tier: 'PLATINUM' },
+    { n: '33', displayName: 'Gaurav Chandra',  elo: 1690, tier: 'PLATINUM' },
+    { n: '34', displayName: 'Swati Banerjee',  elo: 1660, tier: 'PLATINUM' },
+    { n: '35', displayName: 'Manish Tripathi', elo: 1630, tier: 'GOLD'     },
+    { n: '36', displayName: 'Ankita Rawat',    elo: 1610, tier: 'GOLD'     },
+    { n: '37', displayName: 'Rajesh Kapoor',   elo: 1590, tier: 'GOLD'     },
+    { n: '38', displayName: 'Neha Chatterjee', elo: 1560, tier: 'GOLD'     },
+    { n: '39', displayName: 'Vivek Sharma',    elo: 1540, tier: 'GOLD'     },
+    { n: '40', displayName: 'Priyanka Bhat',   elo: 1510, tier: 'GOLD'     },
+    { n: '41', displayName: 'Saurabh Shukla',  elo: 1490, tier: 'GOLD'     },
+    { n: '42', displayName: 'Madhu Iyer',      elo: 1460, tier: 'GOLD'     },
+    { n: '43', displayName: 'Farhan Qureshi',  elo: 1440, tier: 'GOLD'     },
+    { n: '44', displayName: 'Sonali Deshpande',elo: 1410, tier: 'GOLD'     },
+    { n: '45', displayName: 'Nitin Joshi',     elo: 1390, tier: 'GOLD'     },
+    { n: '46', displayName: 'Archana Hegde',   elo: 1360, tier: 'GOLD'     },
+    { n: '47', displayName: 'Rohan Mehrotra',  elo: 1330, tier: 'GOLD'     },
+    { n: '48', displayName: 'Shweta Dubey',    elo: 1310, tier: 'GOLD'     },
+    { n: '49', displayName: 'Aman Verma',      elo: 1290, tier: 'SILVER'   },
+    { n: '50', displayName: 'Kritika Sinha',   elo: 1270, tier: 'SILVER'   },
+    { n: '51', displayName: 'Piyush Agarwal',  elo: 1250, tier: 'SILVER'   },
+    { n: '52', displayName: 'Bhavna Reddy',    elo: 1220, tier: 'SILVER'   },
+    { n: '53', displayName: 'Sameer Ansari',   elo: 1200, tier: 'SILVER'   },
+    { n: '54', displayName: 'Lavanya Kumar',   elo: 1170, tier: 'SILVER'   },
+    { n: '55', displayName: 'Harsh Vardhan',   elo: 1150, tier: 'SILVER'   },
+    { n: '56', displayName: 'Trisha Nambiar',  elo: 1120, tier: 'SILVER'   },
+    { n: '57', displayName: 'Devesh Pandey',   elo: 1090, tier: 'SILVER'   },
+    { n: '58', displayName: 'Rashmi Pillai',   elo: 1060, tier: 'SILVER'   },
+    { n: '59', displayName: 'Akash Tiwari',    elo: 1030, tier: 'SILVER'   },
+    { n: '60', displayName: 'Poornima Das',    elo: 1010, tier: 'SILVER'   },
+    { n: '61', displayName: 'Sunil Chaudhary', elo:  990, tier: 'BRONZE'   },
+    { n: '62', displayName: 'Meenakshi Roy',   elo:  960, tier: 'BRONZE'   },
+    { n: '63', displayName: 'Rahul Nair',      elo:  930, tier: 'BRONZE'   },
+    { n: '64', displayName: 'Geeta Mishra',    elo:  900, tier: 'BRONZE'   },
+    { n: '65', displayName: 'Chirag Shah',     elo:  860, tier: 'BRONZE'   },
+    { n: '66', displayName: 'Vandana Gupta',   elo:  830, tier: 'BRONZE'   },
+    { n: '67', displayName: 'Ajay Bose',       elo:  790, tier: 'BRONZE'   },
+    { n: '68', displayName: 'Sunita Yadav',    elo:  750, tier: 'BRONZE'   },
+    { n: '69', displayName: 'Deepak Rajan',    elo:  700, tier: 'BRONZE'   },
+    { n: '70', displayName: 'Priti Menon',     elo:  640, tier: 'BRONZE'   },
   ];
 
   for (const u of dummyUsers) {
@@ -50,12 +101,12 @@ async function main() {
         email: `dummy${u.n}@catduel.com`,
         displayName: u.displayName,
         eloRating: u.elo,
-        rankTier: u.tier as any,
+        rankTier: u.tier as 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND',
         gamesPlayed: 10, // above the 5-game threshold to appear on leaderboard
       },
     });
   }
-  console.log(`Seeded ${dummyUsers.length} dummy leaderboard users`);
+  console.log(`Seeded ${dummyUsers.length} dummy leaderboard users (${dummyUsers.length - 20} new)`);
 
   // Seed sample questions
   const questions = [

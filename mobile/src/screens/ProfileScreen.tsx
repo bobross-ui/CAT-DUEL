@@ -19,7 +19,7 @@ interface UserProfile {
   rankTier: string;
 }
 
-function TierProgressBar({ eloRating, rankTier }: { eloRating: number; rankTier: string }) {
+function TierProgressBar({ eloRating }: { eloRating: number; rankTier: string }) {
   const tier = getTier(eloRating);
   const isDiamond = tier.max === Infinity;
   const progress = isDiamond ? 1 : (eloRating - tier.min) / (tier.max - tier.min + 1);
@@ -38,7 +38,7 @@ function TierProgressBar({ eloRating, rankTier }: { eloRating: number; rankTier:
       <View style={progressStyles.track}>
         <View style={[
           progressStyles.fill,
-          { width: `${Math.round(progress * 100)}%` as any, backgroundColor: tier.color },
+          { width: `${Math.round(progress * 100)}%` as `${number}%`, backgroundColor: tier.color },
         ]} />
       </View>
     </View>
@@ -111,8 +111,8 @@ export default function ProfileScreen({ navigation }: Props) {
       await api.patch('/users/me', { displayName: editName.trim() });
       setProfile((prev) => prev ? { ...prev, displayName: editName.trim() } : prev);
       setEditVisible(false);
-    } catch (err: any) {
-      const code = err?.response?.data?.error?.code;
+    } catch (err: unknown) {
+      const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;
       setEditError(code === 'DISPLAY_NAME_TAKEN' ? 'That name is already taken.' : 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
