@@ -14,6 +14,7 @@ import usersRouter from './routes/users';
 import adminRouter from './routes/admin';
 import questionsRouter from './routes/questions';
 import gamesRouter from './routes/games';
+import leaderboardRouter from './routes/leaderboard';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -66,6 +67,7 @@ app.use('/api/users', usersRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/questions', questionsRouter);
 app.use('/api/games', gamesRouter);
+app.use('/api/leaderboard', leaderboardRouter);
 
 app.use(errorHandler);
 

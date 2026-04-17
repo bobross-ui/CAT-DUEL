@@ -474,8 +474,6 @@ async function persistMatch(
         });
       });
 
-      // Invalidate global leaderboard cache so next request reflects new ratings
-      await redis.del('leaderboard:global:top100');
       return;
     } catch (err) {
       console.error(`[persistMatch] attempt ${attempt}/${MAX_RETRIES} failed:`, err);
