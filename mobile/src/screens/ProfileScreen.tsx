@@ -129,6 +129,10 @@ export default function ProfileScreen({ navigation }: Props) {
           <Text style={styles.practiceButtonText}>Leaderboard</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.practiceButton} onPress={() => navigation.navigate('MatchHistory')}>
+          <Text style={styles.practiceButtonText}>Match History</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.signOutButton} onPress={signOut}>
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
