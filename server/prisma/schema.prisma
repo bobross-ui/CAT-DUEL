@@ -19,6 +19,14 @@ enum QuestionSource {
   AI
 }
 
+enum RankTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+}
+
 model User {
   id          String   @id @default(uuid())
   firebaseUid String   @unique @map("firebase_uid")
@@ -27,6 +35,7 @@ model User {
   avatarUrl   String?  @map("avatar_url")
   role        String   @default("user")
   eloRating   Int      @default(1200) @map("elo_rating")
+  rankTier    RankTier @default(SILVER) @map("rank_tier")
   gamesPlayed Int      @default(0) @map("games_played")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -36,7 +45,8 @@ model User {
   matchesAsPlayer2 Match[]        @relation("MatchPlayer2")
   matchAnswers    MatchAnswer[]
 
-  @@index([eloRating])
+  @@index([eloRating(sort: Desc)])
+  @@index([rankTier, eloRating(sort: Desc)])
   @@map("users")
 }
 
@@ -86,21 +96,24 @@ model Match {
   player2Id       String   @map("player2_id")
   winnerId        String?  @map("winner_id")
   isDraw          Boolean  @map("is_draw")
-  player1Score    Int      @map("player1_score")
-  player2Score    Int      @map("player2_score")
-  player1Answered Int      @map("player1_answered")
-  player2Answered Int      @map("player2_answered")
-  totalQuestions  Int      @map("total_questions")
-  durationSeconds Int      @map("duration_seconds")
-  finishedAt      DateTime @map("finished_at")
-  createdAt       DateTime @default(now()) @map("created_at")
+  player1Score      Int      @map("player1_score")
+  player2Score      Int      @map("player2_score")
+  player1EloChange  Int      @default(0) @map("player1_elo_change")
+  player2EloChange  Int      @default(0) @map("player2_elo_change")
+  player1Answered   Int      @map("player1_answered")
+  player2Answered   Int      @map("player2_answered")
+  totalQuestions    Int      @map("total_questions")
+  durationSeconds   Int      @map("duration_seconds")
+  status            String   @default("completed")
+  finishedAt        DateTime @map("finished_at")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   player1 User         @relation("MatchPlayer1", fields: [player1Id], references: [id])
   player2 User         @relation("MatchPlayer2", fields: [player2Id], references: [id])
   answers MatchAnswer[]
 
-  @@index([player1Id])
-  @@index([player2Id])
+  @@index([player1Id, finishedAt(sort: Desc)])
+  @@index([player2Id, finishedAt(sort: Desc)])
   @@map("matches")
 }
 

@@ -12,6 +12,7 @@ async function main() {
       email: 'test@catduel.com',
       displayName: 'Test User',
       eloRating: 1200,
+      rankTier: 'SILVER',
     },
   });
   console.log('Seeded user:', user.email);
