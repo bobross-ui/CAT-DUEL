@@ -377,7 +377,15 @@ export async function endGame(
     durationSeconds: state.durationSeconds,
   };
 
-  // Emit individually so each client receives their own Postgres userId for winner comparison
+  // Persist results per player so game:join can replay them on reconnect.
+  // This is the source of truth if fetchSockets() misses a socket (e.g. mobile flicker).
+  await Promise.all([
+    redis.set(`game:${gameId}:result:${state.player1Id}`, JSON.stringify({ ...results, currentUserId: state.player1Id }), 'EX', 300),
+    redis.set(`game:${gameId}:result:${state.player2Id}`, JSON.stringify({ ...results, currentUserId: state.player2Id }), 'EX', 300),
+  ]);
+
+  // Emit to all sockets currently in the room.
+  // Any socket that missed this (brief disconnect) will get it via game:join below.
   const sockets = await gameNs.in(gameId).fetchSockets();
   for (const s of sockets) {
     s.emit('game:finished', { ...results, currentUserId: s.data.user.id });
@@ -543,6 +551,14 @@ export function registerGameHandlers(gameNs: Namespace): void {
       }
 
       socket.join(gameId);
+
+      if (state.status === 'FINISHED') {
+        const raw = await redis.get(`game:${gameId}:result:${user.id}`);
+        if (raw) {
+          socket.emit('game:finished', JSON.parse(raw));
+        }
+        return;
+      }
 
       if (state.status === 'ACTIVE') {
         // Reconnection: send full current state so client can resume

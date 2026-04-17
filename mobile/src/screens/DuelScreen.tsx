@@ -248,9 +248,9 @@ export default function DuelScreen({ route, navigation }: Props) {
       return;
     }
     const doQuit = () => {
+      // Emit forfeit and let the server's game:finished response drive navigation,
+      // so the forfeiting player also lands on the results screen.
       socketRef.current?.emit('game:forfeit', { gameId });
-      socketRef.current?.disconnect();
-      navigation.replace('Profile');
     };
     if (Platform.OS === 'web') {
       if (window.confirm('Quit Duel? You will forfeit this match and your opponent will win.')) {

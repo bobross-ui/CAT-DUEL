@@ -55,7 +55,9 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
 
       {results.isForfeit && (
         <View style={[styles.forfeitBanner, { backgroundColor: theme.warningBg, borderColor: theme.warningBorder }]}>
-          <Text style={[styles.forfeitText, { color: theme.warningText }]}>Opponent forfeited the match</Text>
+          <Text style={[styles.forfeitText, { color: theme.warningText }]}>
+            {youWon ? 'Opponent forfeited the match' : 'You forfeited the match'}
+          </Text>
         </View>
       )}
 
