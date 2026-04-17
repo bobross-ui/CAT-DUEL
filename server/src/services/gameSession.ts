@@ -1,6 +1,7 @@
 import { Namespace, Socket } from 'socket.io';
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
+import { calculateMatchElo, getRankTier, MatchEloResult } from './elo';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -308,6 +309,8 @@ export async function endGame(
   if (timer) clearInterval(timer);
   activeTimers.delete(gameId);
 
+  const isForfeit = options.forcedWinnerId != null;
+
   // Forced winner (forfeit) takes priority over score comparison
   let winnerId: string | null = options.forcedWinnerId ?? null;
   if (!winnerId) {
@@ -315,21 +318,60 @@ export async function endGame(
     else if (state.player2Score > state.player1Score) winnerId = state.player2Id;
   }
 
+  // Fetch current Elo from DB — source of truth (Redis state has matchmaking-time Elo)
+  const [p1, p2] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: state.player1Id },
+      select: { eloRating: true, gamesPlayed: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: state.player2Id },
+      select: { eloRating: true, gamesPlayed: true },
+    }),
+  ]);
+
+  if (!p1 || !p2) {
+    console.error(`[endGame] user not found for game ${gameId}`);
+    return;
+  }
+
+  // For forfeit use dummy scores (1 vs 0) so the winner gets a full win Elo change
+  const p1MatchScore = isForfeit ? (winnerId === state.player1Id ? 1 : 0) : state.player1Score;
+  const p2MatchScore = isForfeit ? (winnerId === state.player2Id ? 1 : 0) : state.player2Score;
+
+  const eloResult = calculateMatchElo({
+    player1: { elo: p1.eloRating, gamesPlayed: p1.gamesPlayed },
+    player2: { elo: p2.eloRating, gamesPlayed: p2.gamesPlayed },
+    player1Score: p1MatchScore,
+    player2Score: p2MatchScore,
+  });
+
   const results = {
     gameId,
     winnerId,
     isDraw: winnerId === null,
+    isForfeit,
     player1: {
       userId: state.player1Id,
       score: state.player1Score,
       questionsAnswered: state.player1Progress,
       answers: state.player1Answers,
+      eloBefore: p1.eloRating,
+      eloAfter: eloResult.player1.newRating,
+      eloDelta: eloResult.player1.delta,
+      newTier: getRankTier(eloResult.player1.newRating),
+      tierChanged: getRankTier(p1.eloRating) !== getRankTier(eloResult.player1.newRating),
     },
     player2: {
       userId: state.player2Id,
       score: state.player2Score,
       questionsAnswered: state.player2Progress,
       answers: state.player2Answers,
+      eloBefore: p2.eloRating,
+      eloAfter: eloResult.player2.newRating,
+      eloDelta: eloResult.player2.delta,
+      newTier: getRankTier(eloResult.player2.newRating),
+      tierChanged: getRankTier(p2.eloRating) !== getRankTier(eloResult.player2.newRating),
     },
     totalQuestions: state.questionIds.length,
     durationSeconds: state.durationSeconds,
@@ -347,12 +389,17 @@ export async function endGame(
     `active_game:${state.player2Id}`,
   );
 
-  persistMatch(state, winnerId).catch((err) =>
+  persistMatch(state, winnerId, isForfeit, eloResult).catch((err) =>
     console.error(`persistMatch error [${gameId}]:`, err),
   );
 }
 
-async function persistMatch(state: GameState, winnerId: string | null): Promise<void> {
+async function persistMatch(
+  state: GameState,
+  winnerId: string | null,
+  isForfeit: boolean,
+  eloResult: MatchEloResult,
+): Promise<void> {
   const answerRows: {
     matchId: string;
     userId: string;
@@ -383,33 +430,65 @@ async function persistMatch(state: GameState, winnerId: string | null): Promise<
     });
   }
 
-  await prisma.$transaction([
-    prisma.match.create({
-      data: {
-        id: state.gameId,
-        player1Id: state.player1Id,
-        player2Id: state.player2Id,
-        winnerId,
-        isDraw: winnerId === null,
-        player1Score: state.player1Score,
-        player2Score: state.player2Score,
-        player1Answered: state.player1Progress,
-        player2Answered: state.player2Progress,
-        totalQuestions: state.questionIds.length,
-        durationSeconds: state.durationSeconds,
-        finishedAt: new Date(),
-      },
-    }),
-    prisma.matchAnswer.createMany({ data: answerRows }),
-    prisma.user.update({
-      where: { id: state.player1Id },
-      data: { gamesPlayed: { increment: 1 } },
-    }),
-    prisma.user.update({
-      where: { id: state.player2Id },
-      data: { gamesPlayed: { increment: 1 } },
-    }),
-  ]);
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.match.create({
+          data: {
+            id: state.gameId,
+            player1Id: state.player1Id,
+            player2Id: state.player2Id,
+            winnerId,
+            isDraw: winnerId === null,
+            player1Score: state.player1Score,
+            player2Score: state.player2Score,
+            player1EloChange: eloResult.player1.delta,
+            player2EloChange: eloResult.player2.delta,
+            player1Answered: state.player1Progress,
+            player2Answered: state.player2Progress,
+            totalQuestions: state.questionIds.length,
+            durationSeconds: state.durationSeconds,
+            status: isForfeit ? 'forfeited' : 'completed',
+            finishedAt: new Date(),
+          },
+        });
+
+        await tx.matchAnswer.createMany({ data: answerRows });
+
+        await tx.user.update({
+          where: { id: state.player1Id },
+          data: {
+            eloRating: eloResult.player1.newRating,
+            rankTier: getRankTier(eloResult.player1.newRating),
+            gamesPlayed: { increment: 1 },
+          },
+        });
+        await tx.user.update({
+          where: { id: state.player2Id },
+          data: {
+            eloRating: eloResult.player2.newRating,
+            rankTier: getRankTier(eloResult.player2.newRating),
+            gamesPlayed: { increment: 1 },
+          },
+        });
+      });
+
+      // Invalidate global leaderboard cache so next request reflects new ratings
+      await redis.del('leaderboard:global:top100');
+      return;
+    } catch (err) {
+      console.error(`[persistMatch] attempt ${attempt}/${MAX_RETRIES} failed:`, err);
+      if (attempt === MAX_RETRIES) {
+        await redis.lpush(
+          'match_persist_failed',
+          JSON.stringify({ gameId: state.gameId, failedAt: Date.now() }),
+        );
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, 200 * Math.pow(2, attempt)));
+    }
+  }
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────────
