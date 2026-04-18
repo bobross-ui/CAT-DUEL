@@ -18,6 +18,14 @@ export async function createMatchmakingSocket(): Promise<Socket> {
   return createSocket('/matchmaking');
 }
 
-export async function createGameSocket(): Promise<Socket> {
-  return createSocket('/game');
+// Shared game socket — created during FoundScreen, reused by DuelScreen.
+let _gameSocketPromise: Promise<Socket> | null = null;
+
+export async function getGameSocket(): Promise<Socket> {
+  if (!_gameSocketPromise) _gameSocketPromise = createSocket('/game');
+  return _gameSocketPromise;
+}
+
+export function releaseGameSocket(): void {
+  _gameSocketPromise = null;
 }

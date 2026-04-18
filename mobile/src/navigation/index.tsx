@@ -19,6 +19,22 @@ import MatchDetailScreen from '../screens/MatchDetailScreen';
 import DebugScreen from '../screens/DebugScreen';
 import TabBar from '../components/TabBar';
 
+export interface ClientQuestion {
+  id: string;
+  category: string;
+  subTopic: string | null;
+  difficulty: number;
+  text: string;
+  options: string[];
+}
+
+export interface InitialGameState {
+  duration: number;
+  totalQuestions: number;
+  firstQuestion: ClientQuestion;
+  questionNumber: number;
+}
+
 export type OpponentInfo = {
   userId: string;
   displayName: string | null;
@@ -61,7 +77,7 @@ export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Matchmaking: undefined;
   Found: { gameId: string; opponent: OpponentInfo; ratingImpact: { win: number; loss: number } | null };
-  Duel: { gameId: string; opponent: OpponentInfo };
+  Duel: { gameId: string; opponent: OpponentInfo; initialState: InitialGameState };
   DuelResults: { results: GameFinishedPayload; userId: string; opponent: OpponentInfo };
   PracticeHome: undefined;
   Question: { category: string; difficulty?: number };

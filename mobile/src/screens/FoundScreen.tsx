@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Animated, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation';
+import { RootStackParamList, InitialGameState } from '../navigation';
 import api from '../services/api';
+import { getGameSocket } from '../services/socket';
 import AppText from '../components/Text';
 import Avatar from '../components/Avatar';
 import Card from '../components/Card';
@@ -128,7 +129,37 @@ export default function FoundScreen({ navigation, route }: Props) {
   const [winRate, setWinRate] = useState<number | null>(null);
   // null = "get ready" hold, then 3→2→1→0
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [initialState, setInitialState] = useState<InitialGameState | null>(null);
   const navigatedRef = useRef(false);
+
+  // Connect, join game, store initialState when server fires game:start
+  useEffect(() => {
+    let mounted = true;
+    let removeListeners: (() => void) | null = null;
+
+    getGameSocket().then(socket => {
+      if (!mounted) return;
+
+      const join = () => socket.emit('game:join', { gameId });
+      socket.on('connect', join);
+      if (socket.connected) join();
+
+      socket.once('game:start', (state: InitialGameState) => {
+        if (!mounted) return;
+        setInitialState(state);
+      });
+
+      removeListeners = () => {
+        socket.off('connect', join);
+        socket.off('game:start');
+      };
+    });
+
+    return () => {
+      mounted = false;
+      removeListeners?.();
+    };
+  }, []);
 
   // Fetch user profile + win rate
   useEffect(() => {
@@ -158,13 +189,13 @@ export default function FoundScreen({ navigation, route }: Props) {
     return () => clearInterval(interval);
   }, [countdown === null]); // only start/stop when null→non-null transition
 
-  // Navigate when countdown reaches 0
+  // Navigate when countdown finishes AND game:start has been received
   useEffect(() => {
-    if (countdown !== null && countdown <= 0 && !navigatedRef.current) {
+    if (countdown !== null && countdown <= 0 && initialState && !navigatedRef.current) {
       navigatedRef.current = true;
-      navigation.replace('Duel', { gameId, opponent });
+      navigation.replace('Duel', { gameId, opponent, initialState });
     }
-  }, [countdown]);
+  }, [countdown, initialState]);
 
   const myTierName  = profile ? getTier(profile.eloRating).name : '—';
   const oppTierName = getTier(opponent.eloRating).name;

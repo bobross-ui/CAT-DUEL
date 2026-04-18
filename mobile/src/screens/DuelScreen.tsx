@@ -1,180 +1,163 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  View, TouchableOpacity, StyleSheet,
+  View, Pressable, StyleSheet,
   ScrollView, Alert, BackHandler, Animated, Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Socket } from 'socket.io-client';
-import { RootStackParamList, GameFinishedPayload } from '../navigation';
-import { createGameSocket } from '../services/socket';
+import { RootStackParamList, GameFinishedPayload, ClientQuestion as NavClientQuestion } from '../navigation';
+import { getGameSocket, releaseGameSocket } from '../services/socket';
 import { useAuth } from '../context/AuthContext';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
+import { radii } from '../theme/tokens';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Duel'>;
+type ClientQuestion = NavClientQuestion;
 
-type Phase = 'PREMATCH' | 'COUNTDOWN' | 'ACTIVE' | 'FINISHED';
-
-interface ClientQuestion {
-  id: string;
-  category: string;
-  subTopic: string | null;
-  difficulty: number;
-  text: string;
-  options: string[];
+interface OpponentProgress {
+  currentQuestion: number;
+  questionsAnswered: number;
 }
 
 interface DuelState {
-  phase: Phase;
-  countdownSeconds: number;
   currentQuestion: ClientQuestion | null;
   questionNumber: number;
   totalQuestions: number;
   selectedAnswer: number | null;
   showFeedback: boolean;
-  lastAnswerCorrect: boolean | null;
   yourScore: number;
   opponentScore: number;
   timeRemaining: number;
-  duration: number;
+  opponentProgress: OpponentProgress | null;
 }
 
-const INITIAL_STATE: DuelState = {
-  phase: 'PREMATCH',
-  countdownSeconds: 3,
+const INITIAL: DuelState = {
   currentQuestion: null,
   questionNumber: 0,
   totalQuestions: 0,
   selectedAnswer: null,
   showFeedback: false,
-  lastAnswerCorrect: null,
   yourScore: 0,
   opponentScore: 0,
   timeRemaining: 600,
-  duration: 600,
+  opponentProgress: null,
 };
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-  const s = (seconds % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
+function formatTime(s: number) {
+  const m = Math.floor(s / 60).toString().padStart(2, '0');
+  const sec = (s % 60).toString().padStart(2, '0');
+  return `${m}:${sec}`;
 }
 
+// ── Blinking dot — 1.4s period ────────────────────────────────────────────────
+function BlinkingDot({ color }: { color: string }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.3, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1,   duration: 700, useNativeDriver: true }),
+      ]),
+    ).start();
+    return () => opacity.stopAnimation();
+  }, []);
+  return (
+    <Animated.View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color, opacity }} />
+  );
+}
+
+// ── Main screen ───────────────────────────────────────────────────────────────
 export default function DuelScreen({ route, navigation }: Props) {
-  const { gameId, opponent } = route.params;
+  const { gameId, opponent, initialState } = route.params;
   const { user } = useAuth();
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
 
-  const [duelState, setDuelState] = useState<DuelState>(INITIAL_STATE);
-  const socketRef = useRef<Socket | null>(null);
+  const [ds, setDs] = useState<DuelState>({
+    ...INITIAL,
+    timeRemaining: initialState.duration,
+    totalQuestions: initialState.totalQuestions,
+    currentQuestion: initialState.firstQuestion,
+    questionNumber: initialState.questionNumber,
+  });
+  const socketRef         = useRef<Socket | null>(null);
   const questionStartTime = useRef(Date.now());
-  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const yourScoreScale = useRef(new Animated.Value(1)).current;
+  // Animations
+  const questionOpacity    = useRef(new Animated.Value(1)).current;
+  const yourScoreScale     = useRef(new Animated.Value(1)).current;
   const opponentScoreScale = useRef(new Animated.Value(1)).current;
 
-  function animateScore(anim: Animated.Value) {
+  function pulseScore(anim: Animated.Value) {
     Animated.sequence([
-      Animated.spring(anim, { toValue: 1.5, useNativeDriver: true, friction: 3, tension: 200 }),
-      Animated.spring(anim, { toValue: 1, useNativeDriver: true, friction: 5 }),
+      Animated.timing(anim, { toValue: 1.15, duration: 90, useNativeDriver: true }),
+      Animated.timing(anim, { toValue: 1,    duration: 90, useNativeDriver: true }),
     ]).start();
   }
 
+  // ── Socket setup ─────────────────────────────────────────────────────────────
   useEffect(() => {
     let mounted = true;
 
     async function connect() {
-      const socket = await createGameSocket();
-      if (!mounted) { socket.disconnect(); return; }
+      const socket = await getGameSocket();
+      if (!mounted) return;
       socketRef.current = socket;
 
-      socket.on('connect', () => {
-        socket.emit('game:join', { gameId });
+      // Re-join on reconnect only — FoundScreen already joined for the initial connection
+      socket.on('connect', () => socket.emit('game:join', { gameId }));
+
+      // Start the timer — game has already started when DuelScreen mounts
+      timerRef.current = setInterval(() => {
+        setDs(prev => prev.timeRemaining <= 0 ? prev : { ...prev, timeRemaining: prev.timeRemaining - 1 });
+      }, 1000);
+
+      socket.on('game:question', ({
+        question, questionNumber, totalQuestions,
+      }: { question: ClientQuestion; questionNumber: number; totalQuestions: number }) => {
+        if (!mounted) return;
+        Animated.timing(questionOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+          if (!mounted) return;
+          questionStartTime.current = Date.now();
+          setDs(prev => ({
+            ...prev, currentQuestion: question, questionNumber, totalQuestions,
+            selectedAnswer: null, showFeedback: false,
+          }));
+          Animated.timing(questionOpacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+        });
       });
 
-      socket.on('game:countdown', ({ seconds }: { seconds: number }) => {
+      socket.on('answer:result', ({
+        isCorrect: _isCorrect, yourScore,
+      }: { isCorrect: boolean; correctAnswer: number; yourScore: number }) => {
         if (!mounted) return;
-        setDuelState((prev) => ({ ...prev, phase: 'COUNTDOWN', countdownSeconds: seconds }));
-
-        let remaining = seconds;
-        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-        countdownIntervalRef.current = setInterval(() => {
-          remaining -= 1;
-          if (remaining <= 0) {
-            clearInterval(countdownIntervalRef.current!);
-            countdownIntervalRef.current = null;
-          } else {
-            setDuelState((prev) => ({ ...prev, countdownSeconds: remaining }));
-          }
-        }, 1000);
-      });
-
-      socket.on('game:start', ({ duration, totalQuestions, firstQuestion, questionNumber }: { duration: number; totalQuestions: number; firstQuestion: ClientQuestion; questionNumber: number }) => {
-        if (!mounted) return;
-        if (countdownIntervalRef.current) {
-          clearInterval(countdownIntervalRef.current);
-          countdownIntervalRef.current = null;
-        }
-        questionStartTime.current = Date.now();
-        setDuelState((prev) => ({
-          ...prev,
-          phase: 'ACTIVE',
-          duration,
-          timeRemaining: duration,
-          totalQuestions,
-          currentQuestion: firstQuestion,
-          questionNumber,
-          selectedAnswer: null,
-          showFeedback: false,
-        }));
-        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = setInterval(() => {
-          setDuelState((prev) => {
-            if (prev.timeRemaining <= 0) return prev;
-            return { ...prev, timeRemaining: prev.timeRemaining - 1 };
-          });
-        }, 1000);
-      });
-
-      socket.on('game:question', ({ question, questionNumber, totalQuestions }: { question: ClientQuestion; questionNumber: number; totalQuestions: number }) => {
-        if (!mounted) return;
-        questionStartTime.current = Date.now();
-        setDuelState((prev) => ({
-          ...prev,
-          currentQuestion: question,
-          questionNumber,
-          totalQuestions,
-          selectedAnswer: null,
-          showFeedback: false,
-          lastAnswerCorrect: null,
-        }));
-      });
-
-      socket.on('answer:result', ({ isCorrect, yourScore }: { isCorrect: boolean; correctAnswer: number; yourScore: number }) => {
-        if (!mounted) return;
-        animateScore(yourScoreScale);
-        setDuelState((prev) => ({
-          ...prev,
-          yourScore,
-          showFeedback: true,
-          lastAnswerCorrect: isCorrect,
-        }));
+        pulseScore(yourScoreScale);
+        setDs(prev => ({ ...prev, yourScore, showFeedback: true }));
       });
 
       socket.on('opponent:scored', ({ opponentScore }: { opponentScore: number }) => {
         if (!mounted) return;
-        setDuelState((prev) => {
-          if (prev.opponentScore !== opponentScore) animateScore(opponentScoreScale);
+        setDs(prev => {
+          if (prev.opponentScore !== opponentScore) pulseScore(opponentScoreScale);
           return { ...prev, opponentScore };
         });
       });
 
+      socket.on('opponent:progress', ({
+        currentQuestion, questionsAnswered,
+      }: { currentQuestion: number; questionsAnswered: number }) => {
+        if (!mounted) return;
+        setDs(prev => ({ ...prev, opponentProgress: { currentQuestion, questionsAnswered } }));
+      });
+
       socket.on('game:timer', ({ remaining }: { remaining: number }) => {
         if (!mounted) return;
-        setDuelState((prev) => ({ ...prev, timeRemaining: remaining }));
+        setDs(prev => ({ ...prev, timeRemaining: remaining }));
       });
 
       socket.on('game:sync', ({
@@ -185,17 +168,10 @@ export default function DuelScreen({ route, navigation }: Props) {
       }) => {
         if (!mounted) return;
         questionStartTime.current = Date.now();
-        setDuelState((prev) => ({
-          ...prev,
-          phase: 'ACTIVE',
-          yourScore,
-          opponentScore,
-          timeRemaining,
-          currentQuestion,
-          questionNumber,
-          totalQuestions,
-          selectedAnswer: null,
-          showFeedback: false,
+        questionOpacity.setValue(1);
+        setDs(prev => ({
+          ...prev, yourScore, opponentScore, timeRemaining,
+          currentQuestion, questionNumber, totalQuestions, selectedAnswer: null, showFeedback: false,
         }));
       });
 
@@ -207,268 +183,294 @@ export default function DuelScreen({ route, navigation }: Props) {
 
       socket.on('game:error', ({ message }: { message: string }) => {
         if (!mounted) return;
-        Alert.alert('Game Error', message, [
-          { text: 'OK', onPress: () => navigation.navigate('MainTabs') },
-        ]);
+        Alert.alert('Game Error', message, [{ text: 'OK', onPress: () => navigation.navigate('MainTabs') }]);
       });
     }
 
     connect();
-
     return () => {
       mounted = false;
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
       socketRef.current?.disconnect();
       socketRef.current = null;
+      releaseGameSocket();
     };
   }, [gameId]);
 
   useEffect(() => {
-    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleQuit();
-      return true;
-    });
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => { handleQuit(); return true; });
     return () => handler.remove();
-  }, [duelState.phase]);
+  }, []);
 
   function submitAnswer() {
-    if (duelState.selectedAnswer === null || !duelState.currentQuestion) return;
+    if (ds.selectedAnswer === null || !ds.currentQuestion) return;
     socketRef.current?.emit('answer:submit', {
       gameId,
-      questionId: duelState.currentQuestion.id,
-      selectedAnswer: duelState.selectedAnswer,
+      questionId: ds.currentQuestion.id,
+      selectedAnswer: ds.selectedAnswer,
       timeTakenMs: Date.now() - questionStartTime.current,
     });
-    setDuelState((prev) => ({ ...prev, selectedAnswer: prev.selectedAnswer }));
   }
 
   function handleQuit() {
-    if (duelState.phase !== 'ACTIVE' && duelState.phase !== 'COUNTDOWN') {
-      navigation.navigate('MainTabs');
-      return;
-    }
-    const doQuit = () => {
-      // Emit forfeit and let the server's game:finished response drive navigation,
-      // so the forfeiting player also lands on the results screen.
-      socketRef.current?.emit('game:forfeit', { gameId });
-    };
+    const doQuit = () => socketRef.current?.emit('game:forfeit', { gameId });
     if (Platform.OS === 'web') {
-      if (window.confirm('Quit Duel? You will forfeit this match and your opponent will win.')) {
-        doQuit();
-      }
+      if (window.confirm('Quit? You will forfeit and your opponent wins.')) doQuit();
     } else {
-      Alert.alert(
-        'Quit Duel?',
-        'You will forfeit this match and your opponent will win.',
-        [
-          { text: 'Stay', style: 'cancel' },
-          { text: 'Quit', style: 'destructive', onPress: doQuit },
-        ],
-      );
+      Alert.alert('Quit Duel?', 'You will forfeit this match and your opponent will win.', [
+        { text: 'Stay', style: 'cancel' },
+        { text: 'Quit', style: 'destructive', onPress: doQuit },
+      ]);
     }
   }
 
-  const isTimerCritical = duelState.timeRemaining <= 60;
+  const isTimerCritical = ds.timeRemaining <= 60;
+  const progressPct     = ds.totalQuestions > 0 ? (ds.questionNumber - 1) / ds.totalQuestions : 0;
+  const oppName         = opponent.displayName ?? 'Opp';
+  const opponentDone    = ds.opponentProgress && ds.opponentProgress.questionsAnswered >= ds.totalQuestions;
+  const category        = [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ');
 
-  function renderPrematch() {
-    return (
-      <View style={styles.centered}>
-        <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.matchFoundTitle}>Match Found!</AppText.Serif>
-        <View style={[styles.opponentCard, { borderColor: theme.line }]}>
-          <Avatar name={opponent.displayName ?? 'O'} size="lg" />
-          <AppText.Serif preset="h1Serif" color={theme.ink}>{opponent.displayName ?? 'Opponent'}</AppText.Serif>
-          <AppText.Sans preset="body" color={theme.ink2}>Elo: {opponent.eloRating}</AppText.Sans>
-        </View>
-        <AppText.Sans preset="small" color={theme.ink3}>Connecting to game room...</AppText.Sans>
-      </View>
-    );
-  }
+  return (
+    <View style={[styles.container, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
 
-  function renderCountdown() {
-    return (
-      <View style={styles.centered}>
-        <AppText.Sans preset="bodyMed" color={theme.ink2} style={styles.countdownLabel}>Get ready!</AppText.Sans>
-        <AppText.Mono preset="deltaLg" color={theme.ink} style={styles.countdownNumber}>{duelState.countdownSeconds}</AppText.Mono>
-      </View>
-    );
-  }
 
-  function renderActive() {
-    const { currentQuestion, questionNumber, totalQuestions, selectedAnswer, showFeedback, lastAnswerCorrect } = duelState;
-    if (!currentQuestion) return null;
+      {/* ── HUD ── */}
+      <View style={[styles.hud, { borderBottomColor: theme.line }]}>
 
-    const feedbackBorderColor = lastAnswerCorrect ? theme.accent : theme.coral;
-
-    return (
-      <>
-        <View style={[styles.scoreHeader, { borderBottomColor: theme.line2 }]}>
-          <View style={styles.playerBlock}>
-            <Avatar name={user?.displayName ?? 'Y'} size="sm" />
-            <AppText.Sans preset="small" color={theme.ink3}>You</AppText.Sans>
-            <Animated.Text style={[styles.scoreValue, { color: theme.ink, transform: [{ scale: yourScoreScale }] }]}>
-              {duelState.yourScore}
-            </Animated.Text>
-          </View>
-
-          <View style={styles.timerBlock}>
-            <AppText.Mono preset="timer" color={isTimerCritical ? theme.coral : theme.ink} style={styles.timerText}>
-              {formatTime(duelState.timeRemaining)}
-            </AppText.Mono>
-          </View>
-
-          <View style={styles.playerBlock}>
-            <Avatar name={opponent.displayName ?? 'O'} size="sm" />
-            <AppText.Sans preset="small" color={theme.ink3}>{opponent.displayName ?? 'Opp'}</AppText.Sans>
-            <Animated.Text style={[styles.scoreValue, { color: theme.ink, transform: [{ scale: opponentScoreScale }] }]}>
-              {duelState.opponentScore}
-            </Animated.Text>
-          </View>
+        {/* You */}
+        <View style={styles.hudSide}>
+          <Avatar name={user?.displayName ?? 'Y'} size="sm" variant="you" />
+          <Animated.Text style={[styles.hudScore, { color: theme.ink, transform: [{ scale: yourScoreScale }] }]}>
+            {ds.yourScore}
+          </Animated.Text>
+          <AppText.Sans preset="small" color={theme.ink3}>you</AppText.Sans>
         </View>
 
-        <ScrollView
-          style={[styles.questionCard, showFeedback && { borderColor: feedbackBorderColor, borderWidth: 2 }]}
-          contentContainerStyle={styles.questionCardContent}
+        {/* vs */}
+        <AppText.Serif preset="italic" color={theme.ink3}>vs</AppText.Serif>
+
+        {/* Opponent */}
+        <View style={[styles.hudSide, { alignItems: 'center' }]}>
+          <Avatar name={oppName} size="sm" variant="opponent" />
+          <Animated.Text style={[styles.hudScore, { color: theme.ink, transform: [{ scale: opponentScoreScale }] }]}>
+            {ds.opponentScore}
+          </Animated.Text>
+          {ds.opponentProgress ? (
+            <View style={styles.progressPing}>
+              {opponentDone
+                ? <View style={[styles.pingDot, { backgroundColor: theme.accent }]} />
+                : <BlinkingDot color={theme.accent} />
+              }
+              <AppText.Sans preset="small" color={theme.ink3} numberOfLines={1} style={{ flexShrink: 1 }}>
+                {opponentDone
+                  ? `${oppName} · done`
+                  : `${oppName} · on Q${ds.opponentProgress.currentQuestion}`}
+              </AppText.Sans>
+            </View>
+          ) : (
+            <AppText.Sans preset="small" color={theme.ink3} numberOfLines={1}>{oppName}</AppText.Sans>
+          )}
+        </View>
+      </View>
+
+      {/* ── Progress bar + timer ── */}
+      <View style={styles.progressRow}>
+        <View style={[styles.progressTrack, { backgroundColor: theme.line2 }]}>
+          <View style={[styles.progressFill, {
+            backgroundColor: theme.accent,
+            width: `${Math.min(progressPct * 100, 100)}%`,
+          }]} />
+        </View>
+        <AppText.Mono
+          preset="timer"
+          color={isTimerCritical ? theme.coral : theme.ink3}
+          style={isTimerCritical ? styles.timerCritical : undefined}
         >
-          <View style={styles.questionMeta}>
-            <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.questionNumber}>
-              Q {questionNumber} of {totalQuestions}
+          {formatTime(ds.timeRemaining)}
+        </AppText.Mono>
+      </View>
+
+      {/* ── Question area (fades on transition) ── */}
+      <Animated.View style={[styles.questionArea, { opacity: questionOpacity }]}>
+        <ScrollView contentContainerStyle={styles.questionContent} showsVerticalScrollIndicator={false}>
+
+          {/* Q-meta */}
+          <View style={styles.qMetaRow}>
+            <AppText.Mono
+              preset="eyebrow"
+              color={theme.ink3}
+              style={[styles.qMetaLabel, { textTransform: 'uppercase' }]}
+              numberOfLines={1}
+            >
+              {category}
             </AppText.Mono>
-            <View style={[styles.categoryBadge, { backgroundColor: theme.bg2 }]}>
-              <AppText.Mono preset="chipLabel" color={theme.ink2}>
-                {currentQuestion.category}
+            <View style={[styles.qPill, { borderColor: theme.line }]}>
+              <AppText.Mono preset="mono" color={theme.ink3}>
+                Q {ds.questionNumber} of {ds.totalQuestions}
               </AppText.Mono>
             </View>
           </View>
 
-          <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>{currentQuestion.text}</AppText.Serif>
+          {/* Question */}
+          <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>
+            {ds.currentQuestion.text}
+          </AppText.Serif>
 
+          {/* Options */}
           <View style={styles.optionsContainer}>
-            {(currentQuestion.options as string[]).map((option, index) => {
-              const isSelected = selectedAnswer === index;
+            {(ds.currentQuestion.options as string[]).map((option, index) => {
+              const isSelected = ds.selectedAnswer === index;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={index}
                   style={[
                     styles.option,
                     {
-                      borderColor: isSelected ? theme.ink : theme.line,
-                      backgroundColor: isSelected ? theme.bg2 : theme.bg,
+                      borderColor: isSelected ? theme.accent : theme.line,
+                      backgroundColor: isSelected ? theme.accentSoft : theme.card,
                     },
                   ]}
-                  onPress={() => !showFeedback && setDuelState((prev) => ({
+                  onPress={() => !ds.showFeedback && setDs(prev => ({
                     ...prev,
                     selectedAnswer: prev.selectedAnswer === index ? null : index,
                   }))}
-                  disabled={showFeedback}
+                  disabled={ds.showFeedback}
                 >
-                  <AppText.Mono preset="mono" color={isSelected ? theme.ink : theme.ink3} style={styles.optionIndex}>
-                    {String.fromCharCode(65 + index)}.
-                  </AppText.Mono>
-                  <AppText.Sans preset="body" color={isSelected ? theme.ink : theme.ink2} style={styles.optionText}>
+                  <AppText.Serif
+                    preset="scoreLg"
+                    color={isSelected ? theme.accentDeep : theme.ink3}
+                    style={styles.optionKey}
+                  >
+                    {String.fromCharCode(65 + index)}
+                  </AppText.Serif>
+                  <AppText.Sans preset="body" color={theme.ink} style={styles.optionText}>
                     {option}
                   </AppText.Sans>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
         </ScrollView>
+      </Animated.View>
 
-        {!showFeedback && (
-          <View style={[styles.footer, { borderTopColor: theme.line2 }]}>
-            <Button
-              label="Submit Answer"
-              onPress={submitAnswer}
-              disabled={selectedAnswer === null}
-            />
+      {/* ── Footer: quit + submit ── */}
+      <View style={[styles.footer, { borderTopColor: theme.line }]}>
+        <Pressable onPress={handleQuit} style={styles.quitBtn} hitSlop={12}>
+          <AppText.Sans preset="label" color={theme.ink3}>Quit</AppText.Sans>
+        </Pressable>
+        {!ds.showFeedback && (
+          <View style={styles.submitWrap}>
+            <Button label="Submit" onPress={submitAnswer} disabled={ds.selectedAnswer === null} />
           </View>
         )}
-      </>
-    );
-  }
+      </View>
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      {duelState.phase !== 'PREMATCH' && (
-        <TouchableOpacity style={styles.quitButton} onPress={handleQuit}>
-          <AppText.Sans preset="label" color={theme.ink3}>Quit</AppText.Sans>
-        </TouchableOpacity>
-      )}
-
-      {duelState.phase === 'PREMATCH' && renderPrematch()}
-      {duelState.phase === 'COUNTDOWN' && renderCountdown()}
-      {duelState.phase === 'ACTIVE' && renderActive()}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
 
-  quitButton: { position: 'absolute', top: 52, right: 20, zIndex: 10, padding: 8 },
 
-  matchFoundTitle: { marginBottom: 32 },
-  opponentCard: {
+  // HUD
+  hud: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderRadius: 16,
-    padding: 24,
-    width: '80%',
-    marginBottom: 32,
-    gap: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  hudSide: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+  },
+  hudScore: {
+    fontFamily: 'SourceSerif-SemiBold',
+    fontSize: 22,
+    lineHeight: 26,
+  },
+  progressPing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: '100%',
+  },
+  pingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
 
-  countdownLabel: { marginBottom: 16 },
-  countdownNumber: { fontSize: 96, lineHeight: 100 },
-
-  scoreHeader: {
+  // Progress + timer
+  progressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 52,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
+    paddingVertical: 8,
+    gap: 10,
   },
-  playerBlock: { flex: 1, alignItems: 'center', gap: 4 },
-  scoreValue: {
-    fontSize: 28,
-    fontWeight: '800',
+  progressTrack: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 3,
+    borderRadius: 2,
+  },
+  timerCritical: {
     fontFamily: 'JetBrainsMono-SemiBold',
   },
 
-  timerBlock: { flex: 1, alignItems: 'center' },
-  timerText: { fontSize: 22 },
+  // Question area
+  questionArea:    { flex: 1 },
+  questionContent: { padding: 20, paddingBottom: 16 },
 
-  questionCard: { flex: 1 },
-  questionCardContent: { padding: 20, paddingBottom: 32 },
-  questionMeta: {
+  // Q-meta row
+  qMetaRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
+    gap: 8,
   },
-  questionNumber: { textTransform: 'uppercase' },
-  categoryBadge: {
-    borderRadius: 6,
+  qMetaLabel: { flex: 1 },
+  qPill: {
+    borderWidth: 1,
+    borderRadius: radii.pill,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 3,
   },
-  questionText: { marginBottom: 24 },
+
+  // Question + options
+  questionText:     { marginBottom: 20 },
   optionsContainer: { gap: 10 },
   option: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
     borderWidth: 1.5,
-    borderRadius: 12,
+    borderRadius: radii.md,
     padding: 14,
   },
-  optionIndex: { width: 20 },
-  optionText: { flex: 1 },
+  optionKey:  { width: 26, textAlign: 'center' },
+  optionText: { flex: 1, paddingTop: 3 },
 
+  // Footer
   footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
+    gap: 12,
     borderTopWidth: 1,
   },
+  quitBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  submitWrap: { flex: 1 },
 });
