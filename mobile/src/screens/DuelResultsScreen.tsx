@@ -1,17 +1,20 @@
-import { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { View, StyleSheet, ScrollView, ActivityIndicator, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import api from '../services/api';
-import EloChangeCard from '../components/EloChangeCard';
 import Button from '../components/Button';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
+import { radii } from '../theme/tokens';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DuelResults'>;
 
 interface AnswerDetail {
   id: string;
+  userId: string;
   questionId: string;
   selectedAnswer: number;
   isCorrect: boolean;
@@ -19,6 +22,7 @@ interface AnswerDetail {
   question: {
     id: string;
     category: string;
+    subTopic: string | null;
     text: string;
     options: string[];
     correctAnswer: number;
@@ -26,180 +30,416 @@ interface AnswerDetail {
   };
 }
 
+interface GroupedQuestion {
+  questionId: string;
+  question: AnswerDetail['question'];
+  yourAnswer: AnswerDetail | null;
+  theirAnswer: AnswerDetail | null;
+}
+
+// ── Mark circle (✓ / ✗ / —) ──────────────────────────────────────────────────
+function MarkCircle({ correct, dim = false }: { correct: boolean | null; dim?: boolean }) {
+  const { theme } = useTheme();
+  const bg     = correct === null ? theme.line2    : correct ? theme.accentSoft : theme.coralSoft;
+  const color  = correct === null ? theme.ink3     : correct ? theme.accentDeep : theme.coral;
+  const symbol = correct === null ? '—' : correct ? '✓' : '✗';
+  return (
+    <View style={[styles.markCircle, { backgroundColor: bg, opacity: dim ? 0.5 : 1 }]}>
+      <AppText.Sans preset="label" color={color} style={styles.markSymbol}>
+        {symbol}
+      </AppText.Sans>
+    </View>
+  );
+}
+
+// ── Main screen ───────────────────────────────────────────────────────────────
 export default function DuelResultsScreen({ route, navigation }: Props) {
   const { results, userId, opponent } = route.params;
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const isPlayer1 = results.player1.userId === userId;
-  const yours = isPlayer1 ? results.player1 : results.player2;
+  const yours  = isPlayer1 ? results.player1 : results.player2;
   const theirs = isPlayer1 ? results.player2 : results.player1;
 
   const youWon = results.winnerId === userId;
   const isDraw = results.isDraw;
-  const outcomeLabel = isDraw ? 'Draw!' : youWon ? 'You Won!' : 'You Lost';
-  const outcomeColor = isDraw ? theme.amber : youWon ? theme.accent : theme.coral;
 
-  const [answers, setAnswers] = useState<AnswerDetail[]>([]);
+  const verdictText  = isDraw ? 'Draw.' : youWon ? 'Victory.' : 'Defeat.';
+  const verdictColor = isDraw ? theme.ink2 : youWon ? theme.accentDeep : theme.coral;
+  const deltaColor   = isDraw ? theme.ink3 : youWon ? theme.accentDeep : theme.coral;
+  const deltaText    = yours.eloDelta >= 0 ? `+${yours.eloDelta}` : `${yours.eloDelta}`;
+  const eloSub       = `◆ ${yours.eloBefore} → ${yours.eloAfter} · ${yours.newTier}`;
+
+  const tierChangeLabel = yours.tierChanged
+    ? (yours.eloDelta > 0
+        ? `promoted to ${yours.newTier.toLowerCase()}`
+        : `dropped to ${yours.newTier.toLowerCase()}`)
+    : null;
+
+  const totalScore = yours.score + theirs.score;
+  const yourFrac  = totalScore > 0 ? yours.score / totalScore : 0.5;
+  const theirFrac = totalScore > 0 ? theirs.score / totalScore : 0.5;
+
+  const [rawAnswers, setRawAnswers] = useState<AnswerDetail[]>([]);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     api
       .get(`/games/${results.gameId}`)
-      .then((res) => setAnswers(res.data.data.answers ?? []))
+      .then((res) => setRawAnswers(res.data.data.answers ?? []))
       .catch(() => {})
       .finally(() => setLoadingBreakdown(false));
   }, [results.gameId]);
 
+  // Group answers by questionId — one entry per unique question, preserving order
+  const grouped = useMemo<GroupedQuestion[]>(() => {
+    const map = new Map<string, GroupedQuestion>();
+    for (const a of rawAnswers) {
+      if (!map.has(a.questionId)) {
+        map.set(a.questionId, {
+          questionId: a.questionId,
+          question: a.question,
+          yourAnswer: null,
+          theirAnswer: null,
+        });
+      }
+      const entry = map.get(a.questionId)!;
+      if (a.userId === userId) {
+        entry.yourAnswer = a;
+      } else {
+        entry.theirAnswer = a;
+      }
+    }
+    return Array.from(map.values());
+  }, [rawAnswers, userId]);
+
+  const oppName = opponent.displayName ?? 'Opponent';
+
   return (
-    <ScrollView style={{ backgroundColor: theme.bg }} contentContainerStyle={styles.container}>
-      <AppText.Serif preset="display" color={outcomeColor} style={styles.outcomeLabel}>{outcomeLabel}</AppText.Serif>
+    <View style={[styles.screen, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-      {results.isForfeit && (
-        <View style={[styles.forfeitBanner, { backgroundColor: theme.amberSoft, borderColor: theme.amber }]}>
-          <AppText.Sans preset="label" color={theme.amberDeep}>
-            {youWon ? 'Opponent forfeited the match' : 'You forfeited the match'}
-          </AppText.Sans>
-        </View>
-      )}
+        {/* ── Hero block ── */}
+        <View style={[styles.hero, { borderBottomColor: theme.line }]}>
 
-      <EloChangeCard
-        eloBefore={yours.eloBefore}
-        eloAfter={yours.eloAfter}
-        eloDelta={yours.eloDelta}
-        tierChanged={yours.tierChanged}
-        newTier={yours.newTier}
-      />
-
-      <View style={[styles.scoreRow, { borderColor: theme.line }]}>
-        <View style={styles.scoreBlock}>
-          <AppText.Sans preset="label" color={theme.ink3}>You</AppText.Sans>
-          <AppText.Serif preset="display" color={theme.ink} style={styles.scoreNumber}>{yours.score}</AppText.Serif>
-          <AppText.Sans preset="small" color={theme.ink3}>{yours.questionsAnswered} answered</AppText.Sans>
-        </View>
-        <AppText.Sans preset="body" color={theme.line}>—</AppText.Sans>
-        <View style={styles.scoreBlock}>
-          <AppText.Sans preset="label" color={theme.ink3}>{opponent.displayName ?? 'Opponent'}</AppText.Sans>
-          <AppText.Serif preset="display" color={theme.ink} style={styles.scoreNumber}>{theirs.score}</AppText.Serif>
-          <AppText.Sans preset="small" color={theme.ink3}>{theirs.questionsAnswered} answered</AppText.Sans>
-        </View>
-      </View>
-
-      {loadingBreakdown ? (
-        <ActivityIndicator style={styles.loader} color={theme.ink3} />
-      ) : answers.length > 0 ? (
-        <View style={styles.breakdown}>
-          <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.breakdownTitle}>Your Answers</AppText.Serif>
-          {answers.map((a, idx) => (
-            <View key={a.id} style={[
-              styles.answerCard,
-              { borderColor: a.isCorrect ? theme.accent : theme.coral,
-                backgroundColor: a.isCorrect ? theme.accentSoft : theme.coralSoft },
-            ]}>
-              <View style={styles.answerHeader}>
-                <AppText.Mono preset="mono" color={theme.ink2}>Q{idx + 1}</AppText.Mono>
-                <AppText.Mono preset="chipLabel" color={theme.ink3} style={{ backgroundColor: theme.bg2, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99 }}>
-                  {a.question.category}
-                </AppText.Mono>
-                <AppText.Mono preset="chipLabel" style={[
-                  styles.answerBadge,
-                  { backgroundColor: a.isCorrect ? theme.accentSoft : theme.coralSoft,
-                    color: a.isCorrect ? theme.accentDeep : theme.coral },
+          {/* Verdict row */}
+          <View style={styles.verdictRow}>
+            <View style={styles.verdictLeft}>
+              <AppText.Serif
+                preset="verdict"
+                color={verdictColor}
+                style={{ fontFamily: 'SourceSerif-MediumItalic', lineHeight: 40 }}
+              >
+                {verdictText}
+              </AppText.Serif>
+              <AppText.Mono preset="mono" color={theme.ink3} style={{ marginTop: 4 }}>
+                {eloSub}
+              </AppText.Mono>
+              {tierChangeLabel && (
+                <View style={[
+                  styles.tierChip,
+                  { backgroundColor: youWon ? theme.accentSoft : theme.coralSoft },
                 ]}>
-                  {a.isCorrect ? 'Correct' : 'Wrong'}
-                </AppText.Mono>
-              </View>
-              <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>{a.question.text}</AppText.Serif>
-              <View style={styles.optionsGrid}>
-                {(a.question.options as string[]).map((opt, i) => {
-                  const isSelected = i === a.selectedAnswer;
-                  const isCorrectOpt = i === a.question.correctAnswer;
-                  return (
-                    <View
-                      key={i}
-                      style={[
-                        styles.optionRow,
-                        { backgroundColor: theme.bg2 },
-                        isCorrectOpt && { backgroundColor: theme.accentSoft },
-                        isSelected && !isCorrectOpt && { backgroundColor: theme.coralSoft },
-                      ]}
-                    >
-                      <AppText.Sans
-                        preset="body"
-                        style={[
-                          isCorrectOpt && { color: theme.accentDeep, fontWeight: '600' },
-                          isSelected && !isCorrectOpt && { color: theme.coral, fontWeight: '600' },
-                          !isCorrectOpt && !isSelected && { color: theme.ink2 },
-                        ]}
+                  <AppText.Mono
+                    preset="chipLabel"
+                    color={youWon ? theme.accentDeep : theme.coral}
+                    style={{ textTransform: 'uppercase' }}
+                  >
+                    {tierChangeLabel}
+                  </AppText.Mono>
+                </View>
+              )}
+            </View>
+            <AppText.Mono preset="deltaLg" color={deltaColor} style={{ lineHeight: 36, marginTop: 5 }}>
+              {deltaText}
+            </AppText.Mono>
+          </View>
+
+          {/* Score split bar */}
+          <View style={styles.scoreSection}>
+            <View style={styles.scoreLabels}>
+              <AppText.Sans preset="small" color={theme.ink3}>you</AppText.Sans>
+              <AppText.Sans preset="small" color={theme.ink3}>{oppName}</AppText.Sans>
+            </View>
+            <View style={[styles.splitBar, { backgroundColor: theme.line2 }]}>
+              <View style={[styles.barSegment, { flex: yourFrac, backgroundColor: theme.accent }]} />
+              <View style={styles.barGap} />
+              <View style={[styles.barSegment, { flex: theirFrac, backgroundColor: theme.ink3 }]} />
+            </View>
+            <View style={styles.scoreNumbers}>
+              <AppText.Serif preset="statVal" color={theme.ink}>{yours.score}</AppText.Serif>
+              <AppText.Serif preset="statVal" color={theme.ink3}>{theirs.score}</AppText.Serif>
+            </View>
+          </View>
+
+          {/* Forfeit note */}
+          {results.isForfeit && (
+            <View style={[styles.forfeitPill, { backgroundColor: theme.amberSoft }]}>
+              <AppText.Mono
+                preset="chipLabel"
+                color={theme.amber}
+                style={{ textTransform: 'uppercase' }}
+              >
+                {youWon ? 'opponent forfeited' : 'you forfeited'}
+              </AppText.Mono>
+            </View>
+          )}
+        </View>
+
+        {/* ── Question review ── */}
+        <View style={styles.breakdown}>
+          <View style={styles.sectionHeader}>
+            <AppText.Mono
+              preset="eyebrow"
+              color={theme.ink3}
+              style={{ textTransform: 'uppercase', letterSpacing: 1.4 }}
+            >
+              Question Review
+            </AppText.Mono>
+            <View style={styles.markLegend}>
+              <AppText.Mono preset="eyebrow" color={theme.ink3}>you</AppText.Mono>
+              <AppText.Mono preset="eyebrow" color={theme.ink4}>{oppName}</AppText.Mono>
+            </View>
+          </View>
+
+          {loadingBreakdown ? (
+            <ActivityIndicator color={theme.ink3} style={{ marginTop: 16 }} />
+          ) : (
+            grouped.map((q, idx) => {
+              const isExpanded = expandedId === q.questionId;
+              return (
+                <Pressable
+                  key={q.questionId}
+                  onPress={() => setExpandedId(isExpanded ? null : q.questionId)}
+                  style={[styles.reviewCard, { backgroundColor: theme.card, borderColor: theme.line }]}
+                >
+                  {/* Compact header row */}
+                  <View style={styles.reviewRow}>
+                    <AppText.Mono preset="mono" color={theme.ink2} style={styles.qNum}>
+                      Q{idx + 1}
+                    </AppText.Mono>
+                    <View style={styles.topicBlock}>
+                      <AppText.Sans preset="bodyMed" color={theme.ink} numberOfLines={1}>
+                        {q.question.subTopic?.toLowerCase() ?? q.question.category.toLowerCase()}
+                      </AppText.Sans>
+                      <AppText.Mono preset="eyebrow" color={theme.ink3}>
+                        {q.question.category}
+                      </AppText.Mono>
+                    </View>
+                    <View style={styles.marks}>
+                      <MarkCircle correct={q.yourAnswer ? q.yourAnswer.isCorrect : null} />
+                      <MarkCircle correct={q.theirAnswer ? q.theirAnswer.isCorrect : null} dim />
+                    </View>
+                    <Feather
+                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={14}
+                      color={theme.ink3}
+                    />
+                  </View>
+
+                  {/* Expanded detail */}
+                  {isExpanded && (
+                    <View style={[styles.expandedSection, { borderTopColor: theme.line }]}>
+                      <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>
+                        {q.question.text}
+                      </AppText.Serif>
+
+                      <View style={styles.optionsList}>
+                        {(q.question.options as string[]).map((opt, i) => {
+                          const isCorrectOpt  = i === q.question.correctAnswer;
+                          const isYourWrong   = q.yourAnswer != null
+                            && i === q.yourAnswer.selectedAnswer
+                            && !q.yourAnswer.isCorrect;
+
+                          let bg    = theme.bg2;
+                          let color = theme.ink2;
+                          if (isCorrectOpt) { bg = theme.accentSoft; color = theme.accentDeep; }
+                          if (isYourWrong)  { bg = theme.coralSoft;  color = theme.coral; }
+
+                          return (
+                            <View key={i} style={[styles.optionRow, { backgroundColor: bg }]}>
+                              <AppText.Mono
+                                preset="eyebrow"
+                                color={color}
+                                style={styles.optionLetter}
+                              >
+                                {String.fromCharCode(65 + i)}
+                              </AppText.Mono>
+                              <AppText.Sans preset="body" color={color} style={{ flex: 1 }}>
+                                {opt}
+                              </AppText.Sans>
+                            </View>
+                          );
+                        })}
+                      </View>
+
+                      <AppText.Mono
+                        preset="eyebrow"
+                        color={theme.ink3}
+                        style={{ textTransform: 'uppercase', marginTop: 12, marginBottom: 4 }}
                       >
-                        {String.fromCharCode(65 + i)}. {opt}
+                        Explanation
+                      </AppText.Mono>
+                      <AppText.Sans preset="body" color={theme.ink2}>
+                        {q.question.explanation}
                       </AppText.Sans>
                     </View>
-                  );
-                })}
-              </View>
-              <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.explanationLabel}>Explanation</AppText.Mono>
-              <AppText.Sans preset="body" color={theme.ink2} style={styles.explanationText}>{a.question.explanation}</AppText.Sans>
-            </View>
-          ))}
+                  )}
+                </Pressable>
+              );
+            })
+          )}
         </View>
-      ) : null}
 
-      <View style={styles.actions}>
-        <Button label="Play Again" onPress={() => navigation.replace('Matchmaking')} style={styles.buttonSpacing} />
-        <Button label="Back to Home" variant="ghost" onPress={() => navigation.navigate('MainTabs')} />
-      </View>
-    </ScrollView>
+        {/* ── Actions ── */}
+        <View style={[styles.actions, { borderTopColor: theme.line }]}>
+          <Pressable
+            onPress={() => navigation.navigate('MainTabs')}
+            style={[styles.homeBtn, { backgroundColor: theme.card, borderColor: theme.line }]}
+          >
+            <Feather name="home" size={22} color={theme.ink2} />
+          </Pressable>
+          <View style={styles.rematchWrap}>
+            <Button label="Rematch →" onPress={() => navigation.replace('Matchmaking')} />
+          </View>
+        </View>
+
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: { flex: 1 },
+  scroll: { paddingBottom: 40 },
+
+  // Hero
+  hero: {
     paddingHorizontal: 20,
-    paddingTop: 80,
-    paddingBottom: 48,
+    paddingTop: 32,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    gap: 16,
+  },
+  verdictRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  verdictLeft: { flex: 1, gap: 4 },
+  tierChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    marginTop: 6,
+  },
+
+  // Score bar
+  scoreSection: { gap: 6 },
+  scoreLabels:  { flexDirection: 'row', justifyContent: 'space-between' },
+  splitBar: {
+    flexDirection: 'row',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  barSegment: { height: 8 },
+  barGap:     { width: 2 },
+  scoreNumbers: { flexDirection: 'row', justifyContent: 'space-between' },
+
+  forfeitPill: {
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+  },
+
+  // Breakdown
+  breakdown: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
   },
-  outcomeLabel: {
-    marginBottom: 40,
+  markLegend: {
+    flexDirection: 'row',
+    gap: 10,
   },
-  scoreRow: {
+
+  // Review card (wraps header + optional expanded section)
+  reviewCard: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  reviewRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 24,
-    marginBottom: 32,
-    borderWidth: 1.5,
-    borderRadius: 16,
-    padding: 28,
-    width: '100%',
+    gap: 10,
+    padding: 12,
+  },
+  qNum:       { width: 30 },
+  topicBlock: { flex: 1, gap: 2 },
+  marks: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+
+  markCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
-  },
-  scoreBlock: { alignItems: 'center', flex: 1 },
-  scoreNumber: { marginVertical: 6 },
-  loader: { marginVertical: 32 },
-  breakdown: { width: '100%', marginBottom: 24 },
-  breakdownTitle: { marginBottom: 16 },
-  answerCard: {
-    borderRadius: 12,
-    borderWidth: 1.5,
-    padding: 16,
-    marginBottom: 16,
-  },
-  answerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
-  answerBadge: { marginLeft: 'auto', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 99 },
-  questionText: { marginBottom: 12 },
-  optionsGrid: { gap: 6, marginBottom: 12 },
-  optionRow: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
-  explanationLabel: { textTransform: 'uppercase', marginBottom: 4 },
-  explanationText: { lineHeight: 18 },
-  actions: { width: '100%', gap: 12, marginTop: 8 },
-  buttonSpacing: { marginBottom: 0 },
-  forfeitBanner: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginBottom: 16,
-    width: '100%',
     alignItems: 'center',
   },
+  markSymbol: {
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+
+  // Expanded section
+  expandedSection: {
+    borderTopWidth: 1,
+    padding: 14,
+  },
+  questionText: { marginBottom: 14 },
+  optionsList:  { gap: 6 },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
+  },
+  optionLetter: { width: 16, textAlign: 'center', paddingTop: 1 },
+
+  // Actions
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    marginTop: 16,
+    borderTopWidth: 1,
+  },
+  homeBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rematchWrap: { flex: 1 },
 });

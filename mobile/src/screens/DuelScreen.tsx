@@ -24,7 +24,7 @@ interface OpponentProgress {
 }
 
 interface DuelState {
-  currentQuestion: ClientQuestion | null;
+  currentQuestion: ClientQuestion;
   questionNumber: number;
   totalQuestions: number;
   selectedAnswer: number | null;
@@ -36,7 +36,7 @@ interface DuelState {
 }
 
 const INITIAL: DuelState = {
-  currentQuestion: null,
+  currentQuestion: null as unknown as ClientQuestion,
   questionNumber: 0,
   totalQuestions: 0,
   selectedAnswer: null,
