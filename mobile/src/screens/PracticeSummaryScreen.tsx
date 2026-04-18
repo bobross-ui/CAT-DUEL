@@ -58,7 +58,7 @@ export default function PracticeSummaryScreen({ navigation, route }: Props) {
       <Button
         label="Back to Home"
         variant="secondary"
-        onPress={() => navigation.navigate('Profile')}
+        onPress={() => navigation.navigate('MainTabs')}
       />
     </View>
   );

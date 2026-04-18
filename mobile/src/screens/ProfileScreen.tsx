@@ -3,10 +3,12 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
   ScrollView, RefreshControl, Modal, TextInput,
 } from 'react-native';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { RootStackParamList } from '../navigation';
+import { MainTabParamList, RootStackParamList } from '../navigation';
 import TierBadge from '../components/TierBadge';
 import Button from '../components/Button';
 import { useTheme } from '../theme/ThemeProvider';
@@ -57,7 +59,10 @@ const progressStyles = StyleSheet.create({
   fill: { height: '100%', borderRadius: 99 },
 });
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Me'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 export default function ProfileScreen({ navigation }: Props) {
   const { signOut } = useAuth();
@@ -169,23 +174,6 @@ export default function ProfileScreen({ navigation }: Props) {
 
         {profile && <TierProgressBar eloRating={profile.eloRating} rankTier={profile.rankTier} />}
 
-        <Button
-          label="Find Duel"
-          onPress={() => navigation.navigate('Matchmaking')}
-          style={styles.buttonSpacing}
-        />
-        <Button
-          label="Practice"
-          variant="secondary"
-          onPress={() => navigation.navigate('PracticeHome')}
-          style={styles.buttonSpacing}
-        />
-        <Button
-          label="Leaderboard"
-          variant="secondary"
-          onPress={() => navigation.navigate('Leaderboard', { userTier: profile?.rankTier ?? 'SILVER' })}
-          style={styles.buttonSpacing}
-        />
         <Button
           label="Match History"
           variant="secondary"

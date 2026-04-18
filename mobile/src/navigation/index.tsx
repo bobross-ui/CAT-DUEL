@@ -1,17 +1,22 @@
+import { NavigatorScreenParams } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import LoginScreen from '../screens/LoginScreen';
+import HomeScreen from '../screens/HomeScreen';
+import PlayScreen from '../screens/PlayScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import LeaderboardScreen from '../screens/LeaderboardScreen';
 import PracticeHomeScreen from '../screens/PracticeHomeScreen';
 import QuestionScreen from '../screens/QuestionScreen';
 import PracticeSummaryScreen from '../screens/PracticeSummaryScreen';
 import MatchmakingScreen from '../screens/MatchmakingScreen';
 import DuelScreen from '../screens/DuelScreen';
 import DuelResultsScreen from '../screens/DuelResultsScreen';
-import LeaderboardScreen from '../screens/LeaderboardScreen';
 import MatchHistoryScreen from '../screens/MatchHistoryScreen';
 import MatchDetailScreen from '../screens/MatchDetailScreen';
 import DebugScreen from '../screens/DebugScreen';
+import TabBar from '../components/TabBar';
 
 export type OpponentInfo = {
   userId: string;
@@ -36,29 +41,50 @@ export type GameFinishedPayload = {
   winnerId: string | null;
   isDraw: boolean;
   isForfeit: boolean;
-  currentUserId: string; // Postgres UUID for this specific player, injected by server on emit
+  currentUserId: string;
   player1: PlayerResult;
   player2: PlayerResult;
   totalQuestions: number;
   durationSeconds: number;
 };
 
+export type MainTabParamList = {
+  Home: undefined;
+  Play: undefined;
+  Ranks: undefined;
+  Me: undefined;
+};
+
 export type RootStackParamList = {
   Login: undefined;
-  Profile: undefined;
-  PracticeHome: undefined;
-  Question: { category: string; difficulty?: number };
-  PracticeSummary: { total: number; correct: number; totalTimeMs: number };
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Matchmaking: undefined;
   Duel: { gameId: string; opponent: OpponentInfo };
   DuelResults: { results: GameFinishedPayload; userId: string; opponent: OpponentInfo };
-  Leaderboard: { userTier: string };
+  PracticeHome: undefined;
+  Question: { category: string; difficulty?: number };
+  PracticeSummary: { total: number; correct: number; totalTimeMs: number };
   MatchHistory: undefined;
   MatchDetail: { matchId: string; opponentName: string | null };
   Debug: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
+
+function MainTabNavigator() {
+  return (
+    <Tab.Navigator
+      tabBar={(props) => <TabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Play" component={PlayScreen} />
+      <Tab.Screen name="Ranks" component={LeaderboardScreen} />
+      <Tab.Screen name="Me" component={ProfileScreen} />
+    </Tab.Navigator>
+  );
+}
 
 export default function RootNavigator() {
   const { user, loading } = useAuth();
@@ -69,18 +95,17 @@ export default function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
         <>
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-          <Stack.Screen name="PracticeHome" component={PracticeHomeScreen} />
-          <Stack.Screen name="Question" component={QuestionScreen} />
-          <Stack.Screen name="PracticeSummary" component={PracticeSummaryScreen} />
+          <Stack.Screen name="MainTabs" component={MainTabNavigator} />
           <Stack.Screen name="Matchmaking" component={MatchmakingScreen} />
           <Stack.Screen
             name="Duel"
             component={DuelScreen}
-            options={{ gestureEnabled: false }} // Prevent swipe-back during duel
+            options={{ gestureEnabled: false }}
           />
           <Stack.Screen name="DuelResults" component={DuelResultsScreen} />
-          <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
+          <Stack.Screen name="PracticeHome" component={PracticeHomeScreen} />
+          <Stack.Screen name="Question" component={QuestionScreen} />
+          <Stack.Screen name="PracticeSummary" component={PracticeSummaryScreen} />
           <Stack.Screen name="MatchHistory" component={MatchHistoryScreen} />
           <Stack.Screen name="MatchDetail" component={MatchDetailScreen} />
           <Stack.Screen name="Debug" component={DebugScreen} />

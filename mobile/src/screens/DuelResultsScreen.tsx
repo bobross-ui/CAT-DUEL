@@ -143,7 +143,7 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
 
       <View style={styles.actions}>
         <Button label="Play Again" onPress={() => navigation.replace('Matchmaking')} style={styles.buttonSpacing} />
-        <Button label="Back to Home" variant="secondary" onPress={() => navigation.replace('Profile')} />
+        <Button label="Back to Home" variant="secondary" onPress={() => navigation.navigate('MainTabs')} />
       </View>
     </ScrollView>
   );

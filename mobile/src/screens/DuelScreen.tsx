@@ -207,7 +207,7 @@ export default function DuelScreen({ route, navigation }: Props) {
       socket.on('game:error', ({ message }: { message: string }) => {
         if (!mounted) return;
         Alert.alert('Game Error', message, [
-          { text: 'OK', onPress: () => navigation.replace('Profile') },
+          { text: 'OK', onPress: () => navigation.navigate('MainTabs') },
         ]);
       });
     }
@@ -244,7 +244,7 @@ export default function DuelScreen({ route, navigation }: Props) {
 
   function handleQuit() {
     if (duelState.phase !== 'ACTIVE' && duelState.phase !== 'COUNTDOWN') {
-      navigation.replace('Profile');
+      navigation.navigate('MainTabs');
       return;
     }
     const doQuit = () => {

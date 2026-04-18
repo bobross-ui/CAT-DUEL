@@ -3,14 +3,10 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, Modal, RefreshControl,
 } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { RootStackParamList } from '../navigation';
 import { leaderboardService } from '../services/leaderboard';
 import TierBadge from '../components/TierBadge';
 import { useTheme } from '../theme/ThemeProvider';
-
-type Props = NativeStackScreenProps<RootStackParamList, 'Leaderboard'>;
 
 type Tab = 'global' | 'around' | 'tier';
 const TIERS = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
@@ -61,10 +57,10 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
   );
 }
 
-export default function LeaderboardScreen({ route, navigation }: Props) {
+export default function LeaderboardScreen() {
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>('global');
-  const [selectedTier, setSelectedTier] = useState(route.params.userTier);
+  const [selectedTier, setSelectedTier] = useState('SILVER');
   const [tierPickerVisible, setTierPickerVisible] = useState(false);
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,9 +104,6 @@ export default function LeaderboardScreen({ route, navigation }: Props) {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={[styles.backText, { color: theme.text }]}>←</Text>
-        </TouchableOpacity>
         <Text style={[styles.title, { color: theme.text }]}>Leaderboard</Text>
       </View>
 
@@ -210,15 +203,10 @@ export default function LeaderboardScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 16,
-    gap: 12,
   },
-  backButton: { padding: 4 },
-  backText: { fontSize: 24 },
   title: { fontSize: 22, fontWeight: '800' },
   tabs: {
     flexDirection: 'row',
