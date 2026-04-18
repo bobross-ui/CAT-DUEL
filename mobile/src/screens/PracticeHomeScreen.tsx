@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
+import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import Button from '../components/Button';
 
@@ -33,11 +34,11 @@ export default function PracticeHomeScreen({ navigation }: Props) {
       contentContainerStyle={styles.content}
     >
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Text style={[styles.backText, { color: theme.ink2 }]}>← Back</Text>
+        <AppText.Sans preset="body" color={theme.ink2}>← Back</AppText.Sans>
       </TouchableOpacity>
 
-      <Text style={[styles.title, { color: theme.ink }]}>Practice</Text>
-      <Text style={[styles.subtitle, { color: theme.ink2 }]}>Choose a category to begin</Text>
+      <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.title}>Practice</AppText.Serif>
+      <AppText.Sans preset="body" color={theme.ink2} style={styles.subtitle}>Choose a category to begin</AppText.Sans>
 
       <View style={styles.categoryGrid}>
         {CATEGORIES.map((cat) => {
@@ -51,16 +52,16 @@ export default function PracticeHomeScreen({ navigation }: Props) {
               ]}
               onPress={() => setSelectedCategory(cat.key)}
             >
-              <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
-              <Text style={[styles.categoryLabel, { color: isSelected ? theme.ink : theme.ink2 }]}>
+              <AppText.Sans style={styles.categoryEmoji}>{cat.emoji}</AppText.Sans>
+              <AppText.Sans preset="bodyMed" color={isSelected ? theme.ink : theme.ink2} style={styles.categoryLabel}>
                 {cat.label}
-              </Text>
+              </AppText.Sans>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      <Text style={[styles.sectionLabel, { color: theme.ink3 }]}>Difficulty</Text>
+      <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.sectionLabel}>Difficulty</AppText.Mono>
       <View style={styles.difficultyRow}>
         {DIFFICULTIES.map((d) => {
           const isSelected = selectedDifficulty === d.value;
@@ -76,9 +77,9 @@ export default function PracticeHomeScreen({ navigation }: Props) {
               ]}
               onPress={() => setSelectedDifficulty(d.value)}
             >
-              <Text style={[styles.difficultyText, { color: isSelected ? theme.bg : theme.ink2 }]}>
+              <AppText.Sans preset="label" color={isSelected ? theme.bg : theme.ink2}>
                 {d.label}
-              </Text>
+              </AppText.Sans>
             </TouchableOpacity>
           );
         })}
@@ -109,16 +110,10 @@ const styles = StyleSheet.create({
   backButton: {
     marginBottom: 24,
   },
-  backText: {
-    fontSize: 16,
-  },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
     marginBottom: 6,
   },
   subtitle: {
-    fontSize: 16,
     marginBottom: 32,
   },
   categoryGrid: {
@@ -137,15 +132,10 @@ const styles = StyleSheet.create({
     fontSize: 28,
   },
   categoryLabel: {
-    fontSize: 15,
-    fontWeight: '600',
     flex: 1,
   },
   sectionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
     marginBottom: 12,
   },
   difficultyRow: {
@@ -159,9 +149,5 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
-  },
-  difficultyText: {
-    fontSize: 14,
-    fontWeight: '500',
   },
 });

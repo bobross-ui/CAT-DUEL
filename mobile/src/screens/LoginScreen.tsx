@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  Text,
   TextInput,
   StyleSheet,
   KeyboardAvoidingView,
@@ -12,6 +11,7 @@ import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeProvider';
 import Button from '../components/Button';
+import AppText from '../components/Text';
 
 export default function LoginScreen() {
   const { signInWithEmail, signInWithGoogle } = useAuth();
@@ -65,10 +65,10 @@ export default function LoginScreen() {
       style={[styles.container, { backgroundColor: theme.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={[styles.title, { color: theme.ink }]}>CAT Duel</Text>
-      <Text style={[styles.subtitle, { color: theme.ink2 }]}>
+      <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.title}>CAT Duel</AppText.Serif>
+      <AppText.Sans preset="body" color={theme.ink2} style={styles.subtitle}>
         {isRegistering ? 'Create an account' : 'Sign in to compete'}
-      </Text>
+      </AppText.Sans>
 
       {isRegistering && (
         <TextInput
@@ -98,7 +98,7 @@ export default function LoginScreen() {
         secureTextEntry
       />
 
-      {error ? <Text style={[styles.error, { color: theme.coral }]}>{error}</Text> : null}
+      {error ? <AppText.Sans preset="label" color={theme.coral} style={styles.error}>{error}</AppText.Sans> : null}
 
       <Button
         label={isRegistering ? 'Register' : 'Sign In'}
@@ -107,17 +107,19 @@ export default function LoginScreen() {
         style={styles.buttonSpacing}
       />
 
-      <Text
-        style={[styles.toggleText, { color: theme.ink2 }]}
+      <AppText.Sans
+        preset="label"
+        color={theme.ink2}
+        style={styles.toggleText}
         onPress={() => { setIsRegistering(r => !r); setError(''); setDisplayName(''); }}
       >
         {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}
-      </Text>
+      </AppText.Sans>
 
       {!isRegistering && (
         <Button
           label="Continue with Google"
-          variant="secondary"
+          variant="ghost"
           onPress={handleGoogleSignIn}
           disabled={loading}
           style={styles.buttonSpacing}
@@ -137,13 +139,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
     marginBottom: 4,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
     marginBottom: 40,
     textAlign: 'center',
   },
@@ -156,14 +155,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   error: {
-    fontSize: 14,
     marginBottom: 12,
   },
   buttonSpacing: {
     marginBottom: 12,
   },
   toggleText: {
-    fontSize: 14,
     textAlign: 'center',
     marginBottom: 12,
     textDecorationLine: 'underline',

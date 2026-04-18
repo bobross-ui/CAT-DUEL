@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, TouchableOpacity, StyleSheet, ActivityIndicator,
   ScrollView, RefreshControl, Modal, TextInput,
 } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
@@ -11,6 +11,7 @@ import api from '../services/api';
 import { MainTabParamList, RootStackParamList } from '../navigation';
 import TierBadge from '../components/TierBadge';
 import Button from '../components/Button';
+import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { ELO_TIERS, getTier } from '../constants';
 
@@ -33,12 +34,12 @@ function TierProgressBar({ eloRating }: { eloRating: number; rankTier: string })
   return (
     <View style={progressStyles.container}>
       <View style={progressStyles.labelRow}>
-        <Text style={[progressStyles.label, { color: theme.ink3 }]}>
+        <AppText.Sans preset="small" color={theme.ink3}>
           {isDiamond ? 'Max Rank' : `${eloRating} / ${tier.max + 1} to ${nextTier?.name}`}
-        </Text>
-        <Text style={[progressStyles.pct, { color: tier.color }]}>
+        </AppText.Sans>
+        <AppText.Mono preset="mono" color={tier.color} style={progressStyles.pct}>
           {isDiamond ? '100%' : `${Math.round(progress * 100)}%`}
-        </Text>
+        </AppText.Mono>
       </View>
       <View style={[progressStyles.track, { backgroundColor: theme.bg2 }]}>
         <View style={[
@@ -53,8 +54,7 @@ function TierProgressBar({ eloRating }: { eloRating: number; rankTier: string })
 const progressStyles = StyleSheet.create({
   container: { width: '100%', marginBottom: 32 },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  label: { fontSize: 12 },
-  pct: { fontSize: 12, fontWeight: '700' },
+  pct: { fontWeight: '700' },
   track: { height: 6, borderRadius: 99, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 99 },
 });
@@ -134,7 +134,7 @@ export default function ProfileScreen({ navigation }: Props) {
   if (error) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <Text style={[styles.error, { color: theme.coral }]}>{error}</Text>
+        <AppText.Sans preset="body" color={theme.coral}>{error}</AppText.Sans>
       </View>
     );
   }
@@ -155,13 +155,13 @@ export default function ProfileScreen({ navigation }: Props) {
             }}
             activeOpacity={1}
           >
-            <Text style={[styles.title, { color: theme.ink }]}>{profile?.displayName ?? 'Anonymous'}</Text>
+            <AppText.Serif preset="heroSerif" color={theme.ink}>{profile?.displayName ?? 'Anonymous'}</AppText.Serif>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={openEdit}
             style={[styles.editButton, { borderColor: theme.line }]}
           >
-            <Text style={[styles.editButtonText, { color: theme.ink2 }]}>Edit</Text>
+            <AppText.Sans preset="label" color={theme.ink2}>Edit</AppText.Sans>
           </TouchableOpacity>
         </View>
         {profile && (
@@ -169,16 +169,16 @@ export default function ProfileScreen({ navigation }: Props) {
             <TierBadge tier={profile.rankTier} />
           </View>
         )}
-        <Text style={[styles.email, { color: theme.ink2 }]}>{profile?.email}</Text>
+        <AppText.Sans preset="body" color={theme.ink2} style={styles.email}>{profile?.email}</AppText.Sans>
 
         <View style={styles.statsRow}>
           <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: theme.ink }]}>{profile?.eloRating}</Text>
-            <Text style={[styles.statLabel, { color: theme.ink2 }]}>Elo Rating</Text>
+            <AppText.Mono preset="deltaLg" color={theme.ink}>{profile?.eloRating}</AppText.Mono>
+            <AppText.Sans preset="label" color={theme.ink2} style={styles.statLabel}>Elo Rating</AppText.Sans>
           </View>
           <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: theme.ink }]}>{profile?.gamesPlayed}</Text>
-            <Text style={[styles.statLabel, { color: theme.ink2 }]}>Games Played</Text>
+            <AppText.Mono preset="deltaLg" color={theme.ink}>{profile?.gamesPlayed}</AppText.Mono>
+            <AppText.Sans preset="label" color={theme.ink2} style={styles.statLabel}>Games Played</AppText.Sans>
           </View>
         </View>
 
@@ -186,7 +186,7 @@ export default function ProfileScreen({ navigation }: Props) {
 
         <Button
           label="Match History"
-          variant="secondary"
+          variant="ghost"
           onPress={() => navigation.navigate('MatchHistory')}
           style={styles.buttonSpacing}
         />
@@ -201,7 +201,7 @@ export default function ProfileScreen({ navigation }: Props) {
       <Modal visible={editVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: theme.bg, borderColor: theme.line }]}>
-            <Text style={[styles.modalTitle, { color: theme.ink }]}>Edit Display Name</Text>
+            <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.modalTitle}>Edit Display Name</AppText.Serif>
             <TextInput
               style={[styles.modalInput, {
                 borderColor: theme.line,
@@ -215,7 +215,7 @@ export default function ProfileScreen({ navigation }: Props) {
               maxLength={50}
               placeholderTextColor={theme.ink3}
             />
-            {editError ? <Text style={[styles.modalError, { color: theme.coral }]}>{editError}</Text> : null}
+            {editError ? <AppText.Sans preset="small" color={theme.coral} style={styles.modalError}>{editError}</AppText.Sans> : null}
             <View style={styles.modalActions}>
               <Button
                 label="Cancel"
@@ -255,22 +255,13 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 4,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-  },
   editButton: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
   },
-  editButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
   email: {
-    fontSize: 16,
     marginBottom: 40,
   },
   tierBadgeRow: {
@@ -284,16 +275,8 @@ const styles = StyleSheet.create({
   stat: {
     alignItems: 'center',
   },
-  statValue: {
-    fontSize: 32,
-    fontWeight: '700',
-  },
   statLabel: {
-    fontSize: 14,
     marginTop: 4,
-  },
-  error: {
-    fontSize: 16,
   },
   buttonSpacing: {
     marginBottom: 12,
@@ -312,8 +295,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
     marginBottom: 16,
   },
   modalInput: {
@@ -325,7 +306,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalError: {
-    fontSize: 13,
     marginBottom: 8,
   },
   modalActions: {

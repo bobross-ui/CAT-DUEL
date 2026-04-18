@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  View, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, Modal, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { leaderboardService } from '../services/leaderboard';
 import TierBadge from '../components/TierBadge';
+import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 
 type Tab = 'global' | 'around' | 'tier';
@@ -44,15 +45,15 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
       { borderBottomColor: theme.line2 },
       entry.isCurrentUser && { backgroundColor: theme.bg2 },
     ]}>
-      <Text style={[styles.rank, { color: theme.ink }]}>{medal ?? `#${entry.rank}`}</Text>
+      <AppText.Mono preset="mono" color={theme.ink} style={styles.rank}>{medal ?? `#${entry.rank}`}</AppText.Mono>
       <View style={styles.nameCol}>
-        <Text style={[styles.name, { color: theme.ink }]} numberOfLines={1}>
+        <AppText.Sans preset="bodyMed" color={theme.ink} numberOfLines={1}>
           {entry.displayName}
           {entry.isCurrentUser ? '  (You)' : ''}
-        </Text>
+        </AppText.Sans>
         <TierBadge tier={entry.rankTier} small />
       </View>
-      <Text style={[styles.elo, { color: theme.ink }]}>{entry.eloRating}</Text>
+      <AppText.Mono preset="mono" color={theme.ink} style={styles.elo}>{entry.eloRating}</AppText.Mono>
     </View>
   );
 }
@@ -104,7 +105,7 @@ export default function LeaderboardScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.ink }]}>Leaderboard</Text>
+        <AppText.Serif preset="heroSerif" color={theme.ink}>Leaderboard</AppText.Serif>
       </View>
 
       <View style={styles.tabs}>
@@ -124,9 +125,9 @@ export default function LeaderboardScreen() {
                 else if (tab === 'tier') setTierPickerVisible(true);
               }}
             >
-              <Text style={[styles.tabText, { color: isActive ? theme.bg : theme.ink2 }]}>
+              <AppText.Mono preset="chipLabel" color={isActive ? theme.bg : theme.ink2}>
                 {label}
-              </Text>
+              </AppText.Mono>
             </TouchableOpacity>
           );
         })}
@@ -134,17 +135,17 @@ export default function LeaderboardScreen() {
 
       {data?.currentUserRank != null && (
         <View style={[styles.rankBanner, { backgroundColor: theme.accentSoft }]}>
-          <Text style={[styles.rankBannerText, { color: theme.accentDeep }]}>
+          <AppText.Sans preset="label" color={theme.accentDeep}>
             Your rank: #{data.currentUserRank} of {data.totalRanked}
-          </Text>
+          </AppText.Sans>
         </View>
       )}
 
       {data != null && data.currentUserRank == null && gamesNeeded != null && gamesNeeded > 0 && (
         <View style={[styles.unrankedBanner, { backgroundColor: theme.amberSoft }]}>
-          <Text style={[styles.unrankedText, { color: theme.amberDeep }]}>
+          <AppText.Sans preset="label" color={theme.amberDeep}>
             Play {gamesNeeded} more match{gamesNeeded !== 1 ? 'es' : ''} to join the leaderboard
-          </Text>
+          </AppText.Sans>
         </View>
       )}
 
@@ -158,10 +159,10 @@ export default function LeaderboardScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={[styles.emptyText, { color: theme.ink }]}>No players ranked yet.</Text>
-              <Text style={[styles.emptySubText, { color: theme.ink2 }]}>
+              <AppText.Sans preset="bodyMed" color={theme.ink}>No players ranked yet.</AppText.Sans>
+              <AppText.Sans preset="body" color={theme.ink2}>
                 Play 5 matches to join the leaderboard.
-              </Text>
+              </AppText.Sans>
             </View>
           }
           contentContainerStyle={styles.list}
@@ -175,7 +176,7 @@ export default function LeaderboardScreen() {
           onPress={() => setTierPickerVisible(false)}
         >
           <View style={[styles.tierPicker, { backgroundColor: theme.bg, borderColor: theme.line }]}>
-            <Text style={[styles.tierPickerTitle, { color: theme.ink }]}>Select Tier</Text>
+            <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.tierPickerTitle}>Select Tier</AppText.Serif>
             {TIERS.map((tier) => (
               <TouchableOpacity
                 key={tier}
@@ -207,7 +208,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
-  title: { fontSize: 22, fontWeight: '800' },
   tabs: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -220,7 +220,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  tabText: { fontSize: 12, fontWeight: '600' },
   rankBanner: {
     marginHorizontal: 20,
     marginBottom: 8,
@@ -228,7 +227,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
-  rankBannerText: { fontSize: 13, fontWeight: '600' },
   unrankedBanner: {
     marginHorizontal: 20,
     marginBottom: 8,
@@ -236,7 +234,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
-  unrankedText: { fontSize: 13, fontWeight: '600' },
   loader: { flex: 1, marginTop: 60 },
   list: { paddingHorizontal: 20, paddingBottom: 40 },
   row: {
@@ -246,13 +243,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     gap: 12,
   },
-  rank: { fontSize: 16, fontWeight: '700', width: 36 },
+  rank: { width: 36 },
   nameCol: { flex: 1, gap: 4 },
-  name: { fontSize: 15, fontWeight: '600' },
-  elo: { fontSize: 16, fontWeight: '700' },
+  elo: {},
   empty: { alignItems: 'center', paddingTop: 60, gap: 8 },
-  emptyText: { fontSize: 16, fontWeight: '600' },
-  emptySubText: { fontSize: 14 },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -266,6 +260,6 @@ const styles = StyleSheet.create({
     width: 260,
     gap: 10,
   },
-  tierPickerTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  tierPickerTitle: { marginBottom: 4 },
   tierOption: { padding: 8, borderRadius: 8, alignItems: 'flex-start' },
 });

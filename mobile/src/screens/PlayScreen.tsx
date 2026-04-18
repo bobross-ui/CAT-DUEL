@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainTabParamList, RootStackParamList } from '../navigation';
 import Button from '../components/Button';
+import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 
 type Props = CompositeScreenProps<
@@ -16,8 +17,8 @@ export default function PlayScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <Text style={[styles.title, { color: theme.ink }]}>Play</Text>
-      <Text style={[styles.sub, { color: theme.ink3 }]}>Choose your game mode</Text>
+      <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.title}>Play</AppText.Serif>
+      <AppText.Sans preset="body" color={theme.ink3} style={styles.sub}>Choose your game mode</AppText.Sans>
 
       <Button
         label="Find Duel"
@@ -26,7 +27,7 @@ export default function PlayScreen({ navigation }: Props) {
       />
       <Button
         label="Solo Practice"
-        variant="secondary"
+        variant="ghost"
         onPress={() => navigation.navigate('PracticeHome')}
         style={styles.buttonSpacing}
       />
@@ -36,7 +37,7 @@ export default function PlayScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 32, paddingTop: 100 },
-  title: { fontSize: 32, fontWeight: '800', marginBottom: 8 },
-  sub: { fontSize: 16, marginBottom: 48 },
+  title: { marginBottom: 8 },
+  sub: { marginBottom: 48 },
   buttonSpacing: { marginBottom: 12 },
 });

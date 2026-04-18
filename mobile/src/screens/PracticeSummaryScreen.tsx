@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
+import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import Button from '../components/Button';
 
@@ -21,32 +22,32 @@ export default function PracticeSummaryScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <Text style={[styles.title, { color: theme.ink }]}>Session Complete</Text>
-      <Text style={[styles.subtitle, { color: theme.ink2 }]}>
+      <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.title}>Session Complete</AppText.Serif>
+      <AppText.Sans preset="body" color={theme.ink2} style={styles.subtitle}>
         {total} question{total !== 1 ? 's' : ''} answered
-      </Text>
+      </AppText.Sans>
 
       <View style={[styles.accuracyCircle, { borderColor: theme.ink }]}>
-        <Text style={[styles.accuracyValue, { color: theme.ink }]}>{accuracy}%</Text>
-        <Text style={[styles.accuracyLabel, { color: theme.ink2 }]}>Accuracy</Text>
+        <AppText.Mono preset="deltaLg" color={theme.ink} style={styles.accuracyValue}>{accuracy}%</AppText.Mono>
+        <AppText.Sans preset="label" color={theme.ink2}>Accuracy</AppText.Sans>
       </View>
 
       <View style={styles.statsGrid}>
         <View style={[styles.statCard, { borderColor: theme.line }]}>
-          <Text style={[styles.statValue, { color: theme.accent }]}>{correct}</Text>
-          <Text style={[styles.statLabel, { color: theme.ink2 }]}>Correct</Text>
+          <AppText.Mono preset="deltaLg" color={theme.accent} style={styles.statValue}>{correct}</AppText.Mono>
+          <AppText.Sans preset="small" color={theme.ink2}>Correct</AppText.Sans>
         </View>
         <View style={[styles.statCard, { borderColor: theme.line }]}>
-          <Text style={[styles.statValue, { color: theme.coral }]}>{incorrect}</Text>
-          <Text style={[styles.statLabel, { color: theme.ink2 }]}>Incorrect</Text>
+          <AppText.Mono preset="deltaLg" color={theme.coral} style={styles.statValue}>{incorrect}</AppText.Mono>
+          <AppText.Sans preset="small" color={theme.ink2}>Incorrect</AppText.Sans>
         </View>
         <View style={[styles.statCard, { borderColor: theme.line }]}>
-          <Text style={[styles.statValue, { color: theme.ink }]}>{formatTime(totalTimeSec)}</Text>
-          <Text style={[styles.statLabel, { color: theme.ink2 }]}>Total Time</Text>
+          <AppText.Mono preset="deltaLg" color={theme.ink} style={styles.statValue}>{formatTime(totalTimeSec)}</AppText.Mono>
+          <AppText.Sans preset="small" color={theme.ink2}>Total Time</AppText.Sans>
         </View>
         <View style={[styles.statCard, { borderColor: theme.line }]}>
-          <Text style={[styles.statValue, { color: theme.ink }]}>{formatTime(avgTimeSec)}</Text>
-          <Text style={[styles.statLabel, { color: theme.ink2 }]}>Avg / Question</Text>
+          <AppText.Mono preset="deltaLg" color={theme.ink} style={styles.statValue}>{formatTime(avgTimeSec)}</AppText.Mono>
+          <AppText.Sans preset="small" color={theme.ink2}>Avg / Question</AppText.Sans>
         </View>
       </View>
 
@@ -57,7 +58,7 @@ export default function PracticeSummaryScreen({ navigation, route }: Props) {
       />
       <Button
         label="Back to Home"
-        variant="secondary"
+        variant="ghost"
         onPress={() => navigation.navigate('MainTabs')}
       />
     </View>
@@ -71,8 +72,8 @@ const styles = StyleSheet.create({
     paddingTop: 80,
     alignItems: 'center',
   },
-  title: { fontSize: 28, fontWeight: '700', marginBottom: 6 },
-  subtitle: { fontSize: 16, marginBottom: 40 },
+  title: { marginBottom: 6 },
+  subtitle: { marginBottom: 40 },
   accuracyCircle: {
     width: 140,
     height: 140,
@@ -82,8 +83,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  accuracyValue: { fontSize: 36, fontWeight: '800' },
-  accuracyLabel: { fontSize: 13, fontWeight: '600' },
+  accuracyValue: { fontSize: 36 },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -99,7 +99,6 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
   },
-  statValue: { fontSize: 28, fontWeight: '700', marginBottom: 4 },
-  statLabel: { fontSize: 13 },
+  statValue: { marginBottom: 4 },
   buttonSpacing: { marginBottom: 12, width: '100%' },
 });

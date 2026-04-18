@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  View, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Animated,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import { questionService, Question, AnswerResult } from '../services/questions';
+import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import Button from '../components/Button';
 
@@ -136,13 +137,13 @@ export default function QuestionScreen({ navigation, route }: Props) {
   if (noMore) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <Text style={styles.noMoreEmoji}>🎉</Text>
-        <Text style={[styles.noMoreTitle, { color: theme.ink }]}>You've seen all questions!</Text>
-        <Text style={[styles.noMoreSub, { color: theme.ink2 }]}>in this category</Text>
+        <AppText.Sans style={styles.noMoreEmoji}>🎉</AppText.Sans>
+        <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.noMoreTitle}>You've seen all questions!</AppText.Serif>
+        <AppText.Sans preset="body" color={theme.ink2} style={styles.noMoreSub}>in this category</AppText.Sans>
         {session.current.questionsAnswered > 0 && (
           <Button label="View Summary" onPress={handleEndSession} style={styles.buttonSpacing} />
         )}
-        <Button label="Back to Practice" variant="secondary" onPress={() => navigation.goBack()} />
+        <Button label="Back to Practice" variant="ghost" onPress={() => navigation.goBack()} />
       </View>
     );
   }
@@ -151,20 +152,20 @@ export default function QuestionScreen({ navigation, route }: Props) {
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={[styles.header, { borderBottomColor: theme.line2 }]}>
         <View>
-          <Text style={[styles.categoryBadge, { color: theme.ink2 }]}>
+          <AppText.Mono preset="eyebrow" color={theme.ink2} style={styles.categoryBadge}>
             {question?.category} · {question?.subTopic ?? `Difficulty ${question?.difficulty}`}
-          </Text>
+          </AppText.Mono>
         </View>
         <View style={styles.headerRight}>
-          <Text style={[styles.timer, { color: theme.ink }]}>{formatTime(elapsedSec)}</Text>
+          <AppText.Mono preset="timer" color={theme.ink} style={styles.timer}>{formatTime(elapsedSec)}</AppText.Mono>
           <TouchableOpacity onPress={handleEndSession}>
-            <Text style={[styles.endText, { color: theme.ink3 }]}>End</Text>
+            <AppText.Sans preset="label" color={theme.ink3}>End</AppText.Sans>
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <Text style={[styles.questionText, { color: theme.ink }]}>{question?.text}</Text>
+        <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>{question?.text}</AppText.Serif>
 
         <View style={styles.optionsContainer}>
           {question?.options.map((option, index) => {
@@ -195,10 +196,10 @@ export default function QuestionScreen({ navigation, route }: Props) {
                 onPress={() => !result && setSelectedOption(index)}
                 disabled={!!result}
               >
-                <Text style={[styles.optionIndex, { color: theme.ink3 }]}>
+                <AppText.Mono preset="mono" color={theme.ink3} style={styles.optionIndex}>
                   {String.fromCharCode(65 + index)}.
-                </Text>
-                <Text style={[styles.optionText, { color: textColor }]}>{option}</Text>
+                </AppText.Mono>
+                <AppText.Sans preset="body" color={textColor} style={styles.optionText}>{option}</AppText.Sans>
               </TouchableOpacity>
             );
           })}
@@ -224,14 +225,12 @@ export default function QuestionScreen({ navigation, route }: Props) {
           { backgroundColor: theme.bg, transform: [{ translateY: resultSlide }] },
         ]}>
           <View style={styles.resultHeader}>
-            <Text style={styles.resultEmoji}>{result.isCorrect ? '✅' : '❌'}</Text>
-            <Text style={[styles.resultTitle, { color: theme.ink }]}>
-              {result.isCorrect ? 'Correct!' : 'Incorrect'}
-            </Text>
+            <AppText.Sans style={styles.resultEmoji}>{result.isCorrect ? '✅' : '❌'}</AppText.Sans>
+            <AppText.Serif preset="h1Serif" color={theme.ink}>{result.isCorrect ? 'Correct!' : 'Incorrect'}</AppText.Serif>
           </View>
           <ScrollView style={styles.explanationScroll} nestedScrollEnabled>
-            <Text style={[styles.explanationLabel, { color: theme.ink3 }]}>Explanation</Text>
-            <Text style={[styles.explanationText, { color: theme.ink2 }]}>{result.explanation}</Text>
+            <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.explanationLabel}>Explanation</AppText.Mono>
+            <AppText.Sans preset="body" color={theme.ink2} style={styles.explanationText}>{result.explanation}</AppText.Sans>
           </ScrollView>
           <Button label="Next Question →" onPress={loadNextQuestion} />
         </Animated.View>
@@ -253,12 +252,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  categoryBadge: { fontSize: 13, fontWeight: '600' },
-  timer: { fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  endText: { fontSize: 14, fontWeight: '600' },
+  categoryBadge: { textTransform: 'uppercase' },
+  timer: { fontSize: 16 },
   scroll: { flex: 1 },
   scrollContent: { padding: 24 },
-  questionText: { fontSize: 18, fontWeight: '500', lineHeight: 28, marginBottom: 32 },
+  questionText: { marginBottom: 32 },
   optionsContainer: { gap: 12 },
   option: {
     borderWidth: 1.5,
@@ -268,12 +266,12 @@ const styles = StyleSheet.create({
     gap: 12,
     alignItems: 'flex-start',
   },
-  optionIndex: { fontSize: 15, fontWeight: '700', width: 20 },
-  optionText: { fontSize: 15, flex: 1, lineHeight: 22 },
+  optionIndex: { width: 20 },
+  optionText: { flex: 1 },
   footer: { padding: 20, borderTopWidth: 1 },
   noMoreEmoji: { fontSize: 48, marginBottom: 16 },
-  noMoreTitle: { fontSize: 22, fontWeight: '700', marginBottom: 8 },
-  noMoreSub: { fontSize: 15, marginBottom: 32 },
+  noMoreTitle: { marginBottom: 8 },
+  noMoreSub: { marginBottom: 32 },
   buttonSpacing: { marginBottom: 12, width: '100%' },
   resultPanel: {
     position: 'absolute',
@@ -293,8 +291,7 @@ const styles = StyleSheet.create({
   },
   resultHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
   resultEmoji: { fontSize: 24 },
-  resultTitle: { fontSize: 20, fontWeight: '700' },
   explanationScroll: { maxHeight: 120, marginBottom: 16 },
-  explanationLabel: { fontSize: 13, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 },
-  explanationText: { fontSize: 14, lineHeight: 22 },
+  explanationLabel: { textTransform: 'uppercase', marginBottom: 6 },
+  explanationText: { lineHeight: 22 },
 });

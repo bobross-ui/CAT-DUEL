@@ -7,7 +7,7 @@ import { radii } from '../theme/tokens';
 interface ButtonProps {
   label: string;
   onPress: () => void;
-  variant?: 'primary' | 'ghost' | 'dark' | 'coral' | 'secondary';
+  variant?: 'primary' | 'ghost' | 'dark' | 'coral';
   loading?: boolean;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -38,7 +38,7 @@ export default function Button({
       case 'primary': return theme.accent;
       case 'dark':    return theme.ink;
       case 'coral':   return theme.coral;
-      case 'ghost': case 'secondary': return 'transparent';
+      case 'ghost': return 'transparent';
     }
   })();
 
@@ -48,11 +48,11 @@ export default function Button({
       case 'primary': return '#FFFFFF';
       case 'dark':    return theme.bg;
       case 'coral':   return '#FFFFFF';
-      case 'ghost': case 'secondary': return theme.ink2;
+      case 'ghost': return theme.ink2;
     }
   })();
 
-  const borderStyle = (variant === 'ghost' || variant === 'secondary')
+  const borderStyle = variant === 'ghost'
     ? { borderWidth: 1, borderColor: theme.line }
     : undefined;
 

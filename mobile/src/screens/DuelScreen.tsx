@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  View, TouchableOpacity, StyleSheet,
   ScrollView, Alert, BackHandler, Animated, Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -8,6 +8,7 @@ import { Socket } from 'socket.io-client';
 import { RootStackParamList, GameFinishedPayload } from '../navigation';
 import { createGameSocket } from '../services/socket';
 import { useAuth } from '../context/AuthContext';
+import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
@@ -273,13 +274,13 @@ export default function DuelScreen({ route, navigation }: Props) {
   function renderPrematch() {
     return (
       <View style={styles.centered}>
-        <Text style={[styles.matchFoundTitle, { color: theme.ink }]}>Match Found!</Text>
+        <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.matchFoundTitle}>Match Found!</AppText.Serif>
         <View style={[styles.opponentCard, { borderColor: theme.line }]}>
           <Avatar name={opponent.displayName ?? 'O'} size="lg" />
-          <Text style={[styles.opponentName, { color: theme.ink }]}>{opponent.displayName ?? 'Opponent'}</Text>
-          <Text style={[styles.opponentElo, { color: theme.ink2 }]}>Elo: {opponent.eloRating}</Text>
+          <AppText.Serif preset="h1Serif" color={theme.ink}>{opponent.displayName ?? 'Opponent'}</AppText.Serif>
+          <AppText.Sans preset="body" color={theme.ink2}>Elo: {opponent.eloRating}</AppText.Sans>
         </View>
-        <Text style={[styles.preparingText, { color: theme.ink3 }]}>Connecting to game room...</Text>
+        <AppText.Sans preset="small" color={theme.ink3}>Connecting to game room...</AppText.Sans>
       </View>
     );
   }
@@ -287,8 +288,8 @@ export default function DuelScreen({ route, navigation }: Props) {
   function renderCountdown() {
     return (
       <View style={styles.centered}>
-        <Text style={[styles.countdownLabel, { color: theme.ink2 }]}>Get ready!</Text>
-        <Text style={[styles.countdownNumber, { color: theme.ink }]}>{duelState.countdownSeconds}</Text>
+        <AppText.Sans preset="bodyMed" color={theme.ink2} style={styles.countdownLabel}>Get ready!</AppText.Sans>
+        <AppText.Mono preset="deltaLg" color={theme.ink} style={styles.countdownNumber}>{duelState.countdownSeconds}</AppText.Mono>
       </View>
     );
   }
@@ -304,21 +305,21 @@ export default function DuelScreen({ route, navigation }: Props) {
         <View style={[styles.scoreHeader, { borderBottomColor: theme.line2 }]}>
           <View style={styles.playerBlock}>
             <Avatar name={user?.displayName ?? 'Y'} size="sm" />
-            <Text style={[styles.playerLabel, { color: theme.ink3 }]}>You</Text>
+            <AppText.Sans preset="small" color={theme.ink3}>You</AppText.Sans>
             <Animated.Text style={[styles.scoreValue, { color: theme.ink, transform: [{ scale: yourScoreScale }] }]}>
               {duelState.yourScore}
             </Animated.Text>
           </View>
 
           <View style={styles.timerBlock}>
-            <Text style={[styles.timerText, { color: isTimerCritical ? theme.coral : theme.ink }]}>
+            <AppText.Mono preset="timer" color={isTimerCritical ? theme.coral : theme.ink} style={styles.timerText}>
               {formatTime(duelState.timeRemaining)}
-            </Text>
+            </AppText.Mono>
           </View>
 
           <View style={styles.playerBlock}>
             <Avatar name={opponent.displayName ?? 'O'} size="sm" />
-            <Text style={[styles.playerLabel, { color: theme.ink3 }]}>{opponent.displayName ?? 'Opp'}</Text>
+            <AppText.Sans preset="small" color={theme.ink3}>{opponent.displayName ?? 'Opp'}</AppText.Sans>
             <Animated.Text style={[styles.scoreValue, { color: theme.ink, transform: [{ scale: opponentScoreScale }] }]}>
               {duelState.opponentScore}
             </Animated.Text>
@@ -330,17 +331,17 @@ export default function DuelScreen({ route, navigation }: Props) {
           contentContainerStyle={styles.questionCardContent}
         >
           <View style={styles.questionMeta}>
-            <Text style={[styles.questionNumber, { color: theme.ink3 }]}>
+            <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.questionNumber}>
               Q {questionNumber} of {totalQuestions}
-            </Text>
+            </AppText.Mono>
             <View style={[styles.categoryBadge, { backgroundColor: theme.bg2 }]}>
-              <Text style={[styles.categoryBadgeText, { color: theme.ink2 }]}>
+              <AppText.Mono preset="chipLabel" color={theme.ink2}>
                 {currentQuestion.category}
-              </Text>
+              </AppText.Mono>
             </View>
           </View>
 
-          <Text style={[styles.questionText, { color: theme.ink }]}>{currentQuestion.text}</Text>
+          <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>{currentQuestion.text}</AppText.Serif>
 
           <View style={styles.optionsContainer}>
             {(currentQuestion.options as string[]).map((option, index) => {
@@ -361,12 +362,12 @@ export default function DuelScreen({ route, navigation }: Props) {
                   }))}
                   disabled={showFeedback}
                 >
-                  <Text style={[styles.optionIndex, { color: isSelected ? theme.ink : theme.ink3 }]}>
+                  <AppText.Mono preset="mono" color={isSelected ? theme.ink : theme.ink3} style={styles.optionIndex}>
                     {String.fromCharCode(65 + index)}.
-                  </Text>
-                  <Text style={[styles.optionText, { color: isSelected ? theme.ink : theme.ink2 }]}>
+                  </AppText.Mono>
+                  <AppText.Sans preset="body" color={isSelected ? theme.ink : theme.ink2} style={styles.optionText}>
                     {option}
-                  </Text>
+                  </AppText.Sans>
                 </TouchableOpacity>
               );
             })}
@@ -390,7 +391,7 @@ export default function DuelScreen({ route, navigation }: Props) {
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {duelState.phase !== 'PREMATCH' && (
         <TouchableOpacity style={styles.quitButton} onPress={handleQuit}>
-          <Text style={[styles.quitText, { color: theme.ink3 }]}>Quit</Text>
+          <AppText.Sans preset="label" color={theme.ink3}>Quit</AppText.Sans>
         </TouchableOpacity>
       )}
 
@@ -406,9 +407,8 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
 
   quitButton: { position: 'absolute', top: 52, right: 20, zIndex: 10, padding: 8 },
-  quitText: { fontSize: 14, fontWeight: '600' },
 
-  matchFoundTitle: { fontSize: 32, fontWeight: '800', marginBottom: 32 },
+  matchFoundTitle: { marginBottom: 32 },
   opponentCard: {
     alignItems: 'center',
     borderWidth: 1.5,
@@ -418,12 +418,9 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     gap: 8,
   },
-  opponentName: { fontSize: 20, fontWeight: '700' },
-  opponentElo: { fontSize: 14 },
-  preparingText: { fontSize: 14 },
 
-  countdownLabel: { fontSize: 18, marginBottom: 16, fontWeight: '500' },
-  countdownNumber: { fontSize: 96, fontWeight: '800', lineHeight: 100 },
+  countdownLabel: { marginBottom: 16 },
+  countdownNumber: { fontSize: 96, lineHeight: 100 },
 
   scoreHeader: {
     flexDirection: 'row',
@@ -434,15 +431,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   playerBlock: { flex: 1, alignItems: 'center', gap: 4 },
-  playerLabel: { fontSize: 12 },
-  scoreValue: { fontSize: 28, fontWeight: '800' },
+  scoreValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    fontFamily: 'JetBrainsMono-SemiBold',
+  },
 
   timerBlock: { flex: 1, alignItems: 'center' },
-  timerText: {
-    fontSize: 22,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
+  timerText: { fontSize: 22 },
 
   questionCard: { flex: 1 },
   questionCardContent: { padding: 20, paddingBottom: 32 },
@@ -452,19 +448,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  questionNumber: { fontSize: 13, fontWeight: '600' },
+  questionNumber: { textTransform: 'uppercase' },
   categoryBadge: {
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  categoryBadgeText: { fontSize: 12, fontWeight: '700' },
-  questionText: {
-    fontSize: 17,
-    fontWeight: '500',
-    lineHeight: 26,
-    marginBottom: 24,
-  },
+  questionText: { marginBottom: 24 },
   optionsContainer: { gap: 10 },
   option: {
     flexDirection: 'row',
@@ -474,8 +464,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
   },
-  optionIndex: { fontSize: 15, fontWeight: '700', width: 20 },
-  optionText: { fontSize: 15, flex: 1, lineHeight: 22 },
+  optionIndex: { width: 20 },
+  optionText: { flex: 1 },
 
   footer: {
     padding: 16,

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  View, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation';
 import api from '../services/api';
 import TierBadge from '../components/TierBadge';
+import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MatchHistory'>;
@@ -89,9 +90,9 @@ export default function MatchHistoryScreen({ navigation }: Props) {
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={[styles.backText, { color: theme.ink }]}>←</Text>
+          <AppText.Sans preset="body" color={theme.ink} style={styles.backText}>←</AppText.Sans>
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.ink }]}>Match History</Text>
+        <AppText.Serif preset="heroSerif" color={theme.ink}>Match History</AppText.Serif>
       </View>
 
       {loading ? (
@@ -109,29 +110,27 @@ export default function MatchHistoryScreen({ navigation }: Props) {
               })}
             >
               <View style={[styles.outcomePill, { backgroundColor: outcomeBg(item.outcome) }]}>
-                <Text style={[styles.outcomeText, { color: outcomeColor(item.outcome) }]}>
+                <AppText.Mono preset="chipLabel" color={outcomeColor(item.outcome)}>
                   {item.outcome}
-                </Text>
+                </AppText.Mono>
               </View>
               <View style={styles.matchInfo}>
                 <View style={styles.opponentRow}>
-                  <Text style={[styles.opponentName, { color: theme.ink }]} numberOfLines={1}>
+                  <AppText.Sans preset="bodyMed" color={theme.ink} numberOfLines={1} style={styles.opponentName}>
                     {item.opponent.displayName ?? 'Anonymous'}
-                  </Text>
+                  </AppText.Sans>
                   <TierBadge tier={item.opponent.rankTier} small />
                 </View>
-                <Text style={[styles.matchMeta, { color: theme.ink3 }]}>
+                <AppText.Sans preset="small" color={theme.ink3}>
                   {formatDate(item.finishedAt)} · {formatDuration(item.durationSeconds)}
                   {item.status === 'forfeited' ? ' · Forfeit' : ''}
-                </Text>
+                </AppText.Sans>
               </View>
               <View style={styles.rightCol}>
-                <Text style={[styles.score, { color: theme.ink }]}>{item.yourScore}–{item.opponentScore}</Text>
-                <Text style={[styles.eloDelta, {
-                  color: item.yourEloChange > 0 ? theme.accent : item.yourEloChange < 0 ? theme.coral : theme.ink3,
-                }]}>
+                <AppText.Mono preset="mono" color={theme.ink} style={styles.score}>{item.yourScore}–{item.opponentScore}</AppText.Mono>
+                <AppText.Mono preset="mono" color={item.yourEloChange > 0 ? theme.accent : item.yourEloChange < 0 ? theme.coral : theme.ink3}>
                   {item.yourEloChange > 0 ? '+' : ''}{item.yourEloChange}
-                </Text>
+                </AppText.Mono>
               </View>
             </TouchableOpacity>
           )}
@@ -143,10 +142,10 @@ export default function MatchHistoryScreen({ navigation }: Props) {
             : null}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={[styles.emptyText, { color: theme.ink }]}>No matches yet.</Text>
-              <Text style={[styles.emptySubText, { color: theme.ink2 }]}>
+              <AppText.Sans preset="bodyMed" color={theme.ink}>No matches yet.</AppText.Sans>
+              <AppText.Sans preset="body" color={theme.ink2}>
                 Play your first duel to see history here.
-              </Text>
+              </AppText.Sans>
             </View>
           }
           contentContainerStyle={styles.list}
@@ -168,7 +167,6 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 4 },
   backText: { fontSize: 24 },
-  title: { fontSize: 22, fontWeight: '800' },
   loader: { flex: 1, marginTop: 60 },
   list: { paddingBottom: 40 },
   row: {
@@ -185,16 +183,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  outcomeText: { fontSize: 11, fontWeight: '800' },
   matchInfo: { flex: 1, gap: 4 },
   opponentRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  opponentName: { fontSize: 15, fontWeight: '600', flexShrink: 1 },
-  matchMeta: { fontSize: 12 },
+  opponentName: { flexShrink: 1 },
   rightCol: { alignItems: 'flex-end', gap: 2 },
-  score: { fontSize: 15, fontWeight: '700' },
-  eloDelta: { fontSize: 13, fontWeight: '600' },
+  score: {},
   footerLoader: { paddingVertical: 16 },
   empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
-  emptyText: { fontSize: 16, fontWeight: '600' },
-  emptySubText: { fontSize: 14 },
 });

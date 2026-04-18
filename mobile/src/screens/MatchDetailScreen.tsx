@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  View, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import api from '../services/api';
+import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MatchDetail'>;
@@ -76,7 +77,7 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
   if (!match || !myId) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <Text style={[styles.errorText, { color: theme.coral }]}>Failed to load match.</Text>
+        <AppText.Sans preset="body" color={theme.coral}>Failed to load match.</AppText.Sans>
       </View>
     );
   }
@@ -102,39 +103,39 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
     <ScrollView style={{ backgroundColor: theme.bg }} contentContainerStyle={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={[styles.backText, { color: theme.ink }]}>←</Text>
+          <AppText.Sans preset="body" color={theme.ink} style={styles.backText}>←</AppText.Sans>
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.ink }]} numberOfLines={1}>
+        <AppText.Serif preset="h1Serif" color={theme.ink} numberOfLines={1} style={styles.title}>
           vs {opponentName ?? opponent.displayName ?? 'Opponent'}
-        </Text>
+        </AppText.Serif>
       </View>
 
-      <Text style={[styles.outcomeLabel, { color: outcomeColor }]}>{outcomeLabel}</Text>
+      <AppText.Serif preset="verdict" color={outcomeColor} style={styles.outcomeLabel}>{outcomeLabel}</AppText.Serif>
 
       {match.status === 'forfeited' && (
         <View style={[styles.forfeitBanner, { backgroundColor: theme.amberSoft, borderColor: theme.amber }]}>
-          <Text style={[styles.forfeitText, { color: theme.amberDeep }]}>Match ended by forfeit</Text>
+          <AppText.Sans preset="label" color={theme.amberDeep}>Match ended by forfeit</AppText.Sans>
         </View>
       )}
 
       <View style={[styles.summaryCard, { borderColor: theme.line }]}>
         <View style={styles.scoreBlock}>
-          <Text style={[styles.scoreLabel, { color: theme.ink3 }]}>You</Text>
-          <Text style={[styles.scoreValue, { color: theme.ink }]}>{myScore}</Text>
-          <Text style={[styles.eloDelta, { color: eloColor }]}>
+          <AppText.Sans preset="label" color={theme.ink3} style={styles.scoreLabel}>You</AppText.Sans>
+          <AppText.Serif preset="display" color={theme.ink}>{myScore}</AppText.Serif>
+          <AppText.Mono preset="mono" color={eloColor} style={styles.eloDelta}>
             {myEloChange > 0 ? '+' : ''}{myEloChange} Elo
-          </Text>
+          </AppText.Mono>
         </View>
-        <Text style={[styles.scoreSep, { color: theme.line }]}>—</Text>
+        <AppText.Sans preset="body" color={theme.line}>—</AppText.Sans>
         <View style={styles.scoreBlock}>
-          <Text style={[styles.scoreLabel, { color: theme.ink3 }]}>{opponent.displayName ?? 'Opponent'}</Text>
-          <Text style={[styles.scoreValue, { color: theme.ink }]}>{theirScore}</Text>
+          <AppText.Sans preset="label" color={theme.ink3} style={styles.scoreLabel}>{opponent.displayName ?? 'Opponent'}</AppText.Sans>
+          <AppText.Serif preset="display" color={theme.ink}>{theirScore}</AppText.Serif>
         </View>
       </View>
 
       {myAnswers.length > 0 && (
         <View style={styles.breakdown}>
-          <Text style={[styles.breakdownTitle, { color: theme.ink }]}>Your Answers</Text>
+          <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.breakdownTitle}>Your Answers</AppText.Serif>
           {myAnswers.map((a, idx) => (
             <View key={a.id} style={[
               styles.answerCard,
@@ -142,19 +143,19 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
                 backgroundColor: a.isCorrect ? theme.accentSoft : theme.coralSoft },
             ]}>
               <View style={styles.answerHeader}>
-                <Text style={[styles.answerNumber, { color: theme.ink2 }]}>Q{idx + 1}</Text>
-                <Text style={[styles.answerCategory, { color: theme.ink3, backgroundColor: theme.bg2 }]}>
+                <AppText.Mono preset="mono" color={theme.ink2}>Q{idx + 1}</AppText.Mono>
+                <AppText.Mono preset="chipLabel" color={theme.ink3} style={{ backgroundColor: theme.bg2, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99 }}>
                   {a.question.category}
-                </Text>
-                <Text style={[
+                </AppText.Mono>
+                <AppText.Mono preset="chipLabel" style={[
                   styles.answerBadge,
                   { backgroundColor: a.isCorrect ? theme.accentSoft : theme.coralSoft,
                     color: a.isCorrect ? theme.accentDeep : theme.coral },
                 ]}>
                   {a.isCorrect ? 'Correct' : 'Wrong'}
-                </Text>
+                </AppText.Mono>
               </View>
-              <Text style={[styles.questionText, { color: theme.ink }]}>{a.question.text}</Text>
+              <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>{a.question.text}</AppText.Serif>
               <View style={styles.optionsGrid}>
                 {(a.question.options as string[]).map((opt, i) => {
                   const isSelected = i === a.selectedAnswer;
@@ -169,20 +170,22 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
                         isSelected && !isCorrectOpt && { backgroundColor: theme.coralSoft },
                       ]}
                     >
-                      <Text style={[
-                        styles.optionText,
-                        { color: theme.ink2 },
-                        isCorrectOpt && { color: theme.accentDeep, fontWeight: '600' },
-                        isSelected && !isCorrectOpt && { color: theme.coral, fontWeight: '600' },
-                      ]}>
+                      <AppText.Sans
+                        preset="body"
+                        style={[
+                          isCorrectOpt && { color: theme.accentDeep, fontWeight: '600' },
+                          isSelected && !isCorrectOpt && { color: theme.coral, fontWeight: '600' },
+                          !isCorrectOpt && !isSelected && { color: theme.ink2 },
+                        ]}
+                      >
                         {String.fromCharCode(65 + i)}. {opt}
-                      </Text>
+                      </AppText.Sans>
                     </View>
                   );
                 })}
               </View>
-              <Text style={[styles.explanationLabel, { color: theme.ink3 }]}>Explanation</Text>
-              <Text style={[styles.explanationText, { color: theme.ink2 }]}>{a.question.explanation}</Text>
+              <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.explanationLabel}>Explanation</AppText.Mono>
+              <AppText.Sans preset="body" color={theme.ink2} style={styles.explanationText}>{a.question.explanation}</AppText.Sans>
             </View>
           ))}
         </View>
@@ -193,7 +196,6 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontSize: 16 },
   container: { paddingBottom: 48 },
   header: {
     flexDirection: 'row',
@@ -205,10 +207,8 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 4 },
   backText: { fontSize: 24 },
-  title: { fontSize: 18, fontWeight: '700', flex: 1 },
+  title: { flex: 1 },
   outcomeLabel: {
-    fontSize: 32,
-    fontWeight: '800',
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -221,7 +221,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
   },
-  forfeitText: { fontSize: 13, fontWeight: '600' },
   summaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -234,21 +233,16 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   scoreBlock: { alignItems: 'center', flex: 1 },
-  scoreLabel: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
-  scoreValue: { fontSize: 40, fontWeight: '800' },
-  eloDelta: { fontSize: 13, fontWeight: '600', marginTop: 4 },
-  scoreSep: { fontSize: 22 },
+  scoreLabel: { marginBottom: 6 },
+  eloDelta: { marginTop: 4 },
   breakdown: { paddingHorizontal: 20 },
-  breakdownTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
+  breakdownTitle: { marginBottom: 16 },
   answerCard: { borderRadius: 12, borderWidth: 1.5, padding: 16, marginBottom: 16 },
   answerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
-  answerNumber: { fontSize: 12, fontWeight: '700' },
-  answerCategory: { fontSize: 11, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99 },
-  answerBadge: { marginLeft: 'auto', fontSize: 12, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 99 },
-  questionText: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
+  answerBadge: { marginLeft: 'auto', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 99 },
+  questionText: { marginBottom: 12 },
   optionsGrid: { gap: 6, marginBottom: 12 },
   optionRow: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
-  optionText: { fontSize: 13 },
-  explanationLabel: { fontSize: 12, fontWeight: '700', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  explanationText: { fontSize: 13, lineHeight: 18 },
+  explanationLabel: { textTransform: 'uppercase', marginBottom: 4 },
+  explanationText: { lineHeight: 18 },
 });
