@@ -33,14 +33,14 @@ function TierProgressBar({ eloRating }: { eloRating: number; rankTier: string })
   return (
     <View style={progressStyles.container}>
       <View style={progressStyles.labelRow}>
-        <Text style={[progressStyles.label, { color: theme.textMuted }]}>
+        <Text style={[progressStyles.label, { color: theme.ink3 }]}>
           {isDiamond ? 'Max Rank' : `${eloRating} / ${tier.max + 1} to ${nextTier?.name}`}
         </Text>
         <Text style={[progressStyles.pct, { color: tier.color }]}>
           {isDiamond ? '100%' : `${Math.round(progress * 100)}%`}
         </Text>
       </View>
-      <View style={[progressStyles.track, { backgroundColor: theme.surfaceHighlight }]}>
+      <View style={[progressStyles.track, { backgroundColor: theme.bg2 }]}>
         <View style={[
           progressStyles.fill,
           { width: `${Math.round(progress * 100)}%` as `${number}%`, backgroundColor: tier.color },
@@ -71,6 +71,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [debugTaps, setDebugTaps] = useState(0);
 
   const [editVisible, setEditVisible] = useState(false);
   const [editName, setEditName] = useState('');
@@ -125,7 +126,7 @@ export default function ProfileScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator size="large" color={theme.text} />
+        <ActivityIndicator size="large" color={theme.ink} />
       </View>
     );
   }
@@ -133,7 +134,7 @@ export default function ProfileScreen({ navigation }: Props) {
   if (error) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>
+        <Text style={[styles.error, { color: theme.coral }]}>{error}</Text>
       </View>
     );
   }
@@ -146,12 +147,21 @@ export default function ProfileScreen({ navigation }: Props) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.nameRow}>
-          <Text style={[styles.title, { color: theme.text }]}>{profile?.displayName ?? 'Anonymous'}</Text>
+          <TouchableOpacity
+            onPress={() => {
+              const next = debugTaps + 1;
+              setDebugTaps(next);
+              if (next >= 5) { setDebugTaps(0); navigation.navigate('Debug'); }
+            }}
+            activeOpacity={1}
+          >
+            <Text style={[styles.title, { color: theme.ink }]}>{profile?.displayName ?? 'Anonymous'}</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={openEdit}
-            style={[styles.editButton, { borderColor: theme.border }]}
+            style={[styles.editButton, { borderColor: theme.line }]}
           >
-            <Text style={[styles.editButtonText, { color: theme.textSecondary }]}>Edit</Text>
+            <Text style={[styles.editButtonText, { color: theme.ink2 }]}>Edit</Text>
           </TouchableOpacity>
         </View>
         {profile && (
@@ -159,16 +169,16 @@ export default function ProfileScreen({ navigation }: Props) {
             <TierBadge tier={profile.rankTier} />
           </View>
         )}
-        <Text style={[styles.email, { color: theme.textSecondary }]}>{profile?.email}</Text>
+        <Text style={[styles.email, { color: theme.ink2 }]}>{profile?.email}</Text>
 
         <View style={styles.statsRow}>
           <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: theme.text }]}>{profile?.eloRating}</Text>
-            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Elo Rating</Text>
+            <Text style={[styles.statValue, { color: theme.ink }]}>{profile?.eloRating}</Text>
+            <Text style={[styles.statLabel, { color: theme.ink2 }]}>Elo Rating</Text>
           </View>
           <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: theme.text }]}>{profile?.gamesPlayed}</Text>
-            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Games Played</Text>
+            <Text style={[styles.statValue, { color: theme.ink }]}>{profile?.gamesPlayed}</Text>
+            <Text style={[styles.statLabel, { color: theme.ink2 }]}>Games Played</Text>
           </View>
         </View>
 
@@ -181,12 +191,6 @@ export default function ProfileScreen({ navigation }: Props) {
           style={styles.buttonSpacing}
         />
         <Button
-          label="Design System"
-          variant="ghost"
-          onPress={() => navigation.navigate('Debug')}
-          style={styles.buttonSpacing}
-        />
-        <Button
           label="Sign Out"
           variant="ghost"
           onPress={signOut}
@@ -196,22 +200,22 @@ export default function ProfileScreen({ navigation }: Props) {
 
       <Modal visible={editVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Edit Display Name</Text>
+          <View style={[styles.modalCard, { backgroundColor: theme.bg, borderColor: theme.line }]}>
+            <Text style={[styles.modalTitle, { color: theme.ink }]}>Edit Display Name</Text>
             <TextInput
               style={[styles.modalInput, {
-                borderColor: theme.border,
-                color: theme.text,
-                backgroundColor: theme.surface,
+                borderColor: theme.line,
+                color: theme.ink,
+                backgroundColor: theme.bg2,
               }]}
               value={editName}
               onChangeText={setEditName}
               autoCapitalize="words"
               autoFocus
               maxLength={50}
-              placeholderTextColor={theme.textMuted}
+              placeholderTextColor={theme.ink3}
             />
-            {editError ? <Text style={[styles.modalError, { color: theme.danger }]}>{editError}</Text> : null}
+            {editError ? <Text style={[styles.modalError, { color: theme.coral }]}>{editError}</Text> : null}
             <View style={styles.modalActions}>
               <Button
                 label="Cancel"

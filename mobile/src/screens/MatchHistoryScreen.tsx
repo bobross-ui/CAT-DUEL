@@ -81,28 +81,28 @@ export default function MatchHistoryScreen({ navigation }: Props) {
 
   // Map outcome to theme semantic colors
   const outcomeColor = (outcome: 'WIN' | 'LOSS' | 'DRAW') =>
-    outcome === 'WIN' ? theme.success : outcome === 'LOSS' ? theme.danger : theme.warning;
+    outcome === 'WIN' ? theme.accent : outcome === 'LOSS' ? theme.coral : theme.amber;
   const outcomeBg = (outcome: 'WIN' | 'LOSS' | 'DRAW') =>
-    outcome === 'WIN' ? theme.successBg : outcome === 'LOSS' ? theme.dangerBg : theme.warningBg;
+    outcome === 'WIN' ? theme.accentSoft : outcome === 'LOSS' ? theme.coralSoft : theme.amberSoft;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={[styles.backText, { color: theme.text }]}>←</Text>
+          <Text style={[styles.backText, { color: theme.ink }]}>←</Text>
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.text }]}>Match History</Text>
+        <Text style={[styles.title, { color: theme.ink }]}>Match History</Text>
       </View>
 
       {loading ? (
-        <ActivityIndicator style={styles.loader} size="large" color={theme.text} />
+        <ActivityIndicator style={styles.loader} size="large" color={theme.ink} />
       ) : (
         <FlatList
           data={entries}
           keyExtractor={(item) => item.matchId}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={[styles.row, { borderBottomColor: theme.borderLight }]}
+              style={[styles.row, { borderBottomColor: theme.line2 }]}
               onPress={() => navigation.navigate('MatchDetail', {
                 matchId: item.matchId,
                 opponentName: item.opponent.displayName,
@@ -115,20 +115,20 @@ export default function MatchHistoryScreen({ navigation }: Props) {
               </View>
               <View style={styles.matchInfo}>
                 <View style={styles.opponentRow}>
-                  <Text style={[styles.opponentName, { color: theme.text }]} numberOfLines={1}>
+                  <Text style={[styles.opponentName, { color: theme.ink }]} numberOfLines={1}>
                     {item.opponent.displayName ?? 'Anonymous'}
                   </Text>
                   <TierBadge tier={item.opponent.rankTier} small />
                 </View>
-                <Text style={[styles.matchMeta, { color: theme.textMuted }]}>
+                <Text style={[styles.matchMeta, { color: theme.ink3 }]}>
                   {formatDate(item.finishedAt)} · {formatDuration(item.durationSeconds)}
                   {item.status === 'forfeited' ? ' · Forfeit' : ''}
                 </Text>
               </View>
               <View style={styles.rightCol}>
-                <Text style={[styles.score, { color: theme.text }]}>{item.yourScore}–{item.opponentScore}</Text>
+                <Text style={[styles.score, { color: theme.ink }]}>{item.yourScore}–{item.opponentScore}</Text>
                 <Text style={[styles.eloDelta, {
-                  color: item.yourEloChange > 0 ? theme.success : item.yourEloChange < 0 ? theme.danger : theme.textMuted,
+                  color: item.yourEloChange > 0 ? theme.accent : item.yourEloChange < 0 ? theme.coral : theme.ink3,
                 }]}>
                   {item.yourEloChange > 0 ? '+' : ''}{item.yourEloChange}
                 </Text>
@@ -139,12 +139,12 @@ export default function MatchHistoryScreen({ navigation }: Props) {
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
           ListFooterComponent={loadingMore
-            ? <ActivityIndicator style={styles.footerLoader} color={theme.textMuted} />
+            ? <ActivityIndicator style={styles.footerLoader} color={theme.ink3} />
             : null}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={[styles.emptyText, { color: theme.text }]}>No matches yet.</Text>
-              <Text style={[styles.emptySubText, { color: theme.textSecondary }]}>
+              <Text style={[styles.emptyText, { color: theme.ink }]}>No matches yet.</Text>
+              <Text style={[styles.emptySubText, { color: theme.ink2 }]}>
                 Play your first duel to see history here.
               </Text>
             </View>

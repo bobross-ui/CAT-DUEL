@@ -41,18 +41,18 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
   return (
     <View style={[
       styles.row,
-      { borderBottomColor: theme.borderLight },
-      entry.isCurrentUser && { backgroundColor: theme.surfaceHighlight },
+      { borderBottomColor: theme.line2 },
+      entry.isCurrentUser && { backgroundColor: theme.bg2 },
     ]}>
-      <Text style={[styles.rank, { color: theme.text }]}>{medal ?? `#${entry.rank}`}</Text>
+      <Text style={[styles.rank, { color: theme.ink }]}>{medal ?? `#${entry.rank}`}</Text>
       <View style={styles.nameCol}>
-        <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
+        <Text style={[styles.name, { color: theme.ink }]} numberOfLines={1}>
           {entry.displayName}
           {entry.isCurrentUser ? '  (You)' : ''}
         </Text>
         <TierBadge tier={entry.rankTier} small />
       </View>
-      <Text style={[styles.elo, { color: theme.text }]}>{entry.eloRating}</Text>
+      <Text style={[styles.elo, { color: theme.ink }]}>{entry.eloRating}</Text>
     </View>
   );
 }
@@ -104,7 +104,7 @@ export default function LeaderboardScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>Leaderboard</Text>
+        <Text style={[styles.title, { color: theme.ink }]}>Leaderboard</Text>
       </View>
 
       <View style={styles.tabs}>
@@ -117,14 +117,14 @@ export default function LeaderboardScreen() {
               key={tab}
               style={[
                 styles.tab,
-                { backgroundColor: isActive ? theme.primary : theme.surfaceHighlight },
+                { backgroundColor: isActive ? theme.ink : theme.bg2 },
               ]}
               onPress={() => {
                 if (tab !== activeTab) switchTab(tab);
                 else if (tab === 'tier') setTierPickerVisible(true);
               }}
             >
-              <Text style={[styles.tabText, { color: isActive ? theme.primaryFg : theme.textSecondary }]}>
+              <Text style={[styles.tabText, { color: isActive ? theme.bg : theme.ink2 }]}>
                 {label}
               </Text>
             </TouchableOpacity>
@@ -133,23 +133,23 @@ export default function LeaderboardScreen() {
       </View>
 
       {data?.currentUserRank != null && (
-        <View style={[styles.rankBanner, { backgroundColor: theme.successBg }]}>
-          <Text style={[styles.rankBannerText, { color: theme.successText }]}>
+        <View style={[styles.rankBanner, { backgroundColor: theme.accentSoft }]}>
+          <Text style={[styles.rankBannerText, { color: theme.accentDeep }]}>
             Your rank: #{data.currentUserRank} of {data.totalRanked}
           </Text>
         </View>
       )}
 
       {data != null && data.currentUserRank == null && gamesNeeded != null && gamesNeeded > 0 && (
-        <View style={[styles.unrankedBanner, { backgroundColor: theme.warningBg }]}>
-          <Text style={[styles.unrankedText, { color: theme.warningText }]}>
+        <View style={[styles.unrankedBanner, { backgroundColor: theme.amberSoft }]}>
+          <Text style={[styles.unrankedText, { color: theme.amberDeep }]}>
             Play {gamesNeeded} more match{gamesNeeded !== 1 ? 'es' : ''} to join the leaderboard
           </Text>
         </View>
       )}
 
       {loading ? (
-        <ActivityIndicator style={styles.loader} size="large" color={theme.text} />
+        <ActivityIndicator style={styles.loader} size="large" color={theme.ink} />
       ) : (
         <FlatList
           data={data?.entries ?? []}
@@ -158,8 +158,8 @@ export default function LeaderboardScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={[styles.emptyText, { color: theme.text }]}>No players ranked yet.</Text>
-              <Text style={[styles.emptySubText, { color: theme.textSecondary }]}>
+              <Text style={[styles.emptyText, { color: theme.ink }]}>No players ranked yet.</Text>
+              <Text style={[styles.emptySubText, { color: theme.ink2 }]}>
                 Play 5 matches to join the leaderboard.
               </Text>
             </View>
@@ -174,14 +174,14 @@ export default function LeaderboardScreen() {
           activeOpacity={1}
           onPress={() => setTierPickerVisible(false)}
         >
-          <View style={[styles.tierPicker, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-            <Text style={[styles.tierPickerTitle, { color: theme.text }]}>Select Tier</Text>
+          <View style={[styles.tierPicker, { backgroundColor: theme.bg, borderColor: theme.line }]}>
+            <Text style={[styles.tierPickerTitle, { color: theme.ink }]}>Select Tier</Text>
             {TIERS.map((tier) => (
               <TouchableOpacity
                 key={tier}
                 style={[
                   styles.tierOption,
-                  selectedTier === tier && { backgroundColor: theme.surfaceHighlight },
+                  selectedTier === tier && { backgroundColor: theme.bg2 },
                 ]}
                 onPress={() => {
                   setSelectedTier(tier);

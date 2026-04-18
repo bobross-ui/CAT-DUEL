@@ -68,7 +68,7 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
   if (loading) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator size="large" color={theme.text} />
+        <ActivityIndicator size="large" color={theme.ink} />
       </View>
     );
   }
@@ -76,7 +76,7 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
   if (!match || !myId) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <Text style={[styles.errorText, { color: theme.danger }]}>Failed to load match.</Text>
+        <Text style={[styles.errorText, { color: theme.coral }]}>Failed to load match.</Text>
       </View>
     );
   }
@@ -92,9 +92,9 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
   else if (match.winnerId == null) outcome = 'DRAW';
   else outcome = 'LOSS';
 
-  const outcomeColor = outcome === 'WIN' ? theme.success : outcome === 'LOSS' ? theme.danger : theme.warning;
+  const outcomeColor = outcome === 'WIN' ? theme.accent : outcome === 'LOSS' ? theme.coral : theme.amber;
   const outcomeLabel = { WIN: 'You Won', LOSS: 'You Lost', DRAW: 'Draw' }[outcome];
-  const eloColor = myEloChange > 0 ? theme.success : myEloChange < 0 ? theme.danger : theme.textMuted;
+  const eloColor = myEloChange > 0 ? theme.accent : myEloChange < 0 ? theme.coral : theme.ink3;
 
   const myAnswers = match.answers.filter(a => a.userId === myId);
 
@@ -102,9 +102,9 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
     <ScrollView style={{ backgroundColor: theme.bg }} contentContainerStyle={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={[styles.backText, { color: theme.text }]}>←</Text>
+          <Text style={[styles.backText, { color: theme.ink }]}>←</Text>
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
+        <Text style={[styles.title, { color: theme.ink }]} numberOfLines={1}>
           vs {opponentName ?? opponent.displayName ?? 'Opponent'}
         </Text>
       </View>
@@ -112,49 +112,49 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
       <Text style={[styles.outcomeLabel, { color: outcomeColor }]}>{outcomeLabel}</Text>
 
       {match.status === 'forfeited' && (
-        <View style={[styles.forfeitBanner, { backgroundColor: theme.warningBg, borderColor: theme.warningBorder }]}>
-          <Text style={[styles.forfeitText, { color: theme.warningText }]}>Match ended by forfeit</Text>
+        <View style={[styles.forfeitBanner, { backgroundColor: theme.amberSoft, borderColor: theme.amber }]}>
+          <Text style={[styles.forfeitText, { color: theme.amberDeep }]}>Match ended by forfeit</Text>
         </View>
       )}
 
-      <View style={[styles.summaryCard, { borderColor: theme.border }]}>
+      <View style={[styles.summaryCard, { borderColor: theme.line }]}>
         <View style={styles.scoreBlock}>
-          <Text style={[styles.scoreLabel, { color: theme.textMuted }]}>You</Text>
-          <Text style={[styles.scoreValue, { color: theme.text }]}>{myScore}</Text>
+          <Text style={[styles.scoreLabel, { color: theme.ink3 }]}>You</Text>
+          <Text style={[styles.scoreValue, { color: theme.ink }]}>{myScore}</Text>
           <Text style={[styles.eloDelta, { color: eloColor }]}>
             {myEloChange > 0 ? '+' : ''}{myEloChange} Elo
           </Text>
         </View>
-        <Text style={[styles.scoreSep, { color: theme.border }]}>—</Text>
+        <Text style={[styles.scoreSep, { color: theme.line }]}>—</Text>
         <View style={styles.scoreBlock}>
-          <Text style={[styles.scoreLabel, { color: theme.textMuted }]}>{opponent.displayName ?? 'Opponent'}</Text>
-          <Text style={[styles.scoreValue, { color: theme.text }]}>{theirScore}</Text>
+          <Text style={[styles.scoreLabel, { color: theme.ink3 }]}>{opponent.displayName ?? 'Opponent'}</Text>
+          <Text style={[styles.scoreValue, { color: theme.ink }]}>{theirScore}</Text>
         </View>
       </View>
 
       {myAnswers.length > 0 && (
         <View style={styles.breakdown}>
-          <Text style={[styles.breakdownTitle, { color: theme.text }]}>Your Answers</Text>
+          <Text style={[styles.breakdownTitle, { color: theme.ink }]}>Your Answers</Text>
           {myAnswers.map((a, idx) => (
             <View key={a.id} style={[
               styles.answerCard,
-              { borderColor: a.isCorrect ? theme.successBorder : theme.dangerBorder,
-                backgroundColor: a.isCorrect ? theme.successBg : theme.dangerBg },
+              { borderColor: a.isCorrect ? theme.accent : theme.coral,
+                backgroundColor: a.isCorrect ? theme.accentSoft : theme.coralSoft },
             ]}>
               <View style={styles.answerHeader}>
-                <Text style={[styles.answerNumber, { color: theme.textSecondary }]}>Q{idx + 1}</Text>
-                <Text style={[styles.answerCategory, { color: theme.textMuted, backgroundColor: theme.surfaceHighlight }]}>
+                <Text style={[styles.answerNumber, { color: theme.ink2 }]}>Q{idx + 1}</Text>
+                <Text style={[styles.answerCategory, { color: theme.ink3, backgroundColor: theme.bg2 }]}>
                   {a.question.category}
                 </Text>
                 <Text style={[
                   styles.answerBadge,
-                  { backgroundColor: a.isCorrect ? theme.successBg : theme.dangerBg,
-                    color: a.isCorrect ? theme.successText : theme.dangerText },
+                  { backgroundColor: a.isCorrect ? theme.accentSoft : theme.coralSoft,
+                    color: a.isCorrect ? theme.accentDeep : theme.coral },
                 ]}>
                   {a.isCorrect ? 'Correct' : 'Wrong'}
                 </Text>
               </View>
-              <Text style={[styles.questionText, { color: theme.text }]}>{a.question.text}</Text>
+              <Text style={[styles.questionText, { color: theme.ink }]}>{a.question.text}</Text>
               <View style={styles.optionsGrid}>
                 {(a.question.options as string[]).map((opt, i) => {
                   const isSelected = i === a.selectedAnswer;
@@ -164,16 +164,16 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
                       key={i}
                       style={[
                         styles.optionRow,
-                        { backgroundColor: theme.surface },
-                        isCorrectOpt && { backgroundColor: theme.successBg },
-                        isSelected && !isCorrectOpt && { backgroundColor: theme.dangerBg },
+                        { backgroundColor: theme.bg2 },
+                        isCorrectOpt && { backgroundColor: theme.accentSoft },
+                        isSelected && !isCorrectOpt && { backgroundColor: theme.coralSoft },
                       ]}
                     >
                       <Text style={[
                         styles.optionText,
-                        { color: theme.textSecondary },
-                        isCorrectOpt && { color: theme.successText, fontWeight: '600' },
-                        isSelected && !isCorrectOpt && { color: theme.dangerText, fontWeight: '600' },
+                        { color: theme.ink2 },
+                        isCorrectOpt && { color: theme.accentDeep, fontWeight: '600' },
+                        isSelected && !isCorrectOpt && { color: theme.coral, fontWeight: '600' },
                       ]}>
                         {String.fromCharCode(65 + i)}. {opt}
                       </Text>
@@ -181,8 +181,8 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
                   );
                 })}
               </View>
-              <Text style={[styles.explanationLabel, { color: theme.textMuted }]}>Explanation</Text>
-              <Text style={[styles.explanationText, { color: theme.textSecondary }]}>{a.question.explanation}</Text>
+              <Text style={[styles.explanationLabel, { color: theme.ink3 }]}>Explanation</Text>
+              <Text style={[styles.explanationText, { color: theme.ink2 }]}>{a.question.explanation}</Text>
             </View>
           ))}
         </View>

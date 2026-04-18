@@ -65,40 +65,40 @@ export default function LoginScreen() {
       style={[styles.container, { backgroundColor: theme.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={[styles.title, { color: theme.text }]}>CAT Duel</Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+      <Text style={[styles.title, { color: theme.ink }]}>CAT Duel</Text>
+      <Text style={[styles.subtitle, { color: theme.ink2 }]}>
         {isRegistering ? 'Create an account' : 'Sign in to compete'}
       </Text>
 
       {isRegistering && (
         <TextInput
-          style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.bg }]}
+          style={[styles.input, { borderColor: theme.line, color: theme.ink, backgroundColor: theme.bg }]}
           placeholder="Display Name"
-          placeholderTextColor={theme.textMuted}
+          placeholderTextColor={theme.ink3}
           value={displayName}
           onChangeText={setDisplayName}
           autoCapitalize="words"
         />
       )}
       <TextInput
-        style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.bg }]}
+        style={[styles.input, { borderColor: theme.line, color: theme.ink, backgroundColor: theme.bg }]}
         placeholder="Email"
-        placeholderTextColor={theme.textMuted}
+        placeholderTextColor={theme.ink3}
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
       />
       <TextInput
-        style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.bg }]}
+        style={[styles.input, { borderColor: theme.line, color: theme.ink, backgroundColor: theme.bg }]}
         placeholder="Password"
-        placeholderTextColor={theme.textMuted}
+        placeholderTextColor={theme.ink3}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
 
-      {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
+      {error ? <Text style={[styles.error, { color: theme.coral }]}>{error}</Text> : null}
 
       <Button
         label={isRegistering ? 'Register' : 'Sign In'}
@@ -108,7 +108,7 @@ export default function LoginScreen() {
       />
 
       <Text
-        style={[styles.toggleText, { color: theme.textSecondary }]}
+        style={[styles.toggleText, { color: theme.ink2 }]}
         onPress={() => { setIsRegistering(r => !r); setError(''); setDisplayName(''); }}
       >
         {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}

@@ -273,13 +273,13 @@ export default function DuelScreen({ route, navigation }: Props) {
   function renderPrematch() {
     return (
       <View style={styles.centered}>
-        <Text style={[styles.matchFoundTitle, { color: theme.text }]}>Match Found!</Text>
-        <View style={[styles.opponentCard, { borderColor: theme.border }]}>
+        <Text style={[styles.matchFoundTitle, { color: theme.ink }]}>Match Found!</Text>
+        <View style={[styles.opponentCard, { borderColor: theme.line }]}>
           <Avatar name={opponent.displayName ?? 'O'} size="lg" />
-          <Text style={[styles.opponentName, { color: theme.text }]}>{opponent.displayName ?? 'Opponent'}</Text>
-          <Text style={[styles.opponentElo, { color: theme.textSecondary }]}>Elo: {opponent.eloRating}</Text>
+          <Text style={[styles.opponentName, { color: theme.ink }]}>{opponent.displayName ?? 'Opponent'}</Text>
+          <Text style={[styles.opponentElo, { color: theme.ink2 }]}>Elo: {opponent.eloRating}</Text>
         </View>
-        <Text style={[styles.preparingText, { color: theme.textMuted }]}>Connecting to game room...</Text>
+        <Text style={[styles.preparingText, { color: theme.ink3 }]}>Connecting to game room...</Text>
       </View>
     );
   }
@@ -287,8 +287,8 @@ export default function DuelScreen({ route, navigation }: Props) {
   function renderCountdown() {
     return (
       <View style={styles.centered}>
-        <Text style={[styles.countdownLabel, { color: theme.textSecondary }]}>Get ready!</Text>
-        <Text style={[styles.countdownNumber, { color: theme.text }]}>{duelState.countdownSeconds}</Text>
+        <Text style={[styles.countdownLabel, { color: theme.ink2 }]}>Get ready!</Text>
+        <Text style={[styles.countdownNumber, { color: theme.ink }]}>{duelState.countdownSeconds}</Text>
       </View>
     );
   }
@@ -297,29 +297,29 @@ export default function DuelScreen({ route, navigation }: Props) {
     const { currentQuestion, questionNumber, totalQuestions, selectedAnswer, showFeedback, lastAnswerCorrect } = duelState;
     if (!currentQuestion) return null;
 
-    const feedbackBorderColor = lastAnswerCorrect ? theme.success : theme.danger;
+    const feedbackBorderColor = lastAnswerCorrect ? theme.accent : theme.coral;
 
     return (
       <>
-        <View style={[styles.scoreHeader, { borderBottomColor: theme.borderLight }]}>
+        <View style={[styles.scoreHeader, { borderBottomColor: theme.line2 }]}>
           <View style={styles.playerBlock}>
             <Avatar name={user?.displayName ?? 'Y'} size="sm" />
-            <Text style={[styles.playerLabel, { color: theme.textMuted }]}>You</Text>
-            <Animated.Text style={[styles.scoreValue, { color: theme.text, transform: [{ scale: yourScoreScale }] }]}>
+            <Text style={[styles.playerLabel, { color: theme.ink3 }]}>You</Text>
+            <Animated.Text style={[styles.scoreValue, { color: theme.ink, transform: [{ scale: yourScoreScale }] }]}>
               {duelState.yourScore}
             </Animated.Text>
           </View>
 
           <View style={styles.timerBlock}>
-            <Text style={[styles.timerText, { color: isTimerCritical ? theme.danger : theme.text }]}>
+            <Text style={[styles.timerText, { color: isTimerCritical ? theme.coral : theme.ink }]}>
               {formatTime(duelState.timeRemaining)}
             </Text>
           </View>
 
           <View style={styles.playerBlock}>
             <Avatar name={opponent.displayName ?? 'O'} size="sm" />
-            <Text style={[styles.playerLabel, { color: theme.textMuted }]}>{opponent.displayName ?? 'Opp'}</Text>
-            <Animated.Text style={[styles.scoreValue, { color: theme.text, transform: [{ scale: opponentScoreScale }] }]}>
+            <Text style={[styles.playerLabel, { color: theme.ink3 }]}>{opponent.displayName ?? 'Opp'}</Text>
+            <Animated.Text style={[styles.scoreValue, { color: theme.ink, transform: [{ scale: opponentScoreScale }] }]}>
               {duelState.opponentScore}
             </Animated.Text>
           </View>
@@ -330,17 +330,17 @@ export default function DuelScreen({ route, navigation }: Props) {
           contentContainerStyle={styles.questionCardContent}
         >
           <View style={styles.questionMeta}>
-            <Text style={[styles.questionNumber, { color: theme.textMuted }]}>
+            <Text style={[styles.questionNumber, { color: theme.ink3 }]}>
               Q {questionNumber} of {totalQuestions}
             </Text>
-            <View style={[styles.categoryBadge, { backgroundColor: theme.surfaceHighlight }]}>
-              <Text style={[styles.categoryBadgeText, { color: theme.textSecondary }]}>
+            <View style={[styles.categoryBadge, { backgroundColor: theme.bg2 }]}>
+              <Text style={[styles.categoryBadgeText, { color: theme.ink2 }]}>
                 {currentQuestion.category}
               </Text>
             </View>
           </View>
 
-          <Text style={[styles.questionText, { color: theme.text }]}>{currentQuestion.text}</Text>
+          <Text style={[styles.questionText, { color: theme.ink }]}>{currentQuestion.text}</Text>
 
           <View style={styles.optionsContainer}>
             {(currentQuestion.options as string[]).map((option, index) => {
@@ -351,8 +351,8 @@ export default function DuelScreen({ route, navigation }: Props) {
                   style={[
                     styles.option,
                     {
-                      borderColor: isSelected ? theme.text : theme.border,
-                      backgroundColor: isSelected ? theme.surfaceHighlight : theme.bg,
+                      borderColor: isSelected ? theme.ink : theme.line,
+                      backgroundColor: isSelected ? theme.bg2 : theme.bg,
                     },
                   ]}
                   onPress={() => !showFeedback && setDuelState((prev) => ({
@@ -361,10 +361,10 @@ export default function DuelScreen({ route, navigation }: Props) {
                   }))}
                   disabled={showFeedback}
                 >
-                  <Text style={[styles.optionIndex, { color: isSelected ? theme.text : theme.textMuted }]}>
+                  <Text style={[styles.optionIndex, { color: isSelected ? theme.ink : theme.ink3 }]}>
                     {String.fromCharCode(65 + index)}.
                   </Text>
-                  <Text style={[styles.optionText, { color: isSelected ? theme.text : theme.textSecondary }]}>
+                  <Text style={[styles.optionText, { color: isSelected ? theme.ink : theme.ink2 }]}>
                     {option}
                   </Text>
                 </TouchableOpacity>
@@ -374,7 +374,7 @@ export default function DuelScreen({ route, navigation }: Props) {
         </ScrollView>
 
         {!showFeedback && (
-          <View style={[styles.footer, { borderTopColor: theme.borderLight }]}>
+          <View style={[styles.footer, { borderTopColor: theme.line2 }]}>
             <Button
               label="Submit Answer"
               onPress={submitAnswer}
@@ -390,7 +390,7 @@ export default function DuelScreen({ route, navigation }: Props) {
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {duelState.phase !== 'PREMATCH' && (
         <TouchableOpacity style={styles.quitButton} onPress={handleQuit}>
-          <Text style={[styles.quitText, { color: theme.textMuted }]}>Quit</Text>
+          <Text style={[styles.quitText, { color: theme.ink3 }]}>Quit</Text>
         </TouchableOpacity>
       )}
 

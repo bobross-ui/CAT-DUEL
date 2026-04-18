@@ -128,7 +128,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
   if (loading) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator size="large" color={theme.text} />
+        <ActivityIndicator size="large" color={theme.ink} />
       </View>
     );
   }
@@ -137,8 +137,8 @@ export default function QuestionScreen({ navigation, route }: Props) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
         <Text style={styles.noMoreEmoji}>🎉</Text>
-        <Text style={[styles.noMoreTitle, { color: theme.text }]}>You've seen all questions!</Text>
-        <Text style={[styles.noMoreSub, { color: theme.textSecondary }]}>in this category</Text>
+        <Text style={[styles.noMoreTitle, { color: theme.ink }]}>You've seen all questions!</Text>
+        <Text style={[styles.noMoreSub, { color: theme.ink2 }]}>in this category</Text>
         {session.current.questionsAnswered > 0 && (
           <Button label="View Summary" onPress={handleEndSession} style={styles.buttonSpacing} />
         )}
@@ -149,43 +149,43 @@ export default function QuestionScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <View style={[styles.header, { borderBottomColor: theme.borderLight }]}>
+      <View style={[styles.header, { borderBottomColor: theme.line2 }]}>
         <View>
-          <Text style={[styles.categoryBadge, { color: theme.textSecondary }]}>
+          <Text style={[styles.categoryBadge, { color: theme.ink2 }]}>
             {question?.category} · {question?.subTopic ?? `Difficulty ${question?.difficulty}`}
           </Text>
         </View>
         <View style={styles.headerRight}>
-          <Text style={[styles.timer, { color: theme.text }]}>{formatTime(elapsedSec)}</Text>
+          <Text style={[styles.timer, { color: theme.ink }]}>{formatTime(elapsedSec)}</Text>
           <TouchableOpacity onPress={handleEndSession}>
-            <Text style={[styles.endText, { color: theme.textMuted }]}>End</Text>
+            <Text style={[styles.endText, { color: theme.ink3 }]}>End</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <Text style={[styles.questionText, { color: theme.text }]}>{question?.text}</Text>
+        <Text style={[styles.questionText, { color: theme.ink }]}>{question?.text}</Text>
 
         <View style={styles.optionsContainer}>
           {question?.options.map((option, index) => {
-            let borderColor = theme.border;
+            let borderColor = theme.line;
             let bg = theme.bg;
-            let textColor = theme.text;
+            let textColor = theme.ink;
 
             if (result) {
               if (index === result.correctAnswer) {
-                borderColor = theme.success;
-                bg = theme.successBg;
-                textColor = theme.successText;
+                borderColor = theme.accent;
+                bg = theme.accentSoft;
+                textColor = theme.accentDeep;
               } else if (index === selectedOption && !result.isCorrect) {
-                borderColor = theme.danger;
-                bg = theme.dangerBg;
-                textColor = theme.dangerText;
+                borderColor = theme.coral;
+                bg = theme.coralSoft;
+                textColor = theme.coral;
               }
             } else if (index === selectedOption) {
-              borderColor = theme.text;
-              bg = theme.surfaceHighlight;
-              textColor = theme.text;
+              borderColor = theme.ink;
+              bg = theme.bg2;
+              textColor = theme.ink;
             }
 
             return (
@@ -195,7 +195,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
                 onPress={() => !result && setSelectedOption(index)}
                 disabled={!!result}
               >
-                <Text style={[styles.optionIndex, { color: theme.textMuted }]}>
+                <Text style={[styles.optionIndex, { color: theme.ink3 }]}>
                   {String.fromCharCode(65 + index)}.
                 </Text>
                 <Text style={[styles.optionText, { color: textColor }]}>{option}</Text>
@@ -208,7 +208,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
       </ScrollView>
 
       {!result && (
-        <View style={[styles.footer, { borderTopColor: theme.borderLight }]}>
+        <View style={[styles.footer, { borderTopColor: theme.line2 }]}>
           <Button
             label="Submit Answer"
             onPress={handleSubmit}
@@ -225,13 +225,13 @@ export default function QuestionScreen({ navigation, route }: Props) {
         ]}>
           <View style={styles.resultHeader}>
             <Text style={styles.resultEmoji}>{result.isCorrect ? '✅' : '❌'}</Text>
-            <Text style={[styles.resultTitle, { color: theme.text }]}>
+            <Text style={[styles.resultTitle, { color: theme.ink }]}>
               {result.isCorrect ? 'Correct!' : 'Incorrect'}
             </Text>
           </View>
           <ScrollView style={styles.explanationScroll} nestedScrollEnabled>
-            <Text style={[styles.explanationLabel, { color: theme.textMuted }]}>Explanation</Text>
-            <Text style={[styles.explanationText, { color: theme.textSecondary }]}>{result.explanation}</Text>
+            <Text style={[styles.explanationLabel, { color: theme.ink3 }]}>Explanation</Text>
+            <Text style={[styles.explanationText, { color: theme.ink2 }]}>{result.explanation}</Text>
           </ScrollView>
           <Button label="Next Question →" onPress={loadNextQuestion} />
         </Animated.View>

@@ -17,6 +17,8 @@ export const palette = {
     coral:      '#C85A4A',
     coralSoft:  '#F7E6E2',
     amber:      '#C98A2B',
+    amberSoft:  '#FDF3E0',
+    amberDeep:  '#7A4F10',
   },
   dark: {
     bg:         '#141312',
@@ -34,6 +36,8 @@ export const palette = {
     coral:      '#E8826F',
     coralSoft:  'rgba(232,130,111,0.15)',
     amber:      '#D9A04C',
+    amberSoft:  'rgba(217,160,76,0.15)',
+    amberDeep:  '#D9A04C',
   },
 };
 

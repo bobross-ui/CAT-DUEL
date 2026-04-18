@@ -33,11 +33,11 @@ export default function PracticeHomeScreen({ navigation }: Props) {
       contentContainerStyle={styles.content}
     >
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Text style={[styles.backText, { color: theme.textSecondary }]}>← Back</Text>
+        <Text style={[styles.backText, { color: theme.ink2 }]}>← Back</Text>
       </TouchableOpacity>
 
-      <Text style={[styles.title, { color: theme.text }]}>Practice</Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Choose a category to begin</Text>
+      <Text style={[styles.title, { color: theme.ink }]}>Practice</Text>
+      <Text style={[styles.subtitle, { color: theme.ink2 }]}>Choose a category to begin</Text>
 
       <View style={styles.categoryGrid}>
         {CATEGORIES.map((cat) => {
@@ -47,12 +47,12 @@ export default function PracticeHomeScreen({ navigation }: Props) {
               key={cat.key}
               style={[
                 styles.categoryCard,
-                { borderColor: isSelected ? theme.text : theme.border, backgroundColor: isSelected ? theme.surfaceHighlight : theme.bg },
+                { borderColor: isSelected ? theme.ink : theme.line, backgroundColor: isSelected ? theme.bg2 : theme.bg },
               ]}
               onPress={() => setSelectedCategory(cat.key)}
             >
               <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
-              <Text style={[styles.categoryLabel, { color: isSelected ? theme.text : theme.textSecondary }]}>
+              <Text style={[styles.categoryLabel, { color: isSelected ? theme.ink : theme.ink2 }]}>
                 {cat.label}
               </Text>
             </TouchableOpacity>
@@ -60,7 +60,7 @@ export default function PracticeHomeScreen({ navigation }: Props) {
         })}
       </View>
 
-      <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Difficulty</Text>
+      <Text style={[styles.sectionLabel, { color: theme.ink3 }]}>Difficulty</Text>
       <View style={styles.difficultyRow}>
         {DIFFICULTIES.map((d) => {
           const isSelected = selectedDifficulty === d.value;
@@ -70,13 +70,13 @@ export default function PracticeHomeScreen({ navigation }: Props) {
               style={[
                 styles.difficultyChip,
                 {
-                  borderColor: isSelected ? theme.primary : theme.border,
-                  backgroundColor: isSelected ? theme.primary : 'transparent',
+                  borderColor: isSelected ? theme.ink : theme.line,
+                  backgroundColor: isSelected ? theme.ink : 'transparent',
                 },
               ]}
               onPress={() => setSelectedDifficulty(d.value)}
             >
-              <Text style={[styles.difficultyText, { color: isSelected ? theme.primaryFg : theme.textSecondary }]}>
+              <Text style={[styles.difficultyText, { color: isSelected ? theme.bg : theme.ink2 }]}>
                 {d.label}
               </Text>
             </TouchableOpacity>

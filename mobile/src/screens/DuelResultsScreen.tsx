@@ -36,7 +36,7 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
   const youWon = results.winnerId === userId;
   const isDraw = results.isDraw;
   const outcomeLabel = isDraw ? 'Draw!' : youWon ? 'You Won!' : 'You Lost';
-  const outcomeColor = isDraw ? theme.warning : youWon ? theme.success : theme.danger;
+  const outcomeColor = isDraw ? theme.amber : youWon ? theme.accent : theme.coral;
 
   const [answers, setAnswers] = useState<AnswerDetail[]>([]);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
@@ -54,8 +54,8 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
       <Text style={[styles.outcomeLabel, { color: outcomeColor }]}>{outcomeLabel}</Text>
 
       {results.isForfeit && (
-        <View style={[styles.forfeitBanner, { backgroundColor: theme.warningBg, borderColor: theme.warningBorder }]}>
-          <Text style={[styles.forfeitText, { color: theme.warningText }]}>
+        <View style={[styles.forfeitBanner, { backgroundColor: theme.amberSoft, borderColor: theme.amber }]}>
+          <Text style={[styles.forfeitText, { color: theme.amberDeep }]}>
             {youWon ? 'Opponent forfeited the match' : 'You forfeited the match'}
           </Text>
         </View>
@@ -69,45 +69,45 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
         newTier={yours.newTier}
       />
 
-      <View style={[styles.scoreRow, { borderColor: theme.border }]}>
+      <View style={[styles.scoreRow, { borderColor: theme.line }]}>
         <View style={styles.scoreBlock}>
-          <Text style={[styles.scoreName, { color: theme.textMuted }]}>You</Text>
-          <Text style={[styles.scoreNumber, { color: theme.text }]}>{yours.score}</Text>
-          <Text style={[styles.scoreAnswered, { color: theme.textMuted }]}>{yours.questionsAnswered} answered</Text>
+          <Text style={[styles.scoreName, { color: theme.ink3 }]}>You</Text>
+          <Text style={[styles.scoreNumber, { color: theme.ink }]}>{yours.score}</Text>
+          <Text style={[styles.scoreAnswered, { color: theme.ink3 }]}>{yours.questionsAnswered} answered</Text>
         </View>
-        <Text style={[styles.scoreSep, { color: theme.border }]}>—</Text>
+        <Text style={[styles.scoreSep, { color: theme.line }]}>—</Text>
         <View style={styles.scoreBlock}>
-          <Text style={[styles.scoreName, { color: theme.textMuted }]}>{opponent.displayName ?? 'Opponent'}</Text>
-          <Text style={[styles.scoreNumber, { color: theme.text }]}>{theirs.score}</Text>
-          <Text style={[styles.scoreAnswered, { color: theme.textMuted }]}>{theirs.questionsAnswered} answered</Text>
+          <Text style={[styles.scoreName, { color: theme.ink3 }]}>{opponent.displayName ?? 'Opponent'}</Text>
+          <Text style={[styles.scoreNumber, { color: theme.ink }]}>{theirs.score}</Text>
+          <Text style={[styles.scoreAnswered, { color: theme.ink3 }]}>{theirs.questionsAnswered} answered</Text>
         </View>
       </View>
 
       {loadingBreakdown ? (
-        <ActivityIndicator style={styles.loader} color={theme.textMuted} />
+        <ActivityIndicator style={styles.loader} color={theme.ink3} />
       ) : answers.length > 0 ? (
         <View style={styles.breakdown}>
-          <Text style={[styles.breakdownTitle, { color: theme.text }]}>Your Answers</Text>
+          <Text style={[styles.breakdownTitle, { color: theme.ink }]}>Your Answers</Text>
           {answers.map((a, idx) => (
             <View key={a.id} style={[
               styles.answerCard,
-              { borderColor: a.isCorrect ? theme.successBorder : theme.dangerBorder,
-                backgroundColor: a.isCorrect ? theme.successBg : theme.dangerBg },
+              { borderColor: a.isCorrect ? theme.accent : theme.coral,
+                backgroundColor: a.isCorrect ? theme.accentSoft : theme.coralSoft },
             ]}>
               <View style={styles.answerHeader}>
-                <Text style={[styles.answerNumber, { color: theme.textSecondary }]}>Q{idx + 1}</Text>
-                <Text style={[styles.answerCategory, { color: theme.textMuted, backgroundColor: theme.surfaceHighlight }]}>
+                <Text style={[styles.answerNumber, { color: theme.ink2 }]}>Q{idx + 1}</Text>
+                <Text style={[styles.answerCategory, { color: theme.ink3, backgroundColor: theme.bg2 }]}>
                   {a.question.category}
                 </Text>
                 <Text style={[
                   styles.answerBadge,
-                  { backgroundColor: a.isCorrect ? theme.successBg : theme.dangerBg,
-                    color: a.isCorrect ? theme.successText : theme.dangerText },
+                  { backgroundColor: a.isCorrect ? theme.accentSoft : theme.coralSoft,
+                    color: a.isCorrect ? theme.accentDeep : theme.coral },
                 ]}>
                   {a.isCorrect ? 'Correct' : 'Wrong'}
                 </Text>
               </View>
-              <Text style={[styles.questionText, { color: theme.text }]}>{a.question.text}</Text>
+              <Text style={[styles.questionText, { color: theme.ink }]}>{a.question.text}</Text>
               <View style={styles.optionsGrid}>
                 {(a.question.options as string[]).map((opt, i) => {
                   const isSelected = i === a.selectedAnswer;
@@ -117,16 +117,16 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
                       key={i}
                       style={[
                         styles.optionRow,
-                        { backgroundColor: theme.surface },
-                        isCorrectOpt && { backgroundColor: theme.successBg },
-                        isSelected && !isCorrectOpt && { backgroundColor: theme.dangerBg },
+                        { backgroundColor: theme.bg2 },
+                        isCorrectOpt && { backgroundColor: theme.accentSoft },
+                        isSelected && !isCorrectOpt && { backgroundColor: theme.coralSoft },
                       ]}
                     >
                       <Text style={[
                         styles.optionText,
-                        { color: theme.textSecondary },
-                        isCorrectOpt && { color: theme.successText, fontWeight: '600' },
-                        isSelected && !isCorrectOpt && { color: theme.dangerText, fontWeight: '600' },
+                        { color: theme.ink2 },
+                        isCorrectOpt && { color: theme.accentDeep, fontWeight: '600' },
+                        isSelected && !isCorrectOpt && { color: theme.coral, fontWeight: '600' },
                       ]}>
                         {String.fromCharCode(65 + i)}. {opt}
                       </Text>
@@ -134,8 +134,8 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
                   );
                 })}
               </View>
-              <Text style={[styles.explanationLabel, { color: theme.textMuted }]}>Explanation</Text>
-              <Text style={[styles.explanationText, { color: theme.textSecondary }]}>{a.question.explanation}</Text>
+              <Text style={[styles.explanationLabel, { color: theme.ink3 }]}>Explanation</Text>
+              <Text style={[styles.explanationText, { color: theme.ink2 }]}>{a.question.explanation}</Text>
             </View>
           ))}
         </View>

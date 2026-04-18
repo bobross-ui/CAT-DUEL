@@ -21,32 +21,32 @@ export default function PracticeSummaryScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <Text style={[styles.title, { color: theme.text }]}>Session Complete</Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+      <Text style={[styles.title, { color: theme.ink }]}>Session Complete</Text>
+      <Text style={[styles.subtitle, { color: theme.ink2 }]}>
         {total} question{total !== 1 ? 's' : ''} answered
       </Text>
 
-      <View style={[styles.accuracyCircle, { borderColor: theme.text }]}>
-        <Text style={[styles.accuracyValue, { color: theme.text }]}>{accuracy}%</Text>
-        <Text style={[styles.accuracyLabel, { color: theme.textSecondary }]}>Accuracy</Text>
+      <View style={[styles.accuracyCircle, { borderColor: theme.ink }]}>
+        <Text style={[styles.accuracyValue, { color: theme.ink }]}>{accuracy}%</Text>
+        <Text style={[styles.accuracyLabel, { color: theme.ink2 }]}>Accuracy</Text>
       </View>
 
       <View style={styles.statsGrid}>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={[styles.statValue, { color: theme.success }]}>{correct}</Text>
-          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Correct</Text>
+        <View style={[styles.statCard, { borderColor: theme.line }]}>
+          <Text style={[styles.statValue, { color: theme.accent }]}>{correct}</Text>
+          <Text style={[styles.statLabel, { color: theme.ink2 }]}>Correct</Text>
         </View>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={[styles.statValue, { color: theme.danger }]}>{incorrect}</Text>
-          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Incorrect</Text>
+        <View style={[styles.statCard, { borderColor: theme.line }]}>
+          <Text style={[styles.statValue, { color: theme.coral }]}>{incorrect}</Text>
+          <Text style={[styles.statLabel, { color: theme.ink2 }]}>Incorrect</Text>
         </View>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={[styles.statValue, { color: theme.text }]}>{formatTime(totalTimeSec)}</Text>
-          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Time</Text>
+        <View style={[styles.statCard, { borderColor: theme.line }]}>
+          <Text style={[styles.statValue, { color: theme.ink }]}>{formatTime(totalTimeSec)}</Text>
+          <Text style={[styles.statLabel, { color: theme.ink2 }]}>Total Time</Text>
         </View>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={[styles.statValue, { color: theme.text }]}>{formatTime(avgTimeSec)}</Text>
-          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Avg / Question</Text>
+        <View style={[styles.statCard, { borderColor: theme.line }]}>
+          <Text style={[styles.statValue, { color: theme.ink }]}>{formatTime(avgTimeSec)}</Text>
+          <Text style={[styles.statLabel, { color: theme.ink2 }]}>Avg / Question</Text>
         </View>
       </View>
 

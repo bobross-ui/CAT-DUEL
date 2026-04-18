@@ -83,12 +83,12 @@ export default function MatchmakingScreen({ navigation }: Props) {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Text style={[styles.backText, { color: theme.textSecondary }]}>← Back</Text>
+        <Text style={[styles.backText, { color: theme.ink2 }]}>← Back</Text>
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <Text style={[styles.title, { color: theme.text }]}>Find a Duel</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+        <Text style={[styles.title, { color: theme.ink }]}>Find a Duel</Text>
+        <Text style={[styles.subtitle, { color: theme.ink2 }]}>
           Get matched with a player near your Elo rating
         </Text>
 
@@ -98,21 +98,21 @@ export default function MatchmakingScreen({ navigation }: Props) {
 
         {phase === 'SEARCHING' && (
           <View style={styles.searchingContainer}>
-            <ActivityIndicator size="large" color={theme.text} style={styles.spinner} />
-            <Text style={[styles.searchingText, { color: theme.text }]}>Searching for an opponent...</Text>
-            <Text style={[styles.searchingHint, { color: theme.textMuted }]}>Range widens after 30 seconds</Text>
+            <ActivityIndicator size="large" color={theme.ink} style={styles.spinner} />
+            <Text style={[styles.searchingText, { color: theme.ink }]}>Searching for an opponent...</Text>
+            <Text style={[styles.searchingHint, { color: theme.ink3 }]}>Range widens after 30 seconds</Text>
             <Button label="Cancel" variant="secondary" onPress={handleCancel} style={styles.cancelButton} />
           </View>
         )}
 
         {phase === 'FOUND' && (
           <View style={styles.searchingContainer}>
-            <ActivityIndicator size="large" color={theme.success} style={styles.spinner} />
-            <Text style={[styles.searchingText, { color: theme.text }]}>Match found! Loading duel...</Text>
+            <ActivityIndicator size="large" color={theme.accent} style={styles.spinner} />
+            <Text style={[styles.searchingText, { color: theme.ink }]}>Match found! Loading duel...</Text>
           </View>
         )}
 
-        {error && <Text style={[styles.errorText, { color: theme.danger }]}>{error}</Text>}
+        {error && <Text style={[styles.errorText, { color: theme.coral }]}>{error}</Text>}
       </View>
     </View>
   );
