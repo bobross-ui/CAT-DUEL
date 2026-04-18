@@ -130,15 +130,16 @@ export default function MatchmakingScreen({ navigation }: Props) {
         });
 
         socket.on('match:found', ({
-          gameId, opponent,
+          gameId, opponent, ratingImpact,
         }: {
           gameId: string;
           opponent: { userId: string; displayName: string | null; avatarUrl: string | null; eloRating: number };
+          ratingImpact?: { win: number; loss: number };
         }) => {
           if (!mounted) return;
           setPhase('FOUND');
           socket.disconnect();
-          navigation.replace('Duel', { gameId, opponent });
+          navigation.replace('Found', { gameId, opponent, ratingImpact: ratingImpact ?? null });
         });
       } catch {
         if (!mounted) return;

@@ -2,6 +2,7 @@ import { Namespace } from 'socket.io';
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
 import { initializeGame, GamePlayer } from './gameSession';
+import { calculateElo } from './elo';
 
 export type QueuePlayer = GamePlayer;
 
@@ -35,11 +36,11 @@ export async function createMatch(
   const [p1User, p2User] = await Promise.all([
     prisma.user.findUnique({
       where: { id: player1.userId },
-      select: { id: true, displayName: true, avatarUrl: true, eloRating: true },
+      select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true },
     }),
     prisma.user.findUnique({
       where: { id: player2.userId },
-      select: { id: true, displayName: true, avatarUrl: true, eloRating: true },
+      select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true },
     }),
   ]);
 
@@ -52,16 +53,28 @@ export async function createMatch(
 
   const matchData = { gameId, duration: 120 }; // TODO: restore to 600 after testing
 
+  function ratingImpactFor(
+    self: { eloRating: number; gamesPlayed: number },
+    opp: { eloRating: number },
+  ) {
+    return {
+      win:  calculateElo({ playerElo: self.eloRating, opponentElo: opp.eloRating, playerGamesPlayed: self.gamesPlayed, actualScore: 1 }).delta,
+      loss: calculateElo({ playerElo: self.eloRating, opponentElo: opp.eloRating, playerGamesPlayed: self.gamesPlayed, actualScore: 0 }).delta,
+    };
+  }
+
   if (socket1) {
     matchmakingNs.to(socket1).emit('match:found', {
       ...matchData,
       opponent: publicProfile(p2User),
+      ratingImpact: ratingImpactFor(p1User, p2User),
     });
   }
   if (socket2) {
     matchmakingNs.to(socket2).emit('match:found', {
       ...matchData,
       opponent: publicProfile(p1User),
+      ratingImpact: ratingImpactFor(p2User, p1User),
     });
   }
 

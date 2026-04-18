@@ -11,6 +11,7 @@ import PracticeHomeScreen from '../screens/PracticeHomeScreen';
 import QuestionScreen from '../screens/QuestionScreen';
 import PracticeSummaryScreen from '../screens/PracticeSummaryScreen';
 import MatchmakingScreen from '../screens/MatchmakingScreen';
+import FoundScreen from '../screens/FoundScreen';
 import DuelScreen from '../screens/DuelScreen';
 import DuelResultsScreen from '../screens/DuelResultsScreen';
 import MatchHistoryScreen from '../screens/MatchHistoryScreen';
@@ -59,6 +60,7 @@ export type RootStackParamList = {
   Login: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Matchmaking: undefined;
+  Found: { gameId: string; opponent: OpponentInfo; ratingImpact: { win: number; loss: number } | null };
   Duel: { gameId: string; opponent: OpponentInfo };
   DuelResults: { results: GameFinishedPayload; userId: string; opponent: OpponentInfo };
   PracticeHome: undefined;
@@ -97,6 +99,7 @@ export default function RootNavigator() {
         <>
           <Stack.Screen name="MainTabs" component={MainTabNavigator} />
           <Stack.Screen name="Matchmaking" component={MatchmakingScreen} />
+          <Stack.Screen name="Found" component={FoundScreen} options={{ gestureEnabled: false }} />
           <Stack.Screen
             name="Duel"
             component={DuelScreen}
