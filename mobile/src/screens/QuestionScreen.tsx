@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Animated,
+  ScrollView, ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
@@ -12,11 +12,17 @@ import Button from '../components/Button';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Question'>;
 
+interface AnsweredQ {
+  category: string;
+  subTopic: string | null;
+  isCorrect: boolean;
+}
+
 interface SessionStats {
   questionsAnswered: number;
   correctAnswers: number;
   totalTimeMs: number;
-  startedAt: Date;
+  answeredQuestions: AnsweredQ[];
 }
 
 export default function QuestionScreen({ navigation, route }: Props) {
@@ -29,44 +35,24 @@ export default function QuestionScreen({ navigation, route }: Props) {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [result, setResult] = useState<AnswerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [elapsedSec, setElapsedSec] = useState(0);
 
   const session = useRef<SessionStats>({
     questionsAnswered: 0,
     correctAnswers: 0,
     totalTimeMs: 0,
-    startedAt: new Date(),
+    answeredQuestions: [],
   });
   const questionStartTime = useRef<number>(Date.now());
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const resultSlide = useRef(new Animated.Value(300)).current;
 
   useEffect(() => {
     loadNextQuestion();
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
-
-  function startTimer() {
-    setElapsedSec(0);
-    questionStartTime.current = Date.now();
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setElapsedSec(Math.floor((Date.now() - questionStartTime.current) / 1000));
-    }, 1000);
-  }
-
-  function stopTimer() {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  }
 
   async function loadNextQuestion() {
     setLoading(true);
     setSelectedOption(null);
     setResult(null);
-    resultSlide.setValue(300);
+    questionStartTime.current = Date.now();
 
     try {
       const res = await questionService.getNext({ category, difficulty });
@@ -75,7 +61,6 @@ export default function QuestionScreen({ navigation, route }: Props) {
         setNoMore(true);
       } else {
         setQuestion(data as Question);
-        startTimer();
       }
     } catch {
       setNoMore(true);
@@ -87,7 +72,6 @@ export default function QuestionScreen({ navigation, route }: Props) {
   async function handleSubmit() {
     if (selectedOption === null || !question) return;
     setSubmitting(true);
-    stopTimer();
 
     const timeTakenMs = Date.now() - questionStartTime.current;
 
@@ -98,38 +82,31 @@ export default function QuestionScreen({ navigation, route }: Props) {
       session.current.questionsAnswered++;
       session.current.totalTimeMs += timeTakenMs;
       if (answerResult.isCorrect) session.current.correctAnswers++;
+      session.current.answeredQuestions.push({
+        category: question.category,
+        subTopic: question.subTopic,
+        isCorrect: answerResult.isCorrect,
+      });
 
       setResult(answerResult);
-      Animated.spring(resultSlide, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 60,
-        friction: 10,
-      }).start();
     } finally {
       setSubmitting(false);
     }
   }
 
   function handleEndSession() {
-    stopTimer();
     navigation.replace('PracticeSummary', {
       total: session.current.questionsAnswered,
       correct: session.current.correctAnswers,
       totalTimeMs: session.current.totalTimeMs,
+      questions: session.current.answeredQuestions,
     });
-  }
-
-  function formatTime(sec: number) {
-    const m = Math.floor(sec / 60).toString().padStart(2, '0');
-    const s = (sec % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
   }
 
   if (loading) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator size="large" color={theme.ink} />
+        <ActivityIndicator color={theme.ink3} />
       </View>
     );
   }
@@ -137,56 +114,68 @@ export default function QuestionScreen({ navigation, route }: Props) {
   if (noMore) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <AppText.Sans style={styles.noMoreEmoji}>🎉</AppText.Sans>
-        <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.noMoreTitle}>You've seen all questions!</AppText.Serif>
-        <AppText.Sans preset="body" color={theme.ink2} style={styles.noMoreSub}>in this category</AppText.Sans>
+        <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.noMoreTitle}>
+          You've seen every question in this filter.
+        </AppText.Serif>
+        <AppText.Sans preset="body" color={theme.ink3} style={styles.noMoreSub}>
+          Try a different section.
+        </AppText.Sans>
         {session.current.questionsAnswered > 0 && (
-          <Button label="View Summary" onPress={handleEndSession} style={styles.buttonSpacing} />
+          <Button label="View Summary" onPress={handleEndSession} style={styles.btnSpacing} />
         )}
-        <Button label="Back to Practice" variant="ghost" onPress={() => navigation.goBack()} />
+        <Button label="Try a different section" variant="ghost" onPress={() => navigation.goBack()} />
       </View>
     );
   }
 
+  const qNumber = session.current.questionsAnswered + 1;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <View style={[styles.header, { borderBottomColor: theme.line2 }]}>
-        <View>
-          <AppText.Mono preset="eyebrow" color={theme.ink2} style={styles.categoryBadge}>
-            {question?.category} · {question?.subTopic ?? `Difficulty ${question?.difficulty}`}
+      {/* ── Header ── */}
+      <View style={[styles.header, { borderBottomColor: theme.line }]}>
+        <View style={styles.qMeta}>
+          <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.uppercase}>
+            {question?.category}{question?.subTopic ? ` · ${question.subTopic}` : ''}
           </AppText.Mono>
         </View>
-        <View style={styles.headerRight}>
-          <AppText.Mono preset="timer" color={theme.ink} style={styles.timer}>{formatTime(elapsedSec)}</AppText.Mono>
-          <TouchableOpacity onPress={handleEndSession}>
-            <AppText.Sans preset="label" color={theme.ink3}>End</AppText.Sans>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={handleEndSession} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <AppText.Sans preset="label" color={theme.ink3}>End</AppText.Sans>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>{question?.text}</AppText.Serif>
+        {/* Q-number */}
+        <AppText.Mono preset="eyebrow" color={theme.ink3} style={[styles.uppercase, styles.qNum]}>
+          Q {qNumber}
+        </AppText.Mono>
 
-        <View style={styles.optionsContainer}>
+        {/* Question */}
+        <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>
+          {question?.text}
+        </AppText.Serif>
+
+        {/* Options */}
+        <View style={styles.options}>
           {question?.options.map((option, index) => {
             let borderColor = theme.line;
-            let bg = theme.bg;
-            let textColor = theme.ink;
+            let bg = theme.card;
+            let letterColor = theme.ink3;
 
             if (result) {
               if (index === result.correctAnswer) {
                 borderColor = theme.accent;
                 bg = theme.accentSoft;
-                textColor = theme.accentDeep;
+                letterColor = theme.accentDeep;
               } else if (index === selectedOption && !result.isCorrect) {
                 borderColor = theme.coral;
                 bg = theme.coralSoft;
-                textColor = theme.coral;
+                letterColor = theme.coral;
               }
             } else if (index === selectedOption) {
-              borderColor = theme.ink;
-              bg = theme.bg2;
-              textColor = theme.ink;
+              borderColor = theme.accent;
+              bg = theme.accentSoft;
+              letterColor = theme.accentDeep;
             }
 
             return (
@@ -195,46 +184,43 @@ export default function QuestionScreen({ navigation, route }: Props) {
                 style={[styles.option, { borderColor, backgroundColor: bg }]}
                 onPress={() => !result && setSelectedOption(index)}
                 disabled={!!result}
+                activeOpacity={0.7}
               >
-                <AppText.Mono preset="mono" color={theme.ink3} style={styles.optionIndex}>
-                  {String.fromCharCode(65 + index)}.
-                </AppText.Mono>
-                <AppText.Sans preset="body" color={textColor} style={styles.optionText}>{option}</AppText.Sans>
+                <AppText.Serif preset="scoreLg" color={letterColor} style={styles.letterKey}>
+                  {String.fromCharCode(65 + index)}
+                </AppText.Serif>
+                <AppText.Sans preset="body" color={theme.ink} style={styles.optionText}>{option}</AppText.Sans>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {result && <View style={{ height: 280 }} />}
+        {/* Inline explanation after submit */}
+        {result && (
+          <View style={[styles.explanation, { backgroundColor: theme.bg2, borderColor: theme.line }]}>
+            <AppText.Mono preset="eyebrow" color={result.isCorrect ? theme.accentDeep : theme.coral} style={styles.uppercase}>
+              {result.isCorrect ? 'CORRECT' : 'INCORRECT'}
+            </AppText.Mono>
+            <AppText.Sans preset="body" color={theme.ink2} style={styles.explanationText}>
+              {result.explanation}
+            </AppText.Sans>
+          </View>
+        )}
       </ScrollView>
 
-      {!result && (
-        <View style={[styles.footer, { borderTopColor: theme.line2 }]}>
+      {/* ── Footer ── */}
+      <View style={[styles.footer, { borderTopColor: theme.line }]}>
+        {result ? (
+          <Button label="Next →" onPress={loadNextQuestion} />
+        ) : (
           <Button
-            label="Submit Answer"
+            label="Submit"
             onPress={handleSubmit}
             loading={submitting}
             disabled={selectedOption === null}
           />
-        </View>
-      )}
-
-      {result && (
-        <Animated.View style={[
-          styles.resultPanel,
-          { backgroundColor: theme.bg, transform: [{ translateY: resultSlide }] },
-        ]}>
-          <View style={styles.resultHeader}>
-            <AppText.Sans style={styles.resultEmoji}>{result.isCorrect ? '✅' : '❌'}</AppText.Sans>
-            <AppText.Serif preset="h1Serif" color={theme.ink}>{result.isCorrect ? 'Correct!' : 'Incorrect'}</AppText.Serif>
-          </View>
-          <ScrollView style={styles.explanationScroll} nestedScrollEnabled>
-            <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.explanationLabel}>Explanation</AppText.Mono>
-            <AppText.Sans preset="body" color={theme.ink2} style={styles.explanationText}>{result.explanation}</AppText.Sans>
-          </ScrollView>
-          <Button label="Next Question →" onPress={loadNextQuestion} />
-        </Animated.View>
-      )}
+        )}
+      </View>
     </View>
   );
 }
@@ -242,56 +228,54 @@ export default function QuestionScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+
+  // Header
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 56,
-    paddingBottom: 16,
+    paddingBottom: 14,
     borderBottomWidth: 1,
   },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  categoryBadge: { textTransform: 'uppercase' },
-  timer: { fontSize: 16 },
+  qMeta: { flex: 1 },
+  uppercase: { textTransform: 'uppercase' },
+
+  // Scroll
   scroll: { flex: 1 },
-  scrollContent: { padding: 24 },
-  questionText: { marginBottom: 32 },
-  optionsContainer: { gap: 12 },
+  scrollContent: { padding: 24, paddingBottom: 16 },
+  qNum: { marginBottom: 12 },
+  questionText: { marginBottom: 28 },
+
+  // Options
+  options: { gap: 10 },
   option: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     flexDirection: 'row',
-    gap: 12,
     alignItems: 'flex-start',
+    gap: 12,
   },
-  optionIndex: { width: 20 },
+  letterKey: { fontSize: 16, lineHeight: 22, width: 20 },
   optionText: { flex: 1 },
-  footer: { padding: 20, borderTopWidth: 1 },
-  noMoreEmoji: { fontSize: 48, marginBottom: 16 },
-  noMoreTitle: { marginBottom: 8 },
-  noMoreSub: { marginBottom: 32 },
-  buttonSpacing: { marginBottom: 12, width: '100%' },
-  resultPanel: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-    paddingBottom: 40,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 10,
-    maxHeight: '55%',
+
+  // Explanation
+  explanation: {
+    marginTop: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    gap: 10,
   },
-  resultHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-  resultEmoji: { fontSize: 24 },
-  explanationScroll: { maxHeight: 120, marginBottom: 16 },
-  explanationLabel: { textTransform: 'uppercase', marginBottom: 6 },
-  explanationText: { lineHeight: 22 },
+  explanationText: {},
+
+  // Footer
+  footer: { padding: 20, borderTopWidth: 1 },
+
+  // No more
+  noMoreTitle: { textAlign: 'center', marginBottom: 10 },
+  noMoreSub: { textAlign: 'center', marginBottom: 32 },
+  btnSpacing: { marginBottom: 12, width: '100%' },
 });

@@ -1,104 +1,145 @@
-import { View, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import AppText from '../components/Text';
-import { useTheme } from '../theme/ThemeProvider';
+import Card from '../components/Card';
 import Button from '../components/Button';
+import { useTheme } from '../theme/ThemeProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeSummary'>;
 
-export default function PracticeSummaryScreen({ navigation, route }: Props) {
-  const { total, correct, totalTimeMs } = route.params;
+function MarkCircle({ isCorrect }: { isCorrect: boolean }) {
   const { theme } = useTheme();
-  const incorrect = total - correct;
-  const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
-  const avgTimeSec = total > 0 ? Math.round(totalTimeMs / total / 1000) : 0;
-  const totalTimeSec = Math.round(totalTimeMs / 1000);
+  const bg = isCorrect ? theme.accentSoft : theme.coralSoft;
+  const color = isCorrect ? theme.accentDeep : theme.coral;
+  return (
+    <View style={[styles.markCircle, { backgroundColor: bg }]}>
+      <AppText.Mono preset="chipLabel" color={color}>{isCorrect ? '✓' : '✗'}</AppText.Mono>
+    </View>
+  );
+}
 
-  function formatTime(sec: number) {
-    if (sec < 60) return `${sec}s`;
-    return `${Math.floor(sec / 60)}m ${sec % 60}s`;
-  }
+export default function PracticeSummaryScreen({ navigation, route }: Props) {
+  const { total, correct, totalTimeMs, questions } = route.params;
+  const { theme } = useTheme();
+  const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.title}>Session Complete</AppText.Serif>
-      <AppText.Sans preset="body" color={theme.ink2} style={styles.subtitle}>
-        {total} question{total !== 1 ? 's' : ''} answered
-      </AppText.Sans>
+    <ScrollView
+      style={{ backgroundColor: theme.bg }}
+      contentContainerStyle={styles.container}
+    >
+      {/* ── Hero ── */}
+      <AppText.Serif preset="verdict" color={theme.ink} style={styles.verdict}>
+        {accuracy >= 80 ? 'Strong.' : accuracy >= 50 ? 'Solid.' : 'Keep going.'}
+      </AppText.Serif>
+      <AppText.Mono preset="mono" color={theme.ink3} style={styles.sub}>
+        {correct} of {total} correct · {accuracy}%
+      </AppText.Mono>
 
-      <View style={[styles.accuracyCircle, { borderColor: theme.ink }]}>
-        <AppText.Mono preset="deltaLg" color={theme.ink} style={styles.accuracyValue}>{accuracy}%</AppText.Mono>
-        <AppText.Sans preset="label" color={theme.ink2}>Accuracy</AppText.Sans>
+      {/* ── Score Card ── */}
+      <Card style={styles.scoreCard}>
+        <View style={styles.scoreBlock}>
+          <AppText.Serif preset="statVal" color={theme.accent}>{correct}</AppText.Serif>
+          <AppText.Mono preset="eyebrow" color={theme.ink3}>CORRECT</AppText.Mono>
+        </View>
+        <View style={[styles.divider, { backgroundColor: theme.line }]} />
+        <View style={styles.scoreBlock}>
+          <AppText.Serif preset="statVal" color={theme.coral}>{total - correct}</AppText.Serif>
+          <AppText.Mono preset="eyebrow" color={theme.ink3}>INCORRECT</AppText.Mono>
+        </View>
+        <View style={[styles.divider, { backgroundColor: theme.line }]} />
+        <View style={styles.scoreBlock}>
+          <AppText.Serif preset="statVal" color={theme.ink}>{total}</AppText.Serif>
+          <AppText.Mono preset="eyebrow" color={theme.ink3}>TOTAL</AppText.Mono>
+        </View>
+      </Card>
+
+      {/* ── Question review ── */}
+      {questions && questions.length > 0 && (
+        <View style={styles.reviewSection}>
+          <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.reviewHeader}>
+            QUESTION REVIEW
+          </AppText.Mono>
+          {questions.map((q, i) => (
+            <Card key={i} style={styles.qRow}>
+              <AppText.Mono preset="mono" color={theme.ink2} style={styles.qNum}>Q{i + 1}</AppText.Mono>
+              <View style={styles.qTopic}>
+                <AppText.Sans preset="bodyMed" color={theme.ink} numberOfLines={1}>
+                  {q.subTopic ?? q.category}
+                </AppText.Sans>
+                <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.uppercase}>
+                  {q.category}
+                </AppText.Mono>
+              </View>
+              <MarkCircle isCorrect={q.isCorrect} />
+            </Card>
+          ))}
+        </View>
+      )}
+
+      {/* ── Actions ── */}
+      <View style={styles.actions}>
+        <Button
+          label="Try Again"
+          onPress={() => navigation.replace('PracticeHome')}
+          style={styles.actionBtn}
+        />
+        <Button
+          label="Home"
+          variant="ghost"
+          onPress={() => navigation.navigate('MainTabs')}
+          style={styles.actionBtn}
+        />
       </View>
-
-      <View style={styles.statsGrid}>
-        <View style={[styles.statCard, { borderColor: theme.line }]}>
-          <AppText.Mono preset="deltaLg" color={theme.accent} style={styles.statValue}>{correct}</AppText.Mono>
-          <AppText.Sans preset="small" color={theme.ink2}>Correct</AppText.Sans>
-        </View>
-        <View style={[styles.statCard, { borderColor: theme.line }]}>
-          <AppText.Mono preset="deltaLg" color={theme.coral} style={styles.statValue}>{incorrect}</AppText.Mono>
-          <AppText.Sans preset="small" color={theme.ink2}>Incorrect</AppText.Sans>
-        </View>
-        <View style={[styles.statCard, { borderColor: theme.line }]}>
-          <AppText.Mono preset="deltaLg" color={theme.ink} style={styles.statValue}>{formatTime(totalTimeSec)}</AppText.Mono>
-          <AppText.Sans preset="small" color={theme.ink2}>Total Time</AppText.Sans>
-        </View>
-        <View style={[styles.statCard, { borderColor: theme.line }]}>
-          <AppText.Mono preset="deltaLg" color={theme.ink} style={styles.statValue}>{formatTime(avgTimeSec)}</AppText.Mono>
-          <AppText.Sans preset="small" color={theme.ink2}>Avg / Question</AppText.Sans>
-        </View>
-      </View>
-
-      <Button
-        label="Practice Again"
-        onPress={() => navigation.replace('PracticeHome')}
-        style={styles.buttonSpacing}
-      />
-      <Button
-        label="Back to Home"
-        variant="ghost"
-        onPress={() => navigation.navigate('MainTabs')}
-      />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    paddingHorizontal: 32,
-    paddingTop: 80,
-    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 72,
+    paddingBottom: 48,
+    gap: 16,
   },
-  title: { marginBottom: 6 },
-  subtitle: { marginBottom: 40 },
-  accuracyCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 6,
+
+  // Hero
+  verdict: { textAlign: 'center' },
+  sub: { textAlign: 'center', marginTop: 6 },
+
+  // Score card
+  scoreCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+  },
+  scoreBlock: { flex: 1, alignItems: 'center', gap: 6 },
+  divider: { width: 1, height: 36, marginHorizontal: 4 },
+
+  // Review
+  reviewSection: { gap: 8 },
+  reviewHeader: { marginBottom: 2 },
+  uppercase: { textTransform: 'uppercase' },
+  qRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    gap: 12,
+  },
+  qNum: { width: 28 },
+  qTopic: { flex: 1, gap: 2 },
+
+  // Mark circle
+  markCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
   },
-  accuracyValue: { fontSize: 36 },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    width: '100%',
-    marginBottom: 40,
-  },
-  statCard: {
-    flex: 1,
-    minWidth: '45%',
-    borderWidth: 1.5,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  statValue: { marginBottom: 4 },
-  buttonSpacing: { marginBottom: 12, width: '100%' },
+
+  // Actions
+  actions: { gap: 10, marginTop: 8 },
+  actionBtn: {},
 });

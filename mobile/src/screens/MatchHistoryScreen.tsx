@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation';
 import api from '../services/api';
 import TierBadge from '../components/TierBadge';
+import Avatar from '../components/Avatar';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 
@@ -31,14 +32,16 @@ interface MatchEntry {
   finishedAt: string;
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-}
+function formatMatchTime(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+  const time = date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
 
-function formatDuration(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  if (date >= todayStart) return `Today, ${time}`;
+  if (date >= yesterdayStart) return `Yesterday, ${time}`;
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) + `, ${time}`;
 }
 
 export default function MatchHistoryScreen({ navigation }: Props) {
@@ -80,71 +83,87 @@ export default function MatchHistoryScreen({ navigation }: Props) {
     setLoadingMore(false);
   }, [fetchPage, loadingMore, page, totalPages]);
 
-  // Map outcome to theme semantic colors
-  const outcomeColor = (outcome: 'WIN' | 'LOSS' | 'DRAW') =>
-    outcome === 'WIN' ? theme.accent : outcome === 'LOSS' ? theme.coral : theme.amber;
-  const outcomeBg = (outcome: 'WIN' | 'LOSS' | 'DRAW') =>
-    outcome === 'WIN' ? theme.accentSoft : outcome === 'LOSS' ? theme.coralSoft : theme.amberSoft;
+  const stripeColor = (outcome: 'WIN' | 'LOSS' | 'DRAW') =>
+    outcome === 'WIN' ? theme.accent : outcome === 'LOSS' ? theme.coral : theme.ink3;
+
+  const deltaColor = (delta: number) =>
+    delta > 0 ? theme.accentDeep : delta < 0 ? theme.coral : theme.ink3;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <AppText.Sans preset="body" color={theme.ink} style={styles.backText}>←</AppText.Sans>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <AppText.Sans preset="body" color={theme.ink}>←</AppText.Sans>
         </TouchableOpacity>
         <AppText.Serif preset="heroSerif" color={theme.ink}>Match History</AppText.Serif>
       </View>
 
       {loading ? (
-        <ActivityIndicator style={styles.loader} size="large" color={theme.ink} />
+        <ActivityIndicator style={styles.loader} color={theme.ink3} />
       ) : (
         <FlatList
           data={entries}
           keyExtractor={(item) => item.matchId}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={[styles.row, { borderBottomColor: theme.line2 }]}
+              style={[styles.card, { backgroundColor: theme.card, borderColor: theme.line }]}
               onPress={() => navigation.navigate('MatchDetail', {
                 matchId: item.matchId,
                 opponentName: item.opponent.displayName,
               })}
+              activeOpacity={0.7}
             >
-              <View style={[styles.outcomePill, { backgroundColor: outcomeBg(item.outcome) }]}>
-                <AppText.Mono preset="chipLabel" color={outcomeColor(item.outcome)}>
-                  {item.outcome}
-                </AppText.Mono>
-              </View>
-              <View style={styles.matchInfo}>
+              {/* Left stripe */}
+              <View style={[styles.stripe, { backgroundColor: stripeColor(item.outcome) }]} />
+
+              {/* Content */}
+              <View style={styles.cardContent}>
+                {/* Opponent row */}
                 <View style={styles.opponentRow}>
-                  <AppText.Sans preset="bodyMed" color={theme.ink} numberOfLines={1} style={styles.opponentName}>
+                  <Avatar name={item.opponent.displayName ?? '?'} size="sm" variant="opponent" />
+                  <AppText.Serif
+                    preset="italic"
+                    color={theme.ink}
+                    numberOfLines={1}
+                    style={styles.opponentName}
+                  >
                     {item.opponent.displayName ?? 'Anonymous'}
-                  </AppText.Sans>
+                  </AppText.Serif>
                   <TierBadge tier={item.opponent.rankTier} small />
                 </View>
-                <AppText.Sans preset="small" color={theme.ink3}>
-                  {formatDate(item.finishedAt)} · {formatDuration(item.durationSeconds)}
-                  {item.status === 'forfeited' ? ' · Forfeit' : ''}
-                </AppText.Sans>
+
+                {/* Result + timestamp */}
+                <View style={styles.metaRow}>
+                  <AppText.Sans preset="bodyMed" color={stripeColor(item.outcome)}>
+                    {item.outcome} · {item.yourScore}–{item.opponentScore}
+                    {item.status === 'forfeited' ? ' · forfeit' : ''}
+                  </AppText.Sans>
+                  <AppText.Mono preset="mono" color={theme.ink3} style={styles.timestamp}>
+                    {formatMatchTime(item.finishedAt)}
+                  </AppText.Mono>
+                </View>
               </View>
-              <View style={styles.rightCol}>
-                <AppText.Mono preset="mono" color={theme.ink} style={styles.score}>{item.yourScore}–{item.opponentScore}</AppText.Mono>
-                <AppText.Mono preset="mono" color={item.yourEloChange > 0 ? theme.accent : item.yourEloChange < 0 ? theme.coral : theme.ink3}>
-                  {item.yourEloChange > 0 ? '+' : ''}{item.yourEloChange}
-                </AppText.Mono>
-              </View>
+
+              {/* Elo delta */}
+              <AppText.Mono preset="mono" color={deltaColor(item.yourEloChange)} style={styles.delta}>
+                {item.yourEloChange > 0 ? '+' : ''}{item.yourEloChange}
+              </AppText.Mono>
             </TouchableOpacity>
           )}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListFooterComponent={loadingMore
             ? <ActivityIndicator style={styles.footerLoader} color={theme.ink3} />
             : null}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <AppText.Sans preset="bodyMed" color={theme.ink}>No matches yet.</AppText.Sans>
-              <AppText.Sans preset="body" color={theme.ink2}>
-                Play your first duel to see history here.
+              <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.emptyHeading}>
+                No matches yet.
+              </AppText.Serif>
+              <AppText.Sans preset="body" color={theme.ink3}>
+                Find your first duel.
               </AppText.Sans>
             </View>
           }
@@ -163,31 +182,51 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 16,
-    gap: 12,
+    gap: 14,
   },
-  backButton: { padding: 4 },
-  backText: { fontSize: 24 },
   loader: { flex: 1, marginTop: 60 },
-  list: { paddingBottom: 40 },
-  row: {
+  list: { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 4 },
+
+  // Card row
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  stripe: {
+    width: 4,
+    alignSelf: 'stretch',
+  },
+  cardContent: {
+    flex: 1,
     paddingVertical: 14,
-    borderBottomWidth: 1,
-    gap: 12,
+    paddingHorizontal: 14,
+    gap: 6,
   },
-  outcomePill: {
-    width: 44,
-    paddingVertical: 5,
-    borderRadius: 8,
+  opponentRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  matchInfo: { flex: 1, gap: 4 },
-  opponentRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  opponentName: { flexShrink: 1 },
-  rightCol: { alignItems: 'flex-end', gap: 2 },
-  score: {},
+  opponentName: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 18,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timestamp: { flex: 1, textAlign: 'right' },
+  delta: { paddingRight: 14, minWidth: 36, textAlign: 'right' },
+
+  // Footer
   footerLoader: { paddingVertical: 16 },
-  empty: { alignItems: 'center', paddingTop: 80, gap: 8 },
+
+  // Empty
+  empty: { alignItems: 'center', paddingTop: 80, gap: 10 },
+  emptyHeading: { marginBottom: 4 },
 });

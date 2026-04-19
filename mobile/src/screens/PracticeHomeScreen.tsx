@@ -8,17 +8,17 @@ import Button from '../components/Button';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeHome'>;
 
-const CATEGORIES = [
-  { key: 'QUANT', label: 'Quantitative\nAptitude', emoji: '🔢' },
-  { key: 'DILR', label: 'Data Interpretation\n& Logical Reasoning', emoji: '📊' },
-  { key: 'VARC', label: 'Verbal Ability\n& Reading Comprehension', emoji: '📝' },
-] as const;
+const CATEGORIES: { key: string; label: string; sub: string }[] = [
+  { key: 'QUANT',  label: 'Quantitative Aptitude',               sub: 'QUANT'  },
+  { key: 'DILR',   label: 'Data Interpretation & Logical Reason', sub: 'DILR'   },
+  { key: 'VARC',   label: 'Verbal Ability & Reading Comp.',        sub: 'VARC'   },
+];
 
-const DIFFICULTIES = [
-  { label: 'All', value: undefined },
-  { label: 'Easy (1–2)', value: 1 },
-  { label: 'Medium (3)', value: 3 },
-  { label: 'Hard (4–5)', value: 4 },
+const DIFFICULTIES: { label: string; value: number | undefined }[] = [
+  { label: 'All',    value: undefined },
+  { label: 'Easy',   value: 1 },
+  { label: 'Medium', value: 3 },
+  { label: 'Hard',   value: 4 },
 ];
 
 export default function PracticeHomeScreen({ navigation }: Props) {
@@ -26,34 +26,51 @@ export default function PracticeHomeScreen({ navigation }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<number | undefined>(undefined);
 
-  const canStart = selectedCategory !== null;
-
   return (
     <ScrollView
       style={{ backgroundColor: theme.bg }}
       contentContainerStyle={styles.content}
     >
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+      <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <AppText.Sans preset="body" color={theme.ink2}>← Back</AppText.Sans>
       </TouchableOpacity>
 
       <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.title}>Practice</AppText.Serif>
-      <AppText.Sans preset="body" color={theme.ink2} style={styles.subtitle}>Choose a category to begin</AppText.Sans>
+      <AppText.Sans preset="body" color={theme.ink3} style={styles.subtitle}>
+        Choose a section to begin
+      </AppText.Sans>
 
-      <View style={styles.categoryGrid}>
+      {/* ── Section chips ── */}
+      <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.sectionLabel}>SECTION</AppText.Mono>
+      <View style={styles.chipRow}>
         {CATEGORIES.map((cat) => {
           const isSelected = selectedCategory === cat.key;
           return (
             <TouchableOpacity
               key={cat.key}
               style={[
-                styles.categoryCard,
-                { borderColor: isSelected ? theme.ink : theme.line, backgroundColor: isSelected ? theme.bg2 : theme.bg },
+                styles.chip,
+                {
+                  backgroundColor: isSelected ? theme.accentSoft : theme.bg2,
+                  borderColor: isSelected ? theme.accent : theme.line,
+                },
               ]}
               onPress={() => setSelectedCategory(cat.key)}
+              activeOpacity={0.7}
             >
-              <AppText.Sans style={styles.categoryEmoji}>{cat.emoji}</AppText.Sans>
-              <AppText.Sans preset="bodyMed" color={isSelected ? theme.ink : theme.ink2} style={styles.categoryLabel}>
+              <AppText.Mono
+                preset="chipLabel"
+                color={isSelected ? theme.accentDeep : theme.ink2}
+                style={styles.chipLabel}
+              >
+                {cat.sub}
+              </AppText.Mono>
+              <AppText.Sans
+                preset="small"
+                color={isSelected ? theme.accentDeep : theme.ink3}
+                numberOfLines={2}
+                style={styles.chipSub}
+              >
                 {cat.label}
               </AppText.Sans>
             </TouchableOpacity>
@@ -61,21 +78,23 @@ export default function PracticeHomeScreen({ navigation }: Props) {
         })}
       </View>
 
-      <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.sectionLabel}>Difficulty</AppText.Mono>
-      <View style={styles.difficultyRow}>
+      {/* ── Difficulty chips ── */}
+      <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.sectionLabel}>DIFFICULTY</AppText.Mono>
+      <View style={styles.diffRow}>
         {DIFFICULTIES.map((d) => {
           const isSelected = selectedDifficulty === d.value;
           return (
             <TouchableOpacity
               key={d.label}
               style={[
-                styles.difficultyChip,
+                styles.diffChip,
                 {
-                  borderColor: isSelected ? theme.ink : theme.line,
                   backgroundColor: isSelected ? theme.ink : 'transparent',
+                  borderColor: isSelected ? theme.ink : theme.line,
                 },
               ]}
               onPress={() => setSelectedDifficulty(d.value)}
+              activeOpacity={0.7}
             >
               <AppText.Sans preset="label" color={isSelected ? theme.bg : theme.ink2}>
                 {d.label}
@@ -86,16 +105,17 @@ export default function PracticeHomeScreen({ navigation }: Props) {
       </View>
 
       <Button
-        label="Start Practice"
+        label="Begin Practice →"
         onPress={() => {
-          if (canStart) {
+          if (selectedCategory) {
             navigation.navigate('Question', {
-              category: selectedCategory!,
+              category: selectedCategory,
               difficulty: selectedDifficulty,
             });
           }
         }}
-        disabled={!canStart}
+        disabled={selectedCategory === null}
+        style={styles.cta}
       />
     </ScrollView>
   );
@@ -105,49 +125,32 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 24,
     paddingTop: 60,
-    paddingBottom: 40,
+    paddingBottom: 48,
+    gap: 0,
   },
-  backButton: {
-    marginBottom: 24,
-  },
-  title: {
-    marginBottom: 6,
-  },
-  subtitle: {
-    marginBottom: 32,
-  },
-  categoryGrid: {
-    gap: 12,
-    marginBottom: 32,
-  },
-  categoryCard: {
-    borderWidth: 1.5,
+  title: { marginTop: 24, marginBottom: 6 },
+  subtitle: { marginBottom: 32 },
+  sectionLabel: { marginBottom: 10 },
+
+  // Section chips
+  chipRow: { gap: 8, marginBottom: 32 },
+  chip: {
+    borderWidth: 1,
     borderRadius: 12,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  categoryEmoji: {
-    fontSize: 28,
-  },
-  categoryLabel: {
-    flex: 1,
-  },
-  sectionLabel: {
-    textTransform: 'uppercase',
-    marginBottom: 12,
-  },
-  difficultyRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 40,
-  },
-  difficultyChip: {
-    borderWidth: 1.5,
-    borderRadius: 20,
+  chipLabel: { marginBottom: 4 },
+  chipSub: {},
+
+  // Difficulty chips
+  diffRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 40 },
+  diffChip: {
+    borderWidth: 1,
+    borderRadius: 99,
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
+
+  cta: {},
 });

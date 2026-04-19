@@ -4,10 +4,15 @@ import {
   ActivityIndicator, Modal, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { leaderboardService } from '../services/leaderboard';
 import TierBadge from '../components/TierBadge';
+import Avatar from '../components/Avatar';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
+import { MainTabParamList } from '../navigation';
+
+type Props = BottomTabScreenProps<MainTabParamList, 'Ranks'>;
 
 type Tab = 'global' | 'around' | 'tier';
 const TIERS = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
@@ -30,7 +35,7 @@ interface LeaderboardData {
 }
 
 function getMedal(rank: number) {
-  if (rank === 1) return '👑';
+  if (rank === 1) return '🥇';
   if (rank === 2) return '🥈';
   if (rank === 3) return '🥉';
   return null;
@@ -42,23 +47,43 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
   return (
     <View style={[
       styles.row,
-      { borderBottomColor: theme.line2 },
-      entry.isCurrentUser && { backgroundColor: theme.bg2 },
+      { backgroundColor: theme.card, borderColor: entry.isCurrentUser ? theme.accent : theme.line },
+      entry.isCurrentUser && { backgroundColor: theme.accentSoft },
     ]}>
-      <AppText.Mono preset="mono" color={theme.ink} style={styles.rank}>{medal ?? `#${entry.rank}`}</AppText.Mono>
+      {/* Rank */}
+      <View style={styles.rankCol}>
+        {medal
+          ? <AppText.Sans preset="body" style={styles.medalGlyph}>{medal}</AppText.Sans>
+          : <AppText.Mono preset="mono" color={theme.ink3}>#{entry.rank}</AppText.Mono>}
+      </View>
+
+      {/* Avatar */}
+      <Avatar
+        name={entry.displayName}
+        size="sm"
+        variant={entry.isCurrentUser ? 'you' : 'opponent'}
+      />
+
+      {/* Name + badge */}
       <View style={styles.nameCol}>
-        <AppText.Sans preset="bodyMed" color={theme.ink} numberOfLines={1}>
-          {entry.displayName}
-          {entry.isCurrentUser ? '  (You)' : ''}
-        </AppText.Sans>
+        <AppText.Serif
+          preset="italic"
+          color={theme.ink}
+          numberOfLines={1}
+          style={styles.nameText}
+        >
+          {entry.displayName}{entry.isCurrentUser ? ' (You)' : ''}
+        </AppText.Serif>
         <TierBadge tier={entry.rankTier} small />
       </View>
-      <AppText.Mono preset="mono" color={theme.ink} style={styles.elo}>{entry.eloRating}</AppText.Mono>
+
+      {/* Rating */}
+      <AppText.Mono preset="mono" color={theme.ink2}>◆ {entry.eloRating}</AppText.Mono>
     </View>
   );
 }
 
-export default function LeaderboardScreen() {
+export default function LeaderboardScreen(_: Props) {
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>('global');
   const [selectedTier, setSelectedTier] = useState('SILVER');
@@ -99,69 +124,79 @@ export default function LeaderboardScreen() {
   }
 
   const gamesNeeded = activeTab !== 'tier' && data?.currentUserRank == null
-    ? 5 - (data?.entries.find(e => e.isCurrentUser)?.gamesPlayed ?? 0)
+    ? Math.max(0, 5 - (data?.entries.find(e => e.isCurrentUser)?.gamesPlayed ?? 0))
     : null;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
-        <AppText.Serif preset="heroSerif" color={theme.ink}>Leaderboard</AppText.Serif>
+        <AppText.Serif preset="heroSerif" color={theme.ink}>Ranks</AppText.Serif>
       </View>
 
-      <View style={styles.tabs}>
+      {/* ── Tab control ── */}
+      <View style={[styles.tabs, { borderBottomColor: theme.line }]}>
         {(['global', 'around', 'tier'] as Tab[]).map((tab) => {
           const isActive = activeTab === tab;
-          const label = tab === 'global' ? 'Global' : tab === 'around' ? 'Around Me'
-            : isActive ? `${selectedTier} ▾` : 'By Tier ▾';
+          const label = tab === 'global' ? 'Global'
+            : tab === 'around' ? 'Around Me'
+            : isActive ? `${selectedTier[0]}${selectedTier.slice(1).toLowerCase()} ▾` : 'By Tier ▾';
           return (
             <TouchableOpacity
               key={tab}
-              style={[
-                styles.tab,
-                { backgroundColor: isActive ? theme.ink : theme.bg2 },
-              ]}
+              style={[styles.tab, isActive && [styles.tabActive, { borderBottomColor: theme.ink }]]}
               onPress={() => {
                 if (tab !== activeTab) switchTab(tab);
                 else if (tab === 'tier') setTierPickerVisible(true);
               }}
             >
-              <AppText.Mono preset="chipLabel" color={isActive ? theme.bg : theme.ink2}>
-                {label}
+              <AppText.Mono
+                preset="chipLabel"
+                color={isActive ? theme.ink : theme.ink3}
+                style={styles.tabLabel}
+              >
+                {label.toUpperCase()}
               </AppText.Mono>
             </TouchableOpacity>
           );
         })}
       </View>
 
+      {/* ── Rank banner ── */}
       {data?.currentUserRank != null && (
         <View style={[styles.rankBanner, { backgroundColor: theme.accentSoft }]}>
-          <AppText.Sans preset="label" color={theme.accentDeep}>
-            Your rank: #{data.currentUserRank} of {data.totalRanked}
-          </AppText.Sans>
+          <AppText.Mono preset="eyebrow" color={theme.accentDeep}>
+            YOUR RANK · #{data.currentUserRank} OF {data.totalRanked}
+          </AppText.Mono>
         </View>
       )}
 
+      {/* ── Unranked nudge ── */}
       {data != null && data.currentUserRank == null && gamesNeeded != null && gamesNeeded > 0 && (
-        <View style={[styles.unrankedBanner, { backgroundColor: theme.amberSoft }]}>
-          <AppText.Sans preset="label" color={theme.amberDeep}>
-            Play {gamesNeeded} more match{gamesNeeded !== 1 ? 'es' : ''} to join the leaderboard
-          </AppText.Sans>
+        <View style={[styles.rankBanner, { backgroundColor: theme.bg2 }]}>
+          <AppText.Mono preset="eyebrow" color={theme.ink3}>
+            PLAY {gamesNeeded} MORE MATCH{gamesNeeded !== 1 ? 'ES' : ''} TO EARN YOUR RANK
+          </AppText.Mono>
         </View>
       )}
 
       {loading ? (
-        <ActivityIndicator style={styles.loader} size="large" color={theme.ink} />
+        <ActivityIndicator style={styles.loader} color={theme.ink3} />
       ) : (
         <FlatList
           data={data?.entries ?? []}
           keyExtractor={(item) => item.userId}
           renderItem={({ item }) => <LeaderboardRow entry={item} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <AppText.Sans preset="bodyMed" color={theme.ink}>No players ranked yet.</AppText.Sans>
-              <AppText.Sans preset="body" color={theme.ink2}>
-                Play 5 matches to join the leaderboard.
+              <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.emptyHeading}>
+                {activeTab === 'tier' ? 'Be the first.' : 'Play a few matches\nto earn your rank.'}
+              </AppText.Serif>
+              <AppText.Sans preset="body" color={theme.ink3} style={styles.emptyBody}>
+                {activeTab === 'tier'
+                  ? `No ${selectedTier[0]}${selectedTier.slice(1).toLowerCase()} players yet.`
+                  : 'Your position appears here once you have 5 matches.'}
               </AppText.Sans>
             </View>
           }
@@ -169,20 +204,23 @@ export default function LeaderboardScreen() {
         />
       )}
 
+      {/* ── Tier picker modal ── */}
       <Modal visible={tierPickerVisible} transparent animationType="fade">
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setTierPickerVisible(false)}
         >
-          <View style={[styles.tierPicker, { backgroundColor: theme.bg, borderColor: theme.line }]}>
-            <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.tierPickerTitle}>Select Tier</AppText.Serif>
+          <View style={[styles.tierPicker, { backgroundColor: theme.card, borderColor: theme.line }]}>
+            <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.tierPickerTitle}>
+              SELECT TIER
+            </AppText.Mono>
             {TIERS.map((tier) => (
               <TouchableOpacity
                 key={tier}
                 style={[
                   styles.tierOption,
-                  selectedTier === tier && { backgroundColor: theme.bg2 },
+                  selectedTier === tier && { backgroundColor: theme.accentSoft },
                 ]}
                 onPress={() => {
                   setSelectedTier(tier);
@@ -206,47 +244,60 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: 60,
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
+
+  // Tabs
   tabs: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    gap: 8,
+    borderBottomWidth: 1,
     marginBottom: 12,
   },
   tab: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 10,
     alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
+  tabActive: { borderBottomWidth: 2 },
+  tabLabel: {},
+
+  // Banners
   rankBanner: {
     marginHorizontal: 20,
-    marginBottom: 8,
+    marginBottom: 10,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
-  unrankedBanner: {
-    marginHorizontal: 20,
-    marginBottom: 8,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
+
+  // List
   loader: { flex: 1, marginTop: 60 },
-  list: { paddingHorizontal: 20, paddingBottom: 40 },
+  list: { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 4 },
+
+  // Row
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
   },
-  rank: { width: 36 },
+  rankCol: { width: 32, alignItems: 'center' },
+  medalGlyph: { fontSize: 18 },
   nameCol: { flex: 1, gap: 4 },
-  elo: {},
-  empty: { alignItems: 'center', paddingTop: 60, gap: 8 },
+  nameText: { fontSize: 15, lineHeight: 18 },
+
+  // Empty
+  empty: { alignItems: 'center', paddingTop: 60, gap: 12, paddingHorizontal: 20 },
+  emptyHeading: { textAlign: 'center' },
+  emptyBody: { textAlign: 'center' },
+
+  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
