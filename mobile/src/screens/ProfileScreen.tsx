@@ -10,10 +10,12 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { MainTabParamList, RootStackParamList } from '../navigation';
 import TierBadge from '../components/TierBadge';
+import Avatar from '../components/Avatar';
+import Card from '../components/Card';
 import Button from '../components/Button';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
-import { ELO_TIERS, getTier } from '../constants';
+import { getTier, getTierToNext } from '../constants';
 
 interface UserProfile {
   id: string;
@@ -24,40 +26,11 @@ interface UserProfile {
   rankTier: string;
 }
 
-function TierProgressBar({ eloRating }: { eloRating: number; rankTier: string }) {
-  const { theme } = useTheme();
-  const tier = getTier(eloRating);
-  const isDiamond = tier.max === Infinity;
-  const progress = isDiamond ? 1 : (eloRating - tier.min) / (tier.max - tier.min + 1);
-  const nextTier = isDiamond ? null : ELO_TIERS[ELO_TIERS.indexOf(tier) + 1];
-
-  return (
-    <View style={progressStyles.container}>
-      <View style={progressStyles.labelRow}>
-        <AppText.Sans preset="small" color={theme.ink3}>
-          {isDiamond ? 'Max Rank' : `${eloRating} / ${tier.max + 1} to ${nextTier?.name}`}
-        </AppText.Sans>
-        <AppText.Mono preset="mono" color={tier.color} style={progressStyles.pct}>
-          {isDiamond ? '100%' : `${Math.round(progress * 100)}%`}
-        </AppText.Mono>
-      </View>
-      <View style={[progressStyles.track, { backgroundColor: theme.bg2 }]}>
-        <View style={[
-          progressStyles.fill,
-          { width: `${Math.round(progress * 100)}%` as `${number}%`, backgroundColor: tier.color },
-        ]} />
-      </View>
-    </View>
-  );
+interface MatchStats {
+  totalGames: number;
+  winRate: number;   // 0–1 fraction
+  peakElo: number;
 }
-
-const progressStyles = StyleSheet.create({
-  container: { width: '100%', marginBottom: 32 },
-  labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  pct: { fontWeight: '700' },
-  track: { height: 6, borderRadius: 99, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: 99 },
-});
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Me'>,
@@ -68,6 +41,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const { signOut } = useAuth();
   const { theme } = useTheme();
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [stats, setStats] = useState<MatchStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -78,25 +52,29 @@ export default function ProfileScreen({ navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
-  const fetchProfile = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const res = await api.get('/auth/me');
-      setProfile(res.data.data);
+      const [profileRes, statsRes] = await Promise.all([
+        api.get('/auth/me'),
+        api.get('/games/stats').catch(() => null),
+      ]);
+      setProfile(profileRes.data.data);
       setError('');
+      if (statsRes) setStats(statsRes.data.data);
     } catch {
       setError('Failed to load profile.');
     }
   }, []);
 
   useEffect(() => {
-    fetchProfile().finally(() => setLoading(false));
-  }, [fetchProfile]);
+    fetchData().finally(() => setLoading(false));
+  }, [fetchData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchProfile();
+    await fetchData();
     setRefreshing(false);
-  }, [fetchProfile]);
+  }, [fetchData]);
 
   function openEdit() {
     setEditName(profile?.displayName ?? '');
@@ -105,10 +83,7 @@ export default function ProfileScreen({ navigation }: Props) {
   }
 
   async function saveDisplayName() {
-    if (!editName.trim()) {
-      setEditError('Name cannot be empty.');
-      return;
-    }
+    if (!editName.trim()) { setEditError('Name cannot be empty.'); return; }
     setSaving(true);
     setEditError('');
     try {
@@ -126,7 +101,7 @@ export default function ProfileScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator size="large" color={theme.ink} />
+        <ActivityIndicator color={theme.ink3} />
       </View>
     );
   }
@@ -134,74 +109,137 @@ export default function ProfileScreen({ navigation }: Props) {
   if (error) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <AppText.Sans preset="body" color={theme.coral}>{error}</AppText.Sans>
+        <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.errorHeading}>Couldn't load.</AppText.Serif>
+        <AppText.Sans preset="body" color={theme.ink3} style={styles.errorBody}>Check your connection and try again.</AppText.Sans>
+        <Button
+          label="Retry"
+          onPress={() => { setError(''); setLoading(true); fetchData().finally(() => setLoading(false)); }}
+          style={styles.retryBtn}
+        />
       </View>
     );
   }
+
+  const tier = profile ? getTier(profile.eloRating) : null;
+  const isDiamond = tier?.max === Infinity;
+  const progress = tier && !isDiamond
+    ? (profile!.eloRating - tier.min) / (tier.max - tier.min + 1)
+    : 1;
+  const winRatePct = stats ? Math.round(stats.winRate * 100) : null;
 
   return (
     <>
       <ScrollView
         style={{ backgroundColor: theme.bg }}
         contentContainerStyle={styles.container}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
       >
+        {/* ── Hero ── */}
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => {
+            const next = debugTaps + 1;
+            setDebugTaps(next);
+            if (next >= 5) { setDebugTaps(0); navigation.navigate('Debug'); }
+          }}
+        >
+          <Avatar name={profile?.displayName ?? '?'} size="xl" />
+        </TouchableOpacity>
+
+        {/* Name + edit */}
         <View style={styles.nameRow}>
-          <TouchableOpacity
-            onPress={() => {
-              const next = debugTaps + 1;
-              setDebugTaps(next);
-              if (next >= 5) { setDebugTaps(0); navigation.navigate('Debug'); }
-            }}
-            activeOpacity={1}
-          >
-            <AppText.Serif preset="heroSerif" color={theme.ink}>{profile?.displayName ?? 'Anonymous'}</AppText.Serif>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={openEdit}
-            style={[styles.editButton, { borderColor: theme.line }]}
-          >
-            <AppText.Sans preset="label" color={theme.ink2}>Edit</AppText.Sans>
+          <AppText.Serif preset="h1Serif" color={theme.ink}>
+            {profile?.displayName ?? 'Anonymous'}
+          </AppText.Serif>
+          <TouchableOpacity onPress={openEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <AppText.Sans preset="label" color={theme.ink3}>edit</AppText.Sans>
           </TouchableOpacity>
         </View>
+
+        {/* Rating + tier badge */}
+        <View style={styles.ratingRow}>
+          <AppText.Mono preset="mono" color={theme.ink2}>◆ {profile?.eloRating}</AppText.Mono>
+          {profile && <TierBadge tier={profile.rankTier} small />}
+        </View>
+
+        {/* ── 3-stat Card ── */}
+        <Card style={styles.statsCard}>
+          <View style={styles.statBlock}>
+            <AppText.Serif preset="statVal" color={theme.ink}>
+              {stats?.totalGames ?? profile?.gamesPlayed ?? '—'}
+            </AppText.Serif>
+            <AppText.Mono preset="eyebrow" color={theme.ink3}>matches</AppText.Mono>
+          </View>
+          <View style={[styles.statDivider, { backgroundColor: theme.line }]} />
+          <View style={styles.statBlock}>
+            <AppText.Serif preset="statVal" color={theme.ink}>
+              {winRatePct !== null ? `${winRatePct}%` : '—'}
+            </AppText.Serif>
+            <AppText.Mono preset="eyebrow" color={theme.ink3}>win rate</AppText.Mono>
+          </View>
+          <View style={[styles.statDivider, { backgroundColor: theme.line }]} />
+          <View style={styles.statBlock}>
+            <AppText.Serif preset="statVal" color={theme.ink}>
+              {stats?.peakElo ? `◆ ${stats.peakElo}` : '—'}
+            </AppText.Serif>
+            <AppText.Mono preset="eyebrow" color={theme.ink3}>peak</AppText.Mono>
+          </View>
+        </Card>
+
+        {/* ── Tier progress hairline ── */}
         {profile && (
-          <View style={styles.tierBadgeRow}>
-            <TierBadge tier={profile.rankTier} />
+          <View style={styles.progressWrap}>
+            <View style={[styles.progressTrack, { backgroundColor: theme.line }]}>
+              <View style={[
+                styles.progressFill,
+                {
+                  width: `${Math.round(progress * 100)}%` as `${number}%`,
+                  backgroundColor: tier?.color ?? theme.accent,
+                },
+              ]} />
+            </View>
+            <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.progressLabel}>
+              {getTierToNext(profile.eloRating)}
+            </AppText.Mono>
           </View>
         )}
-        <AppText.Sans preset="body" color={theme.ink2} style={styles.email}>{profile?.email}</AppText.Sans>
 
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <AppText.Mono preset="deltaLg" color={theme.ink}>{profile?.eloRating}</AppText.Mono>
-            <AppText.Sans preset="label" color={theme.ink2} style={styles.statLabel}>Elo Rating</AppText.Sans>
-          </View>
-          <View style={styles.stat}>
-            <AppText.Mono preset="deltaLg" color={theme.ink}>{profile?.gamesPlayed}</AppText.Mono>
-            <AppText.Sans preset="label" color={theme.ink2} style={styles.statLabel}>Games Played</AppText.Sans>
-          </View>
+        {/* ── List rows ── */}
+        <View style={styles.listSection}>
+          <TouchableOpacity
+            style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
+            onPress={() => navigation.navigate('MatchHistory')}
+            activeOpacity={0.7}
+          >
+            <AppText.Sans preset="bodyMed" color={theme.ink}>Match History</AppText.Sans>
+            <AppText.Sans preset="body" color={theme.ink3}>→</AppText.Sans>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
+            activeOpacity={0.7}
+          >
+            <AppText.Sans preset="bodyMed" color={theme.ink}>Settings</AppText.Sans>
+            <AppText.Sans preset="body" color={theme.ink3}>→</AppText.Sans>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
+            onPress={signOut}
+            activeOpacity={0.7}
+          >
+            <AppText.Sans preset="bodyMed" color={theme.coral}>Sign Out</AppText.Sans>
+          </TouchableOpacity>
         </View>
-
-        {profile && <TierProgressBar eloRating={profile.eloRating} rankTier={profile.rankTier} />}
-
-        <Button
-          label="Match History"
-          variant="ghost"
-          onPress={() => navigation.navigate('MatchHistory')}
-          style={styles.buttonSpacing}
-        />
-        <Button
-          label="Sign Out"
-          variant="ghost"
-          onPress={signOut}
-          style={styles.buttonSpacing}
-        />
       </ScrollView>
 
+      {/* ── Edit name modal ── */}
       <Modal visible={editVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: theme.bg, borderColor: theme.line }]}>
-            <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.modalTitle}>Edit Display Name</AppText.Serif>
+            <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.modalTitle}>
+              Edit Display Name
+            </AppText.Serif>
             <TextInput
               style={[styles.modalInput, {
                 borderColor: theme.line,
@@ -215,7 +253,9 @@ export default function ProfileScreen({ navigation }: Props) {
               maxLength={50}
               placeholderTextColor={theme.ink3}
             />
-            {editError ? <AppText.Sans preset="small" color={theme.coral} style={styles.modalError}>{editError}</AppText.Sans> : null}
+            {editError
+              ? <AppText.Sans preset="small" color={theme.coral} style={styles.modalError}>{editError}</AppText.Sans>
+              : null}
             <View style={styles.modalActions}>
               <Button
                 label="Cancel"
@@ -243,44 +283,49 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 32,
   },
   container: {
-    paddingHorizontal: 32,
-    paddingTop: 80,
-    paddingBottom: 40,
+    alignItems: 'center',
+    paddingTop: 72,
+    paddingBottom: 48,
+    paddingHorizontal: 20,
+    gap: 14,
   },
-  nameRow: {
+
+  // Hero
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
+  // Stats card
+  statsCard: { flexDirection: 'row', alignItems: 'center', padding: 20, width: '100%' },
+  statBlock: { flex: 1, alignItems: 'center', gap: 6 },
+  statDivider: { width: 1, height: 36, marginHorizontal: 4 },
+
+  // Progress
+  progressWrap: { width: '100%', gap: 6 },
+  progressTrack: { height: 2, borderRadius: 99, overflow: 'hidden', width: '100%' },
+  progressFill: { height: '100%', borderRadius: 99 },
+  progressLabel: { textAlign: 'right' },
+
+  // List rows
+  listSection: { width: '100%', gap: 8 },
+  listRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 4,
-  },
-  editButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderRadius: 12,
     borderWidth: 1,
   },
-  email: {
-    marginBottom: 40,
-  },
-  tierBadgeRow: {
-    marginBottom: 24,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 24,
-    marginBottom: 16,
-  },
-  stat: {
-    alignItems: 'center',
-  },
-  statLabel: {
-    marginTop: 4,
-  },
-  buttonSpacing: {
-    marginBottom: 12,
-  },
+
+  // Error state
+  errorHeading: { marginBottom: 8 },
+  errorBody: { marginBottom: 24, textAlign: 'center' },
+  retryBtn: { width: 120 },
+
+  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -294,9 +339,7 @@ const styles = StyleSheet.create({
     padding: 24,
     width: '100%',
   },
-  modalTitle: {
-    marginBottom: 16,
-  },
+  modalTitle: { marginBottom: 16 },
   modalInput: {
     borderWidth: 1,
     borderRadius: 8,
@@ -305,15 +348,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 8,
   },
-  modalError: {
-    marginBottom: 8,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  modalActionBtn: {
-    flex: 1,
-  },
+  modalError: { marginBottom: 8 },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  modalActionBtn: { flex: 1 },
 });

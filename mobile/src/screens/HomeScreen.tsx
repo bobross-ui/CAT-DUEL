@@ -12,7 +12,7 @@ import Avatar from '../components/Avatar';
 import Card from '../components/Card';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
-import { ELO_TIERS, getTier } from '../constants';
+import { getTier, getTierToNext } from '../constants';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Home'>,
@@ -40,13 +40,6 @@ function getStreakCopy(streak: number) {
   if (streak <= 1) return 'Ready to climb?';
   if (streak < 7) return `${streak}-day streak`;
   return `${streak}-day streak · on fire`;
-}
-
-function getTierToNext(eloRating: number) {
-  const tier = getTier(eloRating);
-  if (tier.max === Infinity) return 'max rank';
-  const next = ELO_TIERS[ELO_TIERS.indexOf(tier) + 1];
-  return `${tier.max + 1 - eloRating} to ${next?.name ?? 'next'}`;
 }
 
 export default function HomeScreen({ navigation }: Props) {

@@ -17,3 +17,10 @@ export const ELO_TIERS = [
 export function getTier(eloRating: number) {
   return ELO_TIERS.find((t) => eloRating >= t.min && eloRating <= t.max) ?? ELO_TIERS[0];
 }
+
+export function getTierToNext(eloRating: number): string {
+  const tier = getTier(eloRating);
+  if (tier.max === Infinity) return 'max rank';
+  const next = ELO_TIERS[ELO_TIERS.indexOf(tier) + 1];
+  return `${tier.max + 1 - eloRating} to ${next?.name ?? 'next'}`;
+}
