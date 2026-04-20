@@ -10,6 +10,8 @@ import api from '../services/api';
 import TierBadge from '../components/TierBadge';
 import Avatar from '../components/Avatar';
 import AppText from '../components/Text';
+import ScreenTransitionView from '../components/ScreenTransitionView';
+import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MatchHistory'>;
@@ -46,6 +48,7 @@ function formatMatchTime(iso: string): string {
 
 export default function MatchHistoryScreen({ navigation }: Props) {
   const { theme } = useTheme();
+  const { playHaptic } = useAppPreferences();
   const [entries, setEntries] = useState<MatchEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,10 +74,11 @@ export default function MatchHistoryScreen({ navigation }: Props) {
   );
 
   const onRefresh = useCallback(async () => {
+    void playHaptic('pull_refresh');
     setRefreshing(true);
     await fetchPage(1, true);
     setRefreshing(false);
-  }, [fetchPage]);
+  }, [fetchPage, playHaptic]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || page >= totalPages) return;
@@ -90,7 +94,7 @@ export default function MatchHistoryScreen({ navigation }: Props) {
     delta > 0 ? theme.accentDeep : delta < 0 ? theme.coral : theme.ink3;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <AppText.Sans preset="body" color={theme.ink}>←</AppText.Sans>
@@ -170,7 +174,7 @@ export default function MatchHistoryScreen({ navigation }: Props) {
           contentContainerStyle={styles.list}
         />
       )}
-    </View>
+    </ScreenTransitionView>
   );
 }
 

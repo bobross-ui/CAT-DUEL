@@ -10,6 +10,8 @@ import { RootStackParamList, GameFinishedPayload, ClientQuestion as NavClientQue
 import { getGameSocket, releaseGameSocket } from '../services/socket';
 import { useAuth } from '../context/AuthContext';
 import AppText from '../components/Text';
+import ScreenTransitionView from '../components/ScreenTransitionView';
+import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
@@ -54,17 +56,28 @@ function formatTime(s: number) {
 }
 
 // ── Blinking dot — 1.4s period ────────────────────────────────────────────────
-function BlinkingDot({ color }: { color: string }) {
+function BlinkingDot({ color, animate }: { color: string; animate: boolean }) {
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    Animated.loop(
+    if (!animate) {
+      opacity.setValue(1);
+      return;
+    }
+
+    const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 0.3, duration: 700, useNativeDriver: true }),
         Animated.timing(opacity, { toValue: 1,   duration: 700, useNativeDriver: true }),
       ]),
-    ).start();
-    return () => opacity.stopAnimation();
-  }, []);
+    );
+    loop.start();
+
+    return () => {
+      loop.stop();
+      opacity.stopAnimation(() => opacity.setValue(1));
+    };
+  }, [animate, opacity]);
+
   return (
     <Animated.View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color, opacity }} />
   );
@@ -75,6 +88,7 @@ export default function DuelScreen({ route, navigation }: Props) {
   const { gameId, opponent, initialState } = route.params;
   const { user } = useAuth();
   const { theme } = useTheme();
+  const { playHaptic, reduceMotionEnabled } = useAppPreferences();
   const insets = useSafeAreaInsets();
 
   const [ds, setDs] = useState<DuelState>({
@@ -87,6 +101,7 @@ export default function DuelScreen({ route, navigation }: Props) {
   const socketRef         = useRef<Socket | null>(null);
   const questionStartTime = useRef(Date.now());
   const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerWarningSentRef = useRef(initialState.duration <= 60);
 
   // Animations
   const questionOpacity    = useRef(new Animated.Value(1)).current;
@@ -94,6 +109,7 @@ export default function DuelScreen({ route, navigation }: Props) {
   const opponentScoreScale = useRef(new Animated.Value(1)).current;
 
   function pulseScore(anim: Animated.Value) {
+    if (reduceMotionEnabled) return;
     Animated.sequence([
       Animated.timing(anim, { toValue: 1.15, duration: 90, useNativeDriver: true }),
       Animated.timing(anim, { toValue: 1,    duration: 90, useNativeDriver: true }),
@@ -121,6 +137,16 @@ export default function DuelScreen({ route, navigation }: Props) {
         question, questionNumber, totalQuestions,
       }: { question: ClientQuestion; questionNumber: number; totalQuestions: number }) => {
         if (!mounted) return;
+        if (reduceMotionEnabled) {
+          questionStartTime.current = Date.now();
+          questionOpacity.setValue(1);
+          setDs(prev => ({
+            ...prev, currentQuestion: question, questionNumber, totalQuestions,
+            selectedAnswer: null, showFeedback: false,
+          }));
+          return;
+        }
+
         Animated.timing(questionOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
           if (!mounted) return;
           questionStartTime.current = Date.now();
@@ -161,22 +187,42 @@ export default function DuelScreen({ route, navigation }: Props) {
       });
 
       socket.on('game:sync', ({
-        yourScore, opponentScore, timeRemaining, currentQuestion, questionNumber, totalQuestions,
+        yourScore,
+        opponentScore,
+        timeRemaining,
+        currentQuestion,
+        questionNumber,
+        totalQuestions,
+        opponentProgress,
       }: {
-        yourScore: number; opponentScore: number; timeRemaining: number;
-        currentQuestion: ClientQuestion; questionNumber: number; totalQuestions: number;
+        yourScore: number;
+        opponentScore: number;
+        timeRemaining: number;
+        currentQuestion: ClientQuestion;
+        questionNumber: number;
+        totalQuestions: number;
+        opponentProgress: OpponentProgress | null;
       }) => {
         if (!mounted) return;
         questionStartTime.current = Date.now();
         questionOpacity.setValue(1);
         setDs(prev => ({
           ...prev, yourScore, opponentScore, timeRemaining,
-          currentQuestion, questionNumber, totalQuestions, selectedAnswer: null, showFeedback: false,
+          currentQuestion,
+          questionNumber,
+          totalQuestions,
+          opponentProgress,
+          selectedAnswer: null,
+          showFeedback: false,
         }));
       });
 
       socket.on('game:finished', (results: GameFinishedPayload) => {
         if (!mounted) return;
+        if (!results.isDraw) {
+          const didWin = results.winnerId === results.currentUserId;
+          void playHaptic(didWin ? 'game_won' : 'game_lost');
+        }
         socket.disconnect();
         navigation.replace('DuelResults', { results, userId: results.currentUserId, opponent });
       });
@@ -195,7 +241,13 @@ export default function DuelScreen({ route, navigation }: Props) {
       socketRef.current = null;
       releaseGameSocket();
     };
-  }, [gameId]);
+  }, [gameId, navigation, opponent, playHaptic, questionOpacity, reduceMotionEnabled]);
+
+  useEffect(() => {
+    if (ds.timeRemaining > 60 || timerWarningSentRef.current) return;
+    timerWarningSentRef.current = true;
+    void playHaptic('timer_warning');
+  }, [ds.timeRemaining, playHaptic]);
 
   useEffect(() => {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => { handleQuit(); return true; });
@@ -204,6 +256,7 @@ export default function DuelScreen({ route, navigation }: Props) {
 
   function submitAnswer() {
     if (ds.selectedAnswer === null || !ds.currentQuestion) return;
+    void playHaptic('answer_submit');
     socketRef.current?.emit('answer:submit', {
       gameId,
       questionId: ds.currentQuestion.id,
@@ -231,7 +284,7 @@ export default function DuelScreen({ route, navigation }: Props) {
   const category        = [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ');
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
+    <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
 
 
       {/* ── HUD ── */}
@@ -259,7 +312,7 @@ export default function DuelScreen({ route, navigation }: Props) {
             <View style={styles.progressPing}>
               {opponentDone
                 ? <View style={[styles.pingDot, { backgroundColor: theme.accent }]} />
-                : <BlinkingDot color={theme.accent} />
+                : <BlinkingDot color={theme.accent} animate={!reduceMotionEnabled} />
               }
               <AppText.Sans preset="small" color={theme.ink3} numberOfLines={1} style={{ flexShrink: 1 }}>
                 {opponentDone
@@ -365,7 +418,7 @@ export default function DuelScreen({ route, navigation }: Props) {
         )}
       </View>
 
-    </View>
+    </ScreenTransitionView>
   );
 }
 

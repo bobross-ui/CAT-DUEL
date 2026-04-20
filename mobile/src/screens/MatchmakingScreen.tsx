@@ -8,6 +8,8 @@ import api from '../services/api';
 import Avatar from '../components/Avatar';
 import AppText from '../components/Text';
 import Button from '../components/Button';
+import ScreenTransitionView from '../components/ScreenTransitionView';
+import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Matchmaking'>;
@@ -16,25 +18,41 @@ type Phase = 'CONNECTING' | 'SEARCHING' | 'FOUND';
 const RING_SIZE = 200;
 
 // ── Ripple ring — animated outward pulse ──────────────────────────────────────
-function RippleRing({ delay, color }: { delay: number; color: string }) {
+function RippleRing({
+  delay,
+  color,
+  animate,
+}: {
+  delay: number;
+  color: string;
+  animate: boolean;
+}) {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!animate) {
+      anim.setValue(0.35);
+      return;
+    }
+
+    let loop: Animated.CompositeAnimation | null = null;
     const timer = setTimeout(() => {
-      Animated.loop(
+      loop = Animated.loop(
         Animated.timing(anim, {
           toValue: 1,
           duration: 2400,
           useNativeDriver: true,
           easing: Easing.out(Easing.ease),
         }),
-      ).start();
+      );
+      loop.start();
     }, delay);
     return () => {
       clearTimeout(timer);
-      anim.stopAnimation();
+      loop?.stop();
+      anim.stopAnimation(() => anim.setValue(0));
     };
-  }, []);
+  }, [animate, anim, delay]);
 
   const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1.5] });
   const opacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 0] });
@@ -56,6 +74,7 @@ function RippleRing({ delay, color }: { delay: number; color: string }) {
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function MatchmakingScreen({ navigation }: Props) {
   const { theme } = useTheme();
+  const { playHaptic, reduceMotionEnabled } = useAppPreferences();
   const [phase, setPhase] = useState<Phase>('CONNECTING');
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<{ displayName: string | null; eloRating: number } | null>(null);
@@ -67,13 +86,24 @@ export default function MatchmakingScreen({ navigation }: Props) {
   // Pulsing dot for status chip
   const dotOpacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    Animated.loop(
+    if (reduceMotionEnabled) {
+      dotOpacity.setValue(1);
+      return;
+    }
+
+    const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(dotOpacity, { toValue: 0.25, duration: 700, useNativeDriver: true }),
         Animated.timing(dotOpacity, { toValue: 1,    duration: 700, useNativeDriver: true }),
       ]),
-    ).start();
-  }, []);
+    );
+    loop.start();
+
+    return () => {
+      loop.stop();
+      dotOpacity.stopAnimation(() => dotOpacity.setValue(1));
+    };
+  }, [dotOpacity, reduceMotionEnabled]);
 
   // Start elapsed counter once searching begins
   useEffect(() => {
@@ -138,6 +168,7 @@ export default function MatchmakingScreen({ navigation }: Props) {
         }) => {
           if (!mounted) return;
           setPhase('FOUND');
+          void playHaptic('match_found');
           socket.disconnect();
           navigation.replace('Found', { gameId, opponent, ratingImpact: ratingImpact ?? null });
         });
@@ -172,7 +203,7 @@ export default function MatchmakingScreen({ navigation }: Props) {
     'searching for opponent';
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg }]}>
 
       {/* ── Center stack ── */}
       <View style={styles.centerStack}>
@@ -188,9 +219,9 @@ export default function MatchmakingScreen({ navigation }: Props) {
         {/* Ripple rings + avatar ── all centered in rippleContainer */}
         <View style={styles.rippleContainer}>
           {/* Rings are position:absolute, same size as container → centered automatically */}
-          <RippleRing delay={0}    color={theme.accent} />
-          <RippleRing delay={800}  color={theme.accent} />
-          <RippleRing delay={1600} color={theme.accent} />
+          <RippleRing delay={0} color={theme.accent} animate={!reduceMotionEnabled} />
+          <RippleRing delay={800} color={theme.accent} animate={!reduceMotionEnabled} />
+          <RippleRing delay={1600} color={theme.accent} animate={!reduceMotionEnabled} />
 
           {/* Avatar card on top (non-absolute, centered by parent justifyContent) */}
           <View style={[styles.avatarCard, {
@@ -235,7 +266,7 @@ export default function MatchmakingScreen({ navigation }: Props) {
       <View style={styles.footer}>
         <Button label="Cancel" variant="ghost" onPress={handleCancel} />
       </View>
-    </View>
+    </ScreenTransitionView>
   );
 }
 

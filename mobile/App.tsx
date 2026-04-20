@@ -19,6 +19,7 @@ import {
   JetBrainsMono_600SemiBold,
 } from '@expo-google-fonts/jetbrains-mono';
 import { AuthProvider } from './src/context/AuthContext';
+import { AppPreferencesProvider } from './src/context/AppPreferencesContext';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import RootNavigator from './src/navigation';
 
@@ -46,11 +47,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <ThemeProvider>
-          <NavigationContainer>
-            <RootNavigator />
-          </NavigationContainer>
-        </ThemeProvider>
+        <AppPreferencesProvider>
+          <ThemeProvider>
+            <NavigationContainer>
+              <RootNavigator />
+            </NavigationContainer>
+          </ThemeProvider>
+        </AppPreferencesProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

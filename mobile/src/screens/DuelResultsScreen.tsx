@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, Pressable } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  Pressable,
+  Animated,
+  Easing,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,6 +15,8 @@ import { RootStackParamList } from '../navigation';
 import api from '../services/api';
 import Button from '../components/Button';
 import AppText from '../components/Text';
+import ScreenTransitionView from '../components/ScreenTransitionView';
+import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
 
@@ -56,6 +66,7 @@ function MarkCircle({ correct, dim = false }: { correct: boolean | null; dim?: b
 export default function DuelResultsScreen({ route, navigation }: Props) {
   const { results, userId, opponent } = route.params;
   const { theme } = useTheme();
+  const { reduceMotionEnabled } = useAppPreferences();
   const insets = useSafeAreaInsets();
 
   const isPlayer1 = results.player1.userId === userId;
@@ -80,10 +91,46 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
   const totalScore = yours.score + theirs.score;
   const yourFrac  = totalScore > 0 ? yours.score / totalScore : 0.5;
   const theirFrac = totalScore > 0 ? theirs.score / totalScore : 0.5;
+  const gapWidth = yours.score > 0 && theirs.score > 0 ? 2 : 0;
+  const [splitBarWidth, setSplitBarWidth] = useState(0);
+  const yourBarWidth = useState(() => new Animated.Value(0))[0];
+  const theirBarWidth = useState(() => new Animated.Value(0))[0];
 
   const [rawAnswers, setRawAnswers] = useState<AnswerDetail[]>([]);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (splitBarWidth <= 0) return;
+
+    const availableWidth = Math.max(splitBarWidth - gapWidth, 0);
+    const yourTarget = availableWidth * yourFrac;
+    const theirTarget = availableWidth * theirFrac;
+
+    if (reduceMotionEnabled) {
+      yourBarWidth.setValue(yourTarget);
+      theirBarWidth.setValue(theirTarget);
+      return;
+    }
+
+    yourBarWidth.setValue(0);
+    theirBarWidth.setValue(0);
+
+    Animated.parallel([
+      Animated.timing(yourBarWidth, {
+        toValue: yourTarget,
+        duration: 600,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false,
+      }),
+      Animated.timing(theirBarWidth, {
+        toValue: theirTarget,
+        duration: 600,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [gapWidth, reduceMotionEnabled, splitBarWidth, theirBarWidth, theirFrac, yourBarWidth, yourFrac]);
 
   useEffect(() => {
     api
@@ -118,7 +165,7 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
   const oppName = opponent.displayName ?? 'Opponent';
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
+    <ScreenTransitionView style={[styles.screen, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {/* ── Hero block ── */}
@@ -163,10 +210,17 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
               <AppText.Sans preset="small" color={theme.ink3}>you</AppText.Sans>
               <AppText.Sans preset="small" color={theme.ink3}>{oppName}</AppText.Sans>
             </View>
-            <View style={[styles.splitBar, { backgroundColor: theme.line2 }]}>
-              <View style={[styles.barSegment, { flex: yourFrac, backgroundColor: theme.accent }]} />
-              <View style={styles.barGap} />
-              <View style={[styles.barSegment, { flex: theirFrac, backgroundColor: theme.ink3 }]} />
+            <View
+              style={[styles.splitBar, { backgroundColor: theme.line2 }]}
+              onLayout={(event) => setSplitBarWidth(event.nativeEvent.layout.width)}
+            >
+              <Animated.View
+                style={[styles.barSegment, { width: yourBarWidth, backgroundColor: theme.accent }]}
+              />
+              {gapWidth > 0 ? <View style={styles.barGap} /> : null}
+              <Animated.View
+                style={[styles.barSegment, { width: theirBarWidth, backgroundColor: theme.ink3 }]}
+              />
             </View>
             <View style={styles.scoreNumbers}>
               <AppText.Serif preset="statVal" color={theme.ink}>{yours.score}</AppText.Serif>
@@ -307,7 +361,7 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
         </View>
 
       </ScrollView>
-    </View>
+    </ScreenTransitionView>
   );
 }
 

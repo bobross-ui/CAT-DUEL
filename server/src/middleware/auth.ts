@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import admin from '../config/firebase';
 import { prisma } from '../models/prisma';
+import { touchStreak } from '../services/streak';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -24,6 +25,16 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
           avatarUrl: decoded.picture ?? null,
         },
       });
+    }
+
+    const streakUpdated = await touchStreak(user.id).catch((error) => {
+      console.error('[authMiddleware] touchStreak failed:', error);
+      return false;
+    });
+
+    if (streakUpdated) {
+      const refreshedUser = await prisma.user.findUnique({ where: { id: user.id } });
+      if (refreshedUser) user = refreshedUser;
     }
 
     req.user = user;

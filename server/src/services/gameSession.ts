@@ -31,6 +31,15 @@ interface GameState {
 
 export type GamePlayer = { userId: string; elo: number };
 
+function buildOpponentProgress(answered: number, totalQuestions: number) {
+  if (answered <= 0) return null;
+
+  return {
+    currentQuestion: Math.min(answered + 1, totalQuestions),
+    questionsAnswered: answered,
+  };
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const QUESTION_COUNT = 20;
@@ -265,6 +274,7 @@ async function handleAnswer(
 
   // Persist state and fetch next question in parallel
   const newProgress = state[progressKey];
+  socket.to(gameId).emit('opponent:progress', buildOpponentProgress(newProgress, state.questionIds.length));
   const [nextQuestion] = await Promise.all([
     newProgress < state.questionIds.length
       ? getQuestionForClient(state.questionIds[newProgress])
@@ -563,6 +573,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
       if (state.status === 'ACTIVE') {
         // Reconnection: send full current state so client can resume
         const playerProgress = isPlayer1 ? state.player1Progress : state.player2Progress;
+        const opponentAnswered = isPlayer1 ? state.player2Progress : state.player1Progress;
         const currentQuestion = await getQuestionForClient(
           state.questionIds[playerProgress],
         );
@@ -577,6 +588,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
           currentQuestion,
           questionNumber: playerProgress + 1,
           totalQuestions: state.questionIds.length,
+          opponentProgress: buildOpponentProgress(opponentAnswered, state.questionIds.length),
         });
         return;
       }

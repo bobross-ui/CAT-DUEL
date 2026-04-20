@@ -4,6 +4,7 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainTabParamList, RootStackParamList } from '../navigation';
 import Button from '../components/Button';
+import ScreenTransitionView from '../components/ScreenTransitionView';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 
@@ -16,7 +17,7 @@ export default function PlayScreen({ navigation }: Props) {
   const { theme } = useTheme();
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg }]}>
       <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.title}>Play</AppText.Serif>
       <AppText.Sans preset="body" color={theme.ink3} style={styles.sub}>Choose your game mode</AppText.Sans>
 
@@ -31,7 +32,7 @@ export default function PlayScreen({ navigation }: Props) {
         onPress={() => navigation.navigate('PracticeHome')}
         style={styles.buttonSpacing}
       />
-    </View>
+    </ScreenTransitionView>
   );
 }
 

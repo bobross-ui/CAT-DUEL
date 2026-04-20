@@ -9,6 +9,8 @@ import { leaderboardService } from '../services/leaderboard';
 import TierBadge from '../components/TierBadge';
 import Avatar from '../components/Avatar';
 import AppText from '../components/Text';
+import ScreenTransitionView from '../components/ScreenTransitionView';
+import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { MainTabParamList } from '../navigation';
 
@@ -85,6 +87,7 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
 
 export default function LeaderboardScreen(_: Props) {
   const { theme } = useTheme();
+  const { playHaptic } = useAppPreferences();
   const [activeTab, setActiveTab] = useState<Tab>('global');
   const [selectedTier, setSelectedTier] = useState('SILVER');
   const [tierPickerVisible, setTierPickerVisible] = useState(false);
@@ -112,10 +115,11 @@ export default function LeaderboardScreen(_: Props) {
   );
 
   const onRefresh = useCallback(async () => {
+    void playHaptic('pull_refresh');
     setRefreshing(true);
     await fetchData(activeTab, selectedTier);
     setRefreshing(false);
-  }, [activeTab, selectedTier, fetchData]);
+  }, [activeTab, selectedTier, fetchData, playHaptic]);
 
   function switchTab(tab: Tab) {
     if (tab === activeTab) return;
@@ -128,7 +132,7 @@ export default function LeaderboardScreen(_: Props) {
     : null;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
         <AppText.Serif preset="heroSerif" color={theme.ink}>Ranks</AppText.Serif>
       </View>
@@ -235,7 +239,7 @@ export default function LeaderboardScreen(_: Props) {
           </View>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </ScreenTransitionView>
   );
 }
 

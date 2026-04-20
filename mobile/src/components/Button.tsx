@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Animated, Pressable, ActivityIndicator, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import Text from './Text';
 import { radii } from '../theme/tokens';
@@ -22,14 +23,17 @@ export default function Button({
   style,
 }: ButtonProps) {
   const { theme } = useTheme();
+  const { reduceMotionEnabled } = useAppPreferences();
   const scale = useRef(new Animated.Value(1)).current;
   const isDisabled = disabled || loading;
 
   const onPressIn = () => {
-    Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
+    if (reduceMotionEnabled) return;
+    Animated.timing(scale, { toValue: 0.98, duration: 80, useNativeDriver: true }).start();
   };
   const onPressOut = () => {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+    if (reduceMotionEnabled) return;
+    Animated.timing(scale, { toValue: 1, duration: 80, useNativeDriver: true }).start();
   };
 
   const bgColor = (() => {

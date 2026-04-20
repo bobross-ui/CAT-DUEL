@@ -8,6 +8,8 @@ import { getGameSocket } from '../services/socket';
 import AppText from '../components/Text';
 import Avatar from '../components/Avatar';
 import Card from '../components/Card';
+import ScreenTransitionView from '../components/ScreenTransitionView';
+import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
 import { getTier } from '../constants';
@@ -21,19 +23,25 @@ interface UserProfile {
 }
 
 // ── Countdown digit — scales in from 1.2 on each tick ────────────────────────
-function CountdownDigit({ count }: { count: number }) {
+function CountdownDigit({ count, animate }: { count: number; animate: boolean }) {
   const { theme, mode } = useTheme();
   const scaleAnim  = useRef(new Animated.Value(1.2)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!animate) {
+      scaleAnim.setValue(1);
+      opacityAnim.setValue(1);
+      return;
+    }
+
     scaleAnim.setValue(1.2);
     opacityAnim.setValue(0);
     Animated.parallel([
       Animated.timing(scaleAnim,   { toValue: 1, duration: 300, useNativeDriver: true }),
       Animated.timing(opacityAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, [count]);
+  }, [animate, count, opacityAnim, scaleAnim]);
 
   // On ink background: accent box, white digit
   const boxBg   = theme.accent;
@@ -123,6 +131,7 @@ function RuleCell({ label, value }: { label: string; value: string }) {
 export default function FoundScreen({ navigation, route }: Props) {
   const { gameId, opponent, ratingImpact } = route.params;
   const { theme, mode } = useTheme();
+  const { playHaptic, reduceMotionEnabled } = useAppPreferences();
   const insets = useSafeAreaInsets();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -187,7 +196,12 @@ export default function FoundScreen({ navigation, route }: Props) {
       setCountdown(prev => (prev !== null ? prev - 1 : null));
     }, 1000);
     return () => clearInterval(interval);
-  }, [countdown === null]); // only start/stop when null→non-null transition
+  }, [countdown]);
+
+  useEffect(() => {
+    if (countdown === null || countdown <= 0) return;
+    void playHaptic('countdown_tick');
+  }, [countdown, playHaptic]);
 
   // Navigate when countdown finishes AND game:start has been received
   useEffect(() => {
@@ -205,7 +219,7 @@ export default function FoundScreen({ navigation, route }: Props) {
   const bannerText = mode === 'dark' ? theme.bg2 : '#FFFFFF';
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
+    <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -280,7 +294,7 @@ export default function FoundScreen({ navigation, route }: Props) {
             </AppText.Serif>
           ) : (
             <>
-              <CountdownDigit count={Math.max(0, countdown)} />
+              <CountdownDigit count={Math.max(0, countdown)} animate={!reduceMotionEnabled} />
               <AppText.Serif preset="h1Serif" color={bannerText}>
                 starting in
               </AppText.Serif>
@@ -293,7 +307,7 @@ export default function FoundScreen({ navigation, route }: Props) {
           leaving now counts as a loss
         </AppText.Sans>
       </ScrollView>
-    </View>
+    </ScreenTransitionView>
   );
 }
 

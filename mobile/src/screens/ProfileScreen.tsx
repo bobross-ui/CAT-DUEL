@@ -14,6 +14,8 @@ import Avatar from '../components/Avatar';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import AppText from '../components/Text';
+import ScreenTransitionView from '../components/ScreenTransitionView';
+import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { getTier, getTierToNext } from '../constants';
 
@@ -40,6 +42,7 @@ type Props = CompositeScreenProps<
 export default function ProfileScreen({ navigation }: Props) {
   const { signOut } = useAuth();
   const { theme } = useTheme();
+  const { playHaptic } = useAppPreferences();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<MatchStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,10 +74,11 @@ export default function ProfileScreen({ navigation }: Props) {
   }, [fetchData]);
 
   const onRefresh = useCallback(async () => {
+    void playHaptic('pull_refresh');
     setRefreshing(true);
     await fetchData();
     setRefreshing(false);
-  }, [fetchData]);
+  }, [fetchData, playHaptic]);
 
   function openEdit() {
     setEditName(profile?.displayName ?? '');
@@ -129,22 +133,23 @@ export default function ProfileScreen({ navigation }: Props) {
 
   return (
     <>
-      <ScrollView
-        style={{ backgroundColor: theme.bg }}
-        contentContainerStyle={styles.container}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
-      >
-        {/* ── Hero ── */}
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => {
-            const next = debugTaps + 1;
-            setDebugTaps(next);
-            if (next >= 5) { setDebugTaps(0); navigation.navigate('Debug'); }
-          }}
+      <ScreenTransitionView style={{ flex: 1, backgroundColor: theme.bg }}>
+        <ScrollView
+          style={{ backgroundColor: theme.bg }}
+          contentContainerStyle={styles.container}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
         >
-          <Avatar name={profile?.displayName ?? '?'} size="xl" />
-        </TouchableOpacity>
+          {/* ── Hero ── */}
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {
+              const next = debugTaps + 1;
+              setDebugTaps(next);
+              if (next >= 5) { setDebugTaps(0); navigation.navigate('Debug'); }
+            }}
+          >
+            <Avatar name={profile?.displayName ?? '?'} size="xl" />
+          </TouchableOpacity>
 
         {/* Name + edit */}
         <View style={styles.nameRow}>
@@ -204,34 +209,35 @@ export default function ProfileScreen({ navigation }: Props) {
           </View>
         )}
 
-        {/* ── List rows ── */}
-        <View style={styles.listSection}>
-          <TouchableOpacity
-            style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
-            onPress={() => navigation.navigate('MatchHistory')}
-            activeOpacity={0.7}
-          >
-            <AppText.Sans preset="bodyMed" color={theme.ink}>Match History</AppText.Sans>
-            <AppText.Sans preset="body" color={theme.ink3}>→</AppText.Sans>
-          </TouchableOpacity>
+          {/* ── List rows ── */}
+          <View style={styles.listSection}>
+            <TouchableOpacity
+              style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
+              onPress={() => navigation.navigate('MatchHistory')}
+              activeOpacity={0.7}
+            >
+              <AppText.Sans preset="bodyMed" color={theme.ink}>Match History</AppText.Sans>
+              <AppText.Sans preset="body" color={theme.ink3}>→</AppText.Sans>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
-            activeOpacity={0.7}
-          >
-            <AppText.Sans preset="bodyMed" color={theme.ink}>Settings</AppText.Sans>
-            <AppText.Sans preset="body" color={theme.ink3}>→</AppText.Sans>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
+              activeOpacity={0.7}
+            >
+              <AppText.Sans preset="bodyMed" color={theme.ink}>Settings</AppText.Sans>
+              <AppText.Sans preset="body" color={theme.ink3}>→</AppText.Sans>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
-            onPress={signOut}
-            activeOpacity={0.7}
-          >
-            <AppText.Sans preset="bodyMed" color={theme.coral}>Sign Out</AppText.Sans>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+            <TouchableOpacity
+              style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
+              onPress={signOut}
+              activeOpacity={0.7}
+            >
+              <AppText.Sans preset="bodyMed" color={theme.coral}>Sign Out</AppText.Sans>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </ScreenTransitionView>
 
       {/* ── Edit name modal ── */}
       <Modal visible={editVisible} transparent animationType="fade">

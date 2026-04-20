@@ -11,6 +11,8 @@ import api from '../services/api';
 import Avatar from '../components/Avatar';
 import Card from '../components/Card';
 import AppText from '../components/Text';
+import ScreenTransitionView from '../components/ScreenTransitionView';
+import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { getTier, getTierToNext } from '../constants';
 
@@ -44,6 +46,7 @@ function getStreakCopy(streak: number) {
 
 export default function HomeScreen({ navigation }: Props) {
   const { theme, mode } = useTheme();
+  const { playHaptic } = useAppPreferences();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [winRate, setWinRate] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,10 +77,11 @@ export default function HomeScreen({ navigation }: Props) {
   }, [fetchData]);
 
   const onRefresh = useCallback(async () => {
+    void playHaptic('pull_refresh');
     setRefreshing(true);
     await fetchData();
     setRefreshing(false);
-  }, [fetchData]);
+  }, [fetchData, playHaptic]);
 
   if (loading) {
     return (
@@ -108,15 +112,16 @@ export default function HomeScreen({ navigation }: Props) {
   const playDividerBg   = mode === 'dark' ? 'rgba(28,27,26,0.12)' : 'rgba(255,255,255,0.12)';
 
   return (
-    <ScrollView
-      style={{ backgroundColor: theme.bg }}
-      contentContainerStyle={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
-      }
-    >
-      {/* ── Header ── */}
-      <View style={styles.header}>
+    <ScreenTransitionView style={{ flex: 1, backgroundColor: theme.bg }}>
+      <ScrollView
+        style={{ backgroundColor: theme.bg }}
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
+        }
+      >
+        {/* ── Header ── */}
+        <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.greetingRow}>
             <AppText.Serif preset="heroSerif" color={theme.ink}>
@@ -218,19 +223,20 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
       </Pressable>
 
-      {/* ── Practice ── */}
-      <TouchableOpacity
-        style={[styles.practiceRow, { borderColor: theme.line, backgroundColor: theme.bg2 }]}
-        onPress={() => navigation.navigate('PracticeHome')}
-        activeOpacity={0.7}
-      >
-        <View>
-          <AppText.Sans preset="bodyMed" color={theme.ink}>Solo Practice</AppText.Sans>
-          <AppText.Sans preset="small" color={theme.ink3}>no pressure · full feedback</AppText.Sans>
-        </View>
-        <AppText.Sans preset="label" color={theme.ink3}>→</AppText.Sans>
-      </TouchableOpacity>
-    </ScrollView>
+        {/* ── Practice ── */}
+        <TouchableOpacity
+          style={[styles.practiceRow, { borderColor: theme.line, backgroundColor: theme.bg2 }]}
+          onPress={() => navigation.navigate('PracticeHome')}
+          activeOpacity={0.7}
+        >
+          <View>
+            <AppText.Sans preset="bodyMed" color={theme.ink}>Solo Practice</AppText.Sans>
+            <AppText.Sans preset="small" color={theme.ink3}>no pressure · full feedback</AppText.Sans>
+          </View>
+          <AppText.Sans preset="label" color={theme.ink3}>→</AppText.Sans>
+        </TouchableOpacity>
+      </ScrollView>
+    </ScreenTransitionView>
   );
 }
 
