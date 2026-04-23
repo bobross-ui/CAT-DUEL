@@ -65,6 +65,12 @@ export type GameFinishedPayload = {
   durationSeconds: number;
 };
 
+export type ActiveGamePayload = {
+  gameId: string;
+  opponent: OpponentInfo;
+  initialState: InitialGameState;
+};
+
 export type MainTabParamList = {
   Home: undefined;
   Play: undefined;
@@ -75,7 +81,7 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Login: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
-  Matchmaking: undefined;
+  Matchmaking: { notice?: string } | undefined;
   Found: { gameId: string; opponent: OpponentInfo; ratingImpact: { win: number; loss: number } | null };
   Duel: { gameId: string; opponent: OpponentInfo; initialState: InitialGameState };
   DuelResults: { results: GameFinishedPayload; userId: string; opponent: OpponentInfo };

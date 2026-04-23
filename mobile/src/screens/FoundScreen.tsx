@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, InitialGameState } from '../navigation';
 import api from '../services/api';
-import { getGameSocket } from '../services/socket';
+import { disconnectGameSocket, getGameSocket, releaseGameSocket } from '../services/socket';
 import AppText from '../components/Text';
 import Avatar from '../components/Avatar';
 import Card from '../components/Card';
@@ -15,6 +15,7 @@ import { radii } from '../theme/tokens';
 import { getTier } from '../constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Found'>;
+type PreStartStatus = 'waiting_for_opponent' | 'countdown';
 
 interface UserProfile {
   displayName: string | null;
@@ -136,10 +137,19 @@ export default function FoundScreen({ navigation, route }: Props) {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [winRate, setWinRate] = useState<number | null>(null);
-  // null = "get ready" hold, then 3→2→1→0
+  const [preStartStatus, setPreStartStatus] = useState<PreStartStatus>('waiting_for_opponent');
   const [countdown, setCountdown] = useState<number | null>(null);
   const [initialState, setInitialState] = useState<InitialGameState | null>(null);
+  const [statusMessage, setStatusMessage] = useState('waiting for both players');
   const navigatedRef = useRef(false);
+  const shouldKeepSocketRef = useRef(false);
+  const requeueingRef = useRef(false);
+
+  function reasonToNotice(reason: 'join_timeout' | 'opponent_left' | 'cancelled') {
+    if (reason === 'join_timeout') return 'Opponent didn’t connect. Finding another match...';
+    if (reason === 'opponent_left') return 'Opponent left before the duel began. Finding another match...';
+    return 'Match cancelled. Finding another match...';
+  }
 
   // Connect, join game, store initialState when server fires game:start
   useEffect(() => {
@@ -153,22 +163,80 @@ export default function FoundScreen({ navigation, route }: Props) {
       socket.on('connect', join);
       if (socket.connected) join();
 
+      socket.on('match:status', ({
+        status,
+        seconds,
+      }: {
+        gameId: string;
+        status: PreStartStatus;
+        seconds?: number;
+      }) => {
+        if (!mounted) return;
+        setPreStartStatus(status);
+
+        if (status === 'waiting_for_opponent') {
+          setCountdown(null);
+          setStatusMessage('waiting for both players');
+          return;
+        }
+
+        setStatusMessage('both players ready');
+        if (typeof seconds === 'number') {
+          setCountdown(seconds);
+        }
+      });
+
       socket.once('game:start', (state: InitialGameState) => {
         if (!mounted) return;
+        setCountdown((prev) => prev ?? 0);
         setInitialState(state);
+      });
+
+      socket.on('match:cancelled', ({
+        reason,
+      }: {
+        gameId: string;
+        reason: 'join_timeout' | 'opponent_left' | 'cancelled';
+      }) => {
+        if (!mounted || requeueingRef.current) return;
+        setStatusMessage(reason === 'join_timeout'
+          ? 'opponent did not connect'
+          : reason === 'opponent_left'
+            ? 'opponent left before start'
+            : 'match cancelled');
+      });
+
+      socket.on('match:requeueing', async ({
+        reason,
+      }: {
+        gameId: string;
+        reason: 'join_timeout' | 'opponent_left' | 'cancelled';
+      }) => {
+        if (!mounted) return;
+        requeueingRef.current = true;
+        setStatusMessage('finding another match');
+        await disconnectGameSocket();
+        navigation.replace('Matchmaking', { notice: reasonToNotice(reason) });
       });
 
       removeListeners = () => {
         socket.off('connect', join);
+        socket.off('match:status');
         socket.off('game:start');
+        socket.off('match:cancelled');
+        socket.off('match:requeueing');
       };
     });
 
     return () => {
       mounted = false;
       removeListeners?.();
+      if (!shouldKeepSocketRef.current) {
+        void disconnectGameSocket();
+        releaseGameSocket();
+      }
     };
-  }, []);
+  }, [gameId, navigation]);
 
   // Fetch user profile + win rate
   useEffect(() => {
@@ -179,14 +247,6 @@ export default function FoundScreen({ navigation, route }: Props) {
       if (profileRes) setProfile(profileRes.data.data);
       if (statsRes)   setWinRate(statsRes.data.data?.winRate ?? null);
     });
-  }, []);
-
-  // Hold for 2s so the user can read the card, then start 3-2-1
-  useEffect(() => {
-    const hold = setTimeout(() => {
-      setCountdown(3);
-    }, 2000);
-    return () => clearTimeout(hold);
   }, []);
 
   // Tick down once countdown has started
@@ -207,9 +267,10 @@ export default function FoundScreen({ navigation, route }: Props) {
   useEffect(() => {
     if (countdown !== null && countdown <= 0 && initialState && !navigatedRef.current) {
       navigatedRef.current = true;
+      shouldKeepSocketRef.current = true;
       navigation.replace('Duel', { gameId, opponent, initialState });
     }
-  }, [countdown, initialState]);
+  }, [countdown, gameId, initialState, navigation, opponent]);
 
   const myTierName  = profile ? getTier(profile.eloRating).name : '—';
   const oppTierName = getTier(opponent.eloRating).name;
@@ -288,23 +349,23 @@ export default function FoundScreen({ navigation, route }: Props) {
 
         {/* Start banner — "get ready" hold then countdown */}
         <View style={[styles.banner, { backgroundColor: bannerBg }]}>
-          {countdown === null ? (
-            <AppText.Serif preset="h1Serif" color={bannerText}>
-              get ready
-            </AppText.Serif>
-          ) : (
+          {preStartStatus === 'countdown' && countdown !== null ? (
             <>
               <CountdownDigit count={Math.max(0, countdown)} animate={!reduceMotionEnabled} />
               <AppText.Serif preset="h1Serif" color={bannerText}>
                 starting in
               </AppText.Serif>
             </>
+          ) : (
+            <AppText.Serif preset="h1Serif" color={bannerText}>
+              waiting for opponent
+            </AppText.Serif>
           )}
         </View>
 
         {/* Abandon note */}
         <AppText.Sans preset="small" color={theme.ink3} style={styles.abandonNote}>
-          leaving now counts as a loss
+          {statusMessage}
         </AppText.Sans>
       </ScrollView>
     </ScreenTransitionView>

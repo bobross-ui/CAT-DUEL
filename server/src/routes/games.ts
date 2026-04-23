@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
-import { getActiveGameId } from '../services/gameSession';
+import { getActiveGameForUser } from '../services/gameSession';
 import { prisma } from '../models/prisma';
 
 const router = Router();
@@ -8,8 +8,8 @@ const router = Router();
 // GET /api/games/active
 router.get('/active', authMiddleware, async (req, res, next) => {
   try {
-    const gameId = await getActiveGameId(req.user.id);
-    res.json({ success: true, data: { gameId: gameId ?? null } });
+    const activeGame = await getActiveGameForUser(req.user.id);
+    res.json({ success: true, data: activeGame ?? { gameId: null } });
   } catch (err) {
     next(err);
   }

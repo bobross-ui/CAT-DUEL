@@ -11,25 +11,51 @@ interface PlayerAnswerRecord {
   timeMs: number;
 }
 
+export interface RatingImpact {
+  win: number;
+  loss: number;
+}
+
+export interface GamePlayerProfile {
+  userId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  eloRating: number;
+}
+
 interface GameState {
   gameId: string;
-  status: 'WAITING' | 'COUNTDOWN' | 'ACTIVE' | 'FINISHED';
+  status: 'FOUND' | 'WAITING_FOR_PLAYERS' | 'COUNTDOWN' | 'ACTIVE' | 'FINISHED' | 'CANCELLED';
   player1Id: string;
   player2Id: string;
+  player1Profile: GamePlayerProfile;
+  player2Profile: GamePlayerProfile;
+  player1RatingImpact: RatingImpact;
+  player2RatingImpact: RatingImpact;
   questionIds: string[];
   correctAnswers: Record<string, number>; // server-only, never sent to clients
   player1Progress: number;
   player2Progress: number;
   player1Score: number;
   player2Score: number;
+  player1Joined: boolean;
+  player2Joined: boolean;
   player1Answers: Record<string, PlayerAnswerRecord>;
   player2Answers: Record<string, PlayerAnswerRecord>;
   durationSeconds: number;
+  joinDeadlineAt: number | null;
+  countdownStartedAt: number | null;
   startedAt: number | null;
   createdAt: number;
 }
 
 export type GamePlayer = { userId: string; elo: number };
+export type PendingMatchPayload = {
+  gameId: string;
+  duration: number;
+  opponent: GamePlayerProfile;
+  ratingImpact: RatingImpact;
+};
 
 function buildOpponentProgress(answered: number, totalQuestions: number) {
   if (answered <= 0) return null;
@@ -45,12 +71,17 @@ function buildOpponentProgress(answered: number, totalQuestions: number) {
 const QUESTION_COUNT = 20;
 const GAME_DURATION_SECONDS = 120; // TODO: restore to 600 after testing
 const COUNTDOWN_SECONDS = 3;
+const PRESTART_TIMEOUT_MS = 10_000;
+const PRESTART_TTL_SECONDS = 30;
+const ACTIVE_FORFEIT_GRACE_SECONDS = 15;
 
 // In-memory timer maps. Both are lost on server restart; active games in Redis
 // would need their timers re-initialized by scanning active_game:* keys on startup
 // (deferred to a future hardening pass).
 const activeTimers = new Map<string, NodeJS.Timeout>();
 const forfeitTimers = new Map<string, NodeJS.Timeout>(); // keyed by userId
+const preStartTimers = new Map<string, NodeJS.Timeout>();
+const countdownTimers = new Map<string, NodeJS.Timeout>();
 
 // ─── Redis helpers ─────────────────────────────────────────────────────────────
 
@@ -61,6 +92,153 @@ async function getGameState(gameId: string): Promise<GameState | null> {
 
 async function saveGameState(state: GameState, ttlSeconds = 1200): Promise<void> {
   await redis.set(`game:${state.gameId}`, JSON.stringify(state), 'EX', ttlSeconds);
+}
+
+function socketKey(userId: string) {
+  return `socket:game:${userId}`;
+}
+
+function pendingMatchKey(userId: string) {
+  return `pending_match:${userId}`;
+}
+
+function isPreStartStatus(status: GameState['status']) {
+  return status === 'FOUND' || status === 'WAITING_FOR_PLAYERS' || status === 'COUNTDOWN';
+}
+
+function getStateTtlSeconds(state: GameState) {
+  return isPreStartStatus(state.status) ? PRESTART_TTL_SECONDS : 1200;
+}
+
+function clearPreStartTimer(gameId: string) {
+  const timer = preStartTimers.get(gameId);
+  if (timer) clearTimeout(timer);
+  preStartTimers.delete(gameId);
+}
+
+function clearCountdownTimer(gameId: string) {
+  const timer = countdownTimers.get(gameId);
+  if (timer) clearTimeout(timer);
+  countdownTimers.delete(gameId);
+}
+
+function clearForfeitTimer(userId: string) {
+  const timer = forfeitTimers.get(userId);
+  if (timer) clearTimeout(timer);
+  forfeitTimers.delete(userId);
+}
+
+function isPlayer1(state: GameState, userId: string) {
+  return state.player1Id === userId;
+}
+
+function isParticipant(state: GameState, userId: string) {
+  return state.player1Id === userId || state.player2Id === userId;
+}
+
+function bothPlayersJoined(state: GameState) {
+  return state.player1Joined && state.player2Joined;
+}
+
+function setJoined(state: GameState, userId: string, joined: boolean) {
+  if (state.player1Id === userId) state.player1Joined = joined;
+  if (state.player2Id === userId) state.player2Joined = joined;
+}
+
+function buildPendingMatchPayload(
+  state: GameState,
+  userId: string,
+): PendingMatchPayload {
+  const isP1 = isPlayer1(state, userId);
+
+  return {
+    gameId: state.gameId,
+    duration: state.durationSeconds,
+    opponent: isP1 ? state.player2Profile : state.player1Profile,
+    ratingImpact: isP1 ? state.player1RatingImpact : state.player2RatingImpact,
+  };
+}
+
+async function emitToUser(
+  gameNs: Namespace,
+  userId: string,
+  event: string,
+  payload: unknown,
+): Promise<void> {
+  const targetSocketId = await redis.get(socketKey(userId));
+  if (targetSocketId) {
+    gameNs.to(targetSocketId).emit(event, payload);
+  }
+}
+
+async function emitToParticipants(
+  gameNs: Namespace,
+  state: GameState,
+  event: string,
+  payload: unknown,
+): Promise<void> {
+  await Promise.all([
+    emitToUser(gameNs, state.player1Id, event, payload),
+    emitToUser(gameNs, state.player2Id, event, payload),
+  ]);
+}
+
+async function clearPreStartState(state: GameState): Promise<void> {
+  clearPreStartTimer(state.gameId);
+  clearCountdownTimer(state.gameId);
+
+  await redis.del(
+    pendingMatchKey(state.player1Id),
+    pendingMatchKey(state.player2Id),
+    `game:${state.gameId}`,
+    `game:${state.gameId}:starting`,
+    `game:${state.gameId}:ending`,
+    `game:${state.gameId}:cancelling`,
+    `active_game:${state.player1Id}`,
+    `active_game:${state.player2Id}`,
+  );
+}
+
+async function cancelPreStartGame(
+  gameId: string,
+  gameNs: Namespace,
+  reason: 'join_timeout' | 'opponent_left' | 'cancelled',
+): Promise<void> {
+  const lock = await redis.set(`game:${gameId}:cancelling`, '1', 'EX', 30, 'NX');
+  if (!lock) return;
+
+  const state = await getGameState(gameId);
+  if (!state || !isPreStartStatus(state.status)) return;
+
+  await emitToParticipants(gameNs, state, 'match:cancelled', { gameId, reason });
+
+  const requeueTargets = [
+    state.player1Joined ? state.player1Id : null,
+    state.player2Joined ? state.player2Id : null,
+  ].filter((value): value is string => value != null);
+
+  await Promise.all(
+    requeueTargets.map((userId) =>
+      emitToUser(gameNs, userId, 'match:requeueing', { gameId, reason }),
+    ),
+  );
+
+  await clearPreStartState(state);
+}
+
+async function schedulePreStartTimeout(
+  gameId: string,
+  joinDeadlineAt: number,
+  gameNs: Namespace,
+): Promise<void> {
+  clearPreStartTimer(gameId);
+  const delay = Math.max(joinDeadlineAt - Date.now(), 0);
+  const timer = setTimeout(() => {
+    cancelPreStartGame(gameId, gameNs, 'join_timeout').catch((err) =>
+      console.error(`Pre-start timeout error [${gameId}]:`, err),
+    );
+  }, delay);
+  preStartTimers.set(gameId, timer);
 }
 
 // ─── Question selection ────────────────────────────────────────────────────────
@@ -161,22 +339,42 @@ async function startCountdown(
   state: GameState,
   gameNs: Namespace,
 ): Promise<void> {
-  state.status = 'COUNTDOWN';
-  await saveGameState(state);
+  clearPreStartTimer(gameId);
+  clearCountdownTimer(gameId);
 
+  state.status = 'COUNTDOWN';
+  state.countdownStartedAt = Date.now();
+  await saveGameState(state, getStateTtlSeconds(state));
+
+  await emitToParticipants(gameNs, state, 'match:status', {
+    gameId,
+    status: 'countdown',
+    seconds: COUNTDOWN_SECONDS,
+  });
   gameNs.to(gameId).emit('game:countdown', { seconds: COUNTDOWN_SECONDS });
 
-  setTimeout(async () => {
+  const timer = setTimeout(async () => {
+    countdownTimers.delete(gameId);
+
     // Re-read from Redis — state may have changed (e.g. both players disconnected)
     const current = await getGameState(gameId);
-    if (!current || current.status !== 'COUNTDOWN') return;
+    if (!current || current.status !== 'COUNTDOWN' || !bothPlayersJoined(current)) return;
 
     current.status = 'ACTIVE';
+    current.countdownStartedAt = null;
+    current.joinDeadlineAt = null;
     current.startedAt = Date.now();
+
+    await redis.set(`active_game:${current.player1Id}`, gameId, 'EX', 1200);
+    await redis.set(`active_game:${current.player2Id}`, gameId, 'EX', 1200);
+    await redis.del(
+      pendingMatchKey(current.player1Id),
+      pendingMatchKey(current.player2Id),
+    );
 
     const [firstQuestion] = await Promise.all([
       getQuestionForClient(current.questionIds[0]),
-      saveGameState(current),
+      saveGameState(current, getStateTtlSeconds(current)),
     ]);
 
     // Send start + first question in one event so mobile never has a blank ACTIVE state
@@ -189,6 +387,8 @@ async function startCountdown(
 
     startGameTimer(gameId, current.durationSeconds, gameNs);
   }, COUNTDOWN_SECONDS * 1000);
+
+  countdownTimers.set(gameId, timer);
 }
 
 function startGameTimer(
@@ -318,6 +518,10 @@ export async function endGame(
   const timer = activeTimers.get(gameId);
   if (timer) clearInterval(timer);
   activeTimers.delete(gameId);
+  clearPreStartTimer(gameId);
+  clearCountdownTimer(gameId);
+  clearForfeitTimer(state.player1Id);
+  clearForfeitTimer(state.player2Id);
 
   const isForfeit = options.forcedWinnerId != null;
 
@@ -513,54 +717,72 @@ export async function initializeGame(
   gameId: string,
   player1: GamePlayer,
   player2: GamePlayer,
+  options: {
+    player1Profile: GamePlayerProfile;
+    player2Profile: GamePlayerProfile;
+    player1RatingImpact: RatingImpact;
+    player2RatingImpact: RatingImpact;
+    gameNs: Namespace;
+  },
 ): Promise<void> {
   const { questionIds, correctAnswers } = await selectQuestionsForMatch(player1.elo, player2.elo);
+  const joinDeadlineAt = Date.now() + PRESTART_TIMEOUT_MS;
 
   const state: GameState = {
     gameId,
-    status: 'WAITING',
+    status: 'FOUND',
     player1Id: player1.userId,
     player2Id: player2.userId,
+    player1Profile: options.player1Profile,
+    player2Profile: options.player2Profile,
+    player1RatingImpact: options.player1RatingImpact,
+    player2RatingImpact: options.player2RatingImpact,
     questionIds,
     correctAnswers,
     player1Progress: 0,
     player2Progress: 0,
     player1Score: 0,
     player2Score: 0,
+    player1Joined: false,
+    player2Joined: false,
     player1Answers: {},
     player2Answers: {},
     durationSeconds: GAME_DURATION_SECONDS,
+    joinDeadlineAt,
+    countdownStartedAt: null,
     startedAt: null,
     createdAt: Date.now(),
   };
 
-  await saveGameState(state);
-  await redis.set(`active_game:${player1.userId}`, gameId, 'EX', 1200);
-  await redis.set(`active_game:${player2.userId}`, gameId, 'EX', 1200);
+  await saveGameState(state, getStateTtlSeconds(state));
+  await redis.set(pendingMatchKey(player1.userId), gameId, 'EX', PRESTART_TTL_SECONDS);
+  await redis.set(pendingMatchKey(player2.userId), gameId, 'EX', PRESTART_TTL_SECONDS);
+  await schedulePreStartTimeout(gameId, joinDeadlineAt, options.gameNs);
 }
 
 export function registerGameHandlers(gameNs: Namespace): void {
   gameNs.on('connection', (socket) => {
     const user = socket.data.user;
+    void redis.set(socketKey(user.id), socket.id, 'EX', 1200).catch((err) =>
+      console.error(`Socket bind error [${user.id}]:`, err),
+    );
 
     socket.on('game:join', async ({ gameId }: { gameId: string }) => {
       const state = await getGameState(gameId);
       if (!state) return socket.emit('game:error', { message: 'Game not found' });
 
-      const isPlayer1 = state.player1Id === user.id;
-      const isPlayer2 = state.player2Id === user.id;
-      if (!isPlayer1 && !isPlayer2) {
+      const isPlayer1User = state.player1Id === user.id;
+      const isPlayer2User = state.player2Id === user.id;
+      if (!isPlayer1User && !isPlayer2User) {
         return socket.emit('game:error', { message: 'Not your game' });
       }
 
       // Cancel any pending auto-forfeit timer (player reconnected in time)
-      const forfeitTimer = forfeitTimers.get(user.id);
-      if (forfeitTimer) {
-        clearTimeout(forfeitTimer);
-        forfeitTimers.delete(user.id);
-      }
+      const hadForfeitTimer = forfeitTimers.has(user.id);
+      clearForfeitTimer(user.id);
 
       socket.join(gameId);
+      void redis.set(socketKey(user.id), socket.id, 'EX', 1200).catch(() => {});
 
       if (state.status === 'FINISHED') {
         const raw = await redis.get(`game:${gameId}:result:${user.id}`);
@@ -570,42 +792,75 @@ export function registerGameHandlers(gameNs: Namespace): void {
         return;
       }
 
+      if (state.status === 'CANCELLED') {
+        socket.emit('match:cancelled', { gameId, reason: 'cancelled' });
+        return;
+      }
+
       if (state.status === 'ACTIVE') {
+        if (hadForfeitTimer) {
+          const opponentId = isPlayer1User ? state.player2Id : state.player1Id;
+          await emitToUser(gameNs, opponentId, 'opponent:reconnected', { gameId });
+        }
+
         // Reconnection: send full current state so client can resume
-        const playerProgress = isPlayer1 ? state.player1Progress : state.player2Progress;
-        const opponentAnswered = isPlayer1 ? state.player2Progress : state.player1Progress;
+        const playerProgress = isPlayer1User ? state.player1Progress : state.player2Progress;
+        const opponentAnswered = isPlayer1User ? state.player2Progress : state.player1Progress;
+        const questionIndex = Math.min(playerProgress, state.questionIds.length - 1);
         const currentQuestion = await getQuestionForClient(
-          state.questionIds[playerProgress],
+          state.questionIds[questionIndex],
         );
         const elapsed = Math.floor(
           (Date.now() - (state.startedAt ?? Date.now())) / 1000,
         );
 
         socket.emit('game:sync', {
-          yourScore: isPlayer1 ? state.player1Score : state.player2Score,
-          opponentScore: isPlayer1 ? state.player2Score : state.player1Score,
+          yourScore: isPlayer1User ? state.player1Score : state.player2Score,
+          opponentScore: isPlayer1User ? state.player2Score : state.player1Score,
           timeRemaining: Math.max(0, state.durationSeconds - elapsed),
           currentQuestion,
-          questionNumber: playerProgress + 1,
+          questionNumber: Math.min(playerProgress + 1, state.questionIds.length),
           totalQuestions: state.questionIds.length,
           opponentProgress: buildOpponentProgress(opponentAnswered, state.questionIds.length),
         });
         return;
       }
 
-      if (state.status === 'WAITING') {
-        const room = await gameNs.in(gameId).fetchSockets();
-        if (room.length >= 2) {
-          // NX lock prevents double-countdown when both sockets join concurrently
-          const lock = await redis.set(
-            `game:${gameId}:starting`,
-            '1',
-            'EX',
-            30,
-            'NX',
-          );
-          if (lock) await startCountdown(gameId, state, gameNs);
+      if (state.status === 'COUNTDOWN') {
+        const elapsedCountdown = Math.floor(
+          (Date.now() - (state.countdownStartedAt ?? Date.now())) / 1000,
+        );
+        const remaining = Math.max(0, COUNTDOWN_SECONDS - elapsedCountdown);
+        socket.emit('match:status', {
+          gameId,
+          status: 'countdown',
+          seconds: remaining,
+        });
+        return;
+      }
+
+      if (state.status === 'FOUND' || state.status === 'WAITING_FOR_PLAYERS') {
+        setJoined(state, user.id, true);
+        state.status = 'WAITING_FOR_PLAYERS';
+        await saveGameState(state, getStateTtlSeconds(state));
+
+        if (!bothPlayersJoined(state)) {
+          socket.emit('match:status', {
+            gameId,
+            status: 'waiting_for_opponent',
+          });
+          return;
         }
+
+        // NX lock prevents double-countdown when both sockets join concurrently
+        const lock = await redis.set(
+          `game:${gameId}:starting`,
+          '1',
+          'EX',
+          30,
+          'NX',
+        );
+        if (lock) await startCountdown(gameId, state, gameNs);
       }
     });
 
@@ -651,25 +906,57 @@ export function registerGameHandlers(gameNs: Namespace): void {
     });
 
     socket.on('disconnect', async () => {
+      const currentSocketId = await redis.get(socketKey(user.id));
+      if (currentSocketId === socket.id) {
+        await redis.del(socketKey(user.id));
+      }
+
+      const pendingGameId = await getPendingGameId(user.id);
+      if (pendingGameId) {
+        const pendingState = await getGameState(pendingGameId);
+        if (pendingState && isPreStartStatus(pendingState.status) && isParticipant(pendingState, user.id)) {
+          setJoined(pendingState, user.id, false);
+
+          if (pendingState.status === 'COUNTDOWN') {
+            await saveGameState(pendingState, getStateTtlSeconds(pendingState));
+            await cancelPreStartGame(pendingGameId, gameNs, 'opponent_left');
+            return;
+          }
+
+          pendingState.status = bothPlayersJoined(pendingState) ? 'WAITING_FOR_PLAYERS' : 'FOUND';
+          await saveGameState(pendingState, getStateTtlSeconds(pendingState));
+        }
+      }
+
       const gameId = await getActiveGameId(user.id);
       if (!gameId) return;
 
       const state = await getGameState(gameId);
       if (!state || state.status !== 'ACTIVE') return;
 
-      // Start 2-minute auto-forfeit timer. Cancelled if the player reconnects.
+      if (forfeitTimers.has(user.id)) return;
+
+      const opponentId =
+        state.player1Id === user.id ? state.player2Id : state.player1Id;
+
+      await emitToUser(gameNs, opponentId, 'opponent:disconnected', {
+        gameId,
+        secondsUntilForfeit: ACTIVE_FORFEIT_GRACE_SECONDS,
+      });
+
+      // Start a short active-duel auto-forfeit timer. Cancelled if the player reconnects.
       const timer = setTimeout(async () => {
         forfeitTimers.delete(user.id);
         const current = await getGameState(gameId);
         if (!current || current.status !== 'ACTIVE') return;
 
-        const opponentId =
+        const currentOpponentId =
           current.player1Id === user.id ? current.player2Id : current.player1Id;
 
-        await endGame(gameId, gameNs, { forcedWinnerId: opponentId }).catch((err) =>
+        await endGame(gameId, gameNs, { forcedWinnerId: currentOpponentId }).catch((err) =>
           console.error(`Auto-forfeit endGame error [${gameId}]:`, err),
         );
-      }, 2 * 60 * 1000);
+      }, ACTIVE_FORFEIT_GRACE_SECONDS * 1000);
 
       forfeitTimers.set(user.id, timer);
     });
@@ -678,4 +965,65 @@ export function registerGameHandlers(gameNs: Namespace): void {
 
 export async function getActiveGameId(userId: string): Promise<string | null> {
   return redis.get(`active_game:${userId}`);
+}
+
+export async function getActiveGameForUser(userId: string): Promise<{
+  gameId: string;
+  opponent: GamePlayerProfile;
+  initialState: {
+    duration: number;
+    totalQuestions: number;
+    firstQuestion: Awaited<ReturnType<typeof getQuestionForClient>>;
+    questionNumber: number;
+  };
+} | null> {
+  const gameId = await getActiveGameId(userId);
+  if (!gameId) return null;
+
+  const state = await getGameState(gameId);
+  if (!state || !isParticipant(state, userId) || state.status !== 'ACTIVE') {
+    await redis.del(`active_game:${userId}`);
+    return null;
+  }
+
+  const isPlayer1User = isPlayer1(state, userId);
+  const playerProgress = isPlayer1User ? state.player1Progress : state.player2Progress;
+  const questionIndex = Math.min(playerProgress, state.questionIds.length - 1);
+  const firstQuestion = await getQuestionForClient(state.questionIds[questionIndex]);
+  if (!firstQuestion) {
+    await redis.del(`active_game:${userId}`);
+    return null;
+  }
+
+  const elapsed = Math.floor((Date.now() - (state.startedAt ?? Date.now())) / 1000);
+
+  return {
+    gameId,
+    opponent: isPlayer1User ? state.player2Profile : state.player1Profile,
+    initialState: {
+      duration: Math.max(0, state.durationSeconds - elapsed),
+      totalQuestions: state.questionIds.length,
+      firstQuestion,
+      questionNumber: Math.min(playerProgress + 1, state.questionIds.length),
+    },
+  };
+}
+
+export async function getPendingMatchForUser(
+  userId: string,
+): Promise<PendingMatchPayload | null> {
+  const gameId = await getPendingGameId(userId);
+  if (!gameId) return null;
+
+  const state = await getGameState(gameId);
+  if (!state || !isParticipant(state, userId) || !isPreStartStatus(state.status)) {
+    await redis.del(pendingMatchKey(userId));
+    return null;
+  }
+
+  return buildPendingMatchPayload(state, userId);
+}
+
+export async function getPendingGameId(userId: string): Promise<string | null> {
+  return redis.get(pendingMatchKey(userId));
 }

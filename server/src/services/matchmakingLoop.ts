@@ -15,7 +15,7 @@ function parseQueueEntries(raw: string[]): QueuePlayer[] {
   return players;
 }
 
-async function runMatchmaking(matchmakingNs: Namespace): Promise<void> {
+async function runMatchmaking(matchmakingNs: Namespace, gameNs: Namespace): Promise<void> {
   const raw = await redis.zrangebyscore(
     'matchmaking_queue',
     '-inf',
@@ -50,7 +50,7 @@ async function runMatchmaking(matchmakingNs: Namespace): Promise<void> {
       matched.add(player.userId);
       matched.add(opponent.userId);
 
-      await createMatch(matchmakingNs, player, opponent);
+      await createMatch(matchmakingNs, gameNs, player, opponent);
     } else if (waitTime > TIMEOUT_MS) {
       const socketId = await redis.get(`socket:mm:${player.userId}`);
       if (socketId) {
@@ -67,9 +67,9 @@ async function runMatchmaking(matchmakingNs: Namespace): Promise<void> {
   }
 }
 
-export function startMatchmakingLoop(matchmakingNs: Namespace): void {
+export function startMatchmakingLoop(matchmakingNs: Namespace, gameNs: Namespace): void {
   setInterval(() => {
-    runMatchmaking(matchmakingNs).catch((err) =>
+    runMatchmaking(matchmakingNs, gameNs).catch((err) =>
       console.error('Matchmaking loop error:', err),
     );
   }, 2000);

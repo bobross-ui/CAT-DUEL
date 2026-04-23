@@ -1,7 +1,14 @@
 import { Namespace } from 'socket.io';
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
-import { initializeGame, GamePlayer } from './gameSession';
+import {
+  initializeGame,
+  GamePlayer,
+  GamePlayerProfile,
+  getActiveGameForUser,
+  getPendingMatchForUser,
+  RatingImpact,
+} from './gameSession';
 import { calculateElo } from './elo';
 
 export type QueuePlayer = GamePlayer;
@@ -11,7 +18,7 @@ function publicProfile(user: {
   displayName: string | null;
   avatarUrl: string | null;
   eloRating: number;
-}) {
+}): GamePlayerProfile {
   return {
     userId: user.id,
     displayName: user.displayName,
@@ -22,6 +29,7 @@ function publicProfile(user: {
 
 export async function createMatch(
   matchmakingNs: Namespace,
+  gameNs: Namespace,
   player1: QueuePlayer,
   player2: QueuePlayer,
 ): Promise<void> {
@@ -56,29 +64,40 @@ export async function createMatch(
   function ratingImpactFor(
     self: { eloRating: number; gamesPlayed: number },
     opp: { eloRating: number },
-  ) {
+  ): RatingImpact {
     return {
       win:  calculateElo({ playerElo: self.eloRating, opponentElo: opp.eloRating, playerGamesPlayed: self.gamesPlayed, actualScore: 1 }).delta,
       loss: calculateElo({ playerElo: self.eloRating, opponentElo: opp.eloRating, playerGamesPlayed: self.gamesPlayed, actualScore: 0 }).delta,
     };
   }
 
+  const p1Profile = publicProfile(p1User);
+  const p2Profile = publicProfile(p2User);
+  const p1RatingImpact = ratingImpactFor(p1User, p2User);
+  const p2RatingImpact = ratingImpactFor(p2User, p1User);
+
+  await initializeGame(gameId, player1, player2, {
+    player1Profile: p1Profile,
+    player2Profile: p2Profile,
+    player1RatingImpact: p1RatingImpact,
+    player2RatingImpact: p2RatingImpact,
+    gameNs,
+  });
+
   if (socket1) {
     matchmakingNs.to(socket1).emit('match:found', {
       ...matchData,
-      opponent: publicProfile(p2User),
-      ratingImpact: ratingImpactFor(p1User, p2User),
+      opponent: p2Profile,
+      ratingImpact: p1RatingImpact,
     });
   }
   if (socket2) {
     matchmakingNs.to(socket2).emit('match:found', {
       ...matchData,
-      opponent: publicProfile(p1User),
-      ratingImpact: ratingImpactFor(p2User, p1User),
+      opponent: p1Profile,
+      ratingImpact: p2RatingImpact,
     });
   }
-
-  await initializeGame(gameId, player1, player2);
 }
 
 export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
@@ -89,9 +108,15 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
       const alreadyInQueue = await redis.zscore('matchmaking_queue', user.id);
       if (alreadyInQueue) return;
 
-      const activeGame = await redis.get(`active_game:${user.id}`);
+      const activeGame = await getActiveGameForUser(user.id);
       if (activeGame) {
-        socket.emit('queue:error', { message: 'You are already in a game' });
+        socket.emit('queue:active_game', activeGame);
+        return;
+      }
+
+      const pendingMatch = await getPendingMatchForUser(user.id);
+      if (pendingMatch) {
+        socket.emit('match:found', pendingMatch);
         return;
       }
 

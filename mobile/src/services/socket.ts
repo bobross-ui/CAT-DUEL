@@ -29,3 +29,10 @@ export async function getGameSocket(): Promise<Socket> {
 export function releaseGameSocket(): void {
   _gameSocketPromise = null;
 }
+
+export async function disconnectGameSocket(): Promise<void> {
+  if (!_gameSocketPromise) return;
+  const socket = await _gameSocketPromise;
+  socket.disconnect();
+  _gameSocketPromise = null;
+}

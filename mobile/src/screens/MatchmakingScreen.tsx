@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Animated, Easing } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Socket } from 'socket.io-client';
-import { RootStackParamList } from '../navigation';
+import { ActiveGamePayload, RootStackParamList } from '../navigation';
 import { createMatchmakingSocket } from '../services/socket';
 import api from '../services/api';
 import Avatar from '../components/Avatar';
@@ -72,7 +72,7 @@ function RippleRing({
 }
 
 // ── Main screen ───────────────────────────────────────────────────────────────
-export default function MatchmakingScreen({ navigation }: Props) {
+export default function MatchmakingScreen({ navigation, route }: Props) {
   const { theme } = useTheme();
   const { playHaptic, reduceMotionEnabled } = useAppPreferences();
   const [phase, setPhase] = useState<Phase>('CONNECTING');
@@ -154,6 +154,12 @@ export default function MatchmakingScreen({ navigation }: Props) {
           setError(message);
         });
 
+        socket.on('queue:active_game', (activeGame: ActiveGamePayload) => {
+          if (!mounted) return;
+          socket.disconnect();
+          navigation.replace('Duel', activeGame);
+        });
+
         socket.on('queue:timeout', () => {
           if (!mounted) return;
           setError('No opponent found. Try again.');
@@ -186,7 +192,7 @@ export default function MatchmakingScreen({ navigation }: Props) {
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
-  }, []);
+  }, [navigation, playHaptic]);
 
   function handleCancel() {
     socketRef.current?.emit('queue:leave');
@@ -201,6 +207,7 @@ export default function MatchmakingScreen({ navigation }: Props) {
     phase === 'CONNECTING' ? 'connecting' :
     phase === 'FOUND'      ? 'match found' :
     'searching for opponent';
+  const notice = route.params?.notice;
 
   return (
     <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg }]}>
@@ -258,6 +265,11 @@ export default function MatchmakingScreen({ navigation }: Props) {
         {error && (
           <AppText.Sans preset="label" color={theme.coral} style={styles.errorText}>
             {error}
+          </AppText.Sans>
+        )}
+        {!error && notice && (
+          <AppText.Sans preset="label" color={theme.accentDeep} style={styles.errorText}>
+            {notice}
           </AppText.Sans>
         )}
       </View>

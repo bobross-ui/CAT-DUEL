@@ -7,6 +7,7 @@ import Button from '../components/Button';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
+import api from '../services/api';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Play'>,
@@ -16,6 +17,17 @@ type Props = CompositeScreenProps<
 export default function PlayScreen({ navigation }: Props) {
   const { theme } = useTheme();
 
+  const handleFindDuel = async () => {
+    const activeRes = await api.get('/games/active').catch(() => null);
+    const activeGame = activeRes?.data?.data;
+    if (activeGame?.gameId && activeGame.opponent && activeGame.initialState) {
+      navigation.navigate('Duel', activeGame);
+      return;
+    }
+
+    navigation.navigate('Matchmaking');
+  };
+
   return (
     <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg }]}>
       <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.title}>Play</AppText.Serif>
@@ -23,7 +35,7 @@ export default function PlayScreen({ navigation }: Props) {
 
       <Button
         label="Find Duel"
-        onPress={() => navigation.navigate('Matchmaking')}
+        onPress={handleFindDuel}
         style={styles.buttonSpacing}
       />
       <Button

@@ -55,7 +55,7 @@ gameNs.on('connection', async (socket) => {
 
 registerMatchmakingHandlers(matchmakingNs);
 registerGameHandlers(gameNs);
-startMatchmakingLoop(matchmakingNs);
+startMatchmakingLoop(matchmakingNs, gameNs);
 
 // --- Express middleware ---
 app.use(cors());

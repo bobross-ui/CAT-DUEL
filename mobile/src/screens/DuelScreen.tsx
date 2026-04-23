@@ -98,6 +98,7 @@ export default function DuelScreen({ route, navigation }: Props) {
     currentQuestion: initialState.firstQuestion,
     questionNumber: initialState.questionNumber,
   });
+  const [opponentDisconnectNotice, setOpponentDisconnectNotice] = useState<string | null>(null);
   const socketRef         = useRef<Socket | null>(null);
   const questionStartTime = useRef(Date.now());
   const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -186,6 +187,18 @@ export default function DuelScreen({ route, navigation }: Props) {
         setDs(prev => ({ ...prev, timeRemaining: remaining }));
       });
 
+      socket.on('opponent:disconnected', ({
+        secondsUntilForfeit,
+      }: { gameId: string; secondsUntilForfeit: number }) => {
+        if (!mounted) return;
+        setOpponentDisconnectNotice(`Opponent disconnected. Forfeit in ${secondsUntilForfeit}s.`);
+      });
+
+      socket.on('opponent:reconnected', () => {
+        if (!mounted) return;
+        setOpponentDisconnectNotice(null);
+      });
+
       socket.on('game:sync', ({
         yourScore,
         opponentScore,
@@ -219,6 +232,7 @@ export default function DuelScreen({ route, navigation }: Props) {
 
       socket.on('game:finished', (results: GameFinishedPayload) => {
         if (!mounted) return;
+        setOpponentDisconnectNotice(null);
         if (!results.isDraw) {
           const didWin = results.winnerId === results.currentUserId;
           void playHaptic(didWin ? 'game_won' : 'game_lost');
@@ -325,6 +339,14 @@ export default function DuelScreen({ route, navigation }: Props) {
           )}
         </View>
       </View>
+
+      {opponentDisconnectNotice && (
+        <View style={[styles.disconnectBanner, { backgroundColor: theme.amberSoft, borderColor: theme.amber }]}>
+          <AppText.Sans preset="label" color={theme.amberDeep}>
+            {opponentDisconnectNotice}
+          </AppText.Sans>
+        </View>
+      )}
 
       {/* ── Progress bar + timer ── */}
       <View style={styles.progressRow}>
@@ -455,6 +477,14 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
+  },
+  disconnectBanner: {
+    marginHorizontal: 20,
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
 
   // Progress + timer
