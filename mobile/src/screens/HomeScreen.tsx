@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, StyleSheet, ActivityIndicator, ScrollView, RefreshControl,
+  View, StyleSheet, ScrollView, RefreshControl,
   TouchableOpacity, Pressable,
 } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
@@ -9,7 +9,9 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainTabParamList, RootStackParamList } from '../navigation';
 import api from '../services/api';
 import Avatar from '../components/Avatar';
+import Button from '../components/Button';
 import Card from '../components/Card';
+import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
@@ -51,6 +53,7 @@ export default function HomeScreen({ navigation }: Props) {
   const [winRate, setWinRate] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -59,6 +62,8 @@ export default function HomeScreen({ navigation }: Props) {
         api.get('/games/history?page=1&limit=20').catch(() => null),
       ]);
       setProfile(profileRes.data.data);
+      setError('');
+      setWinRate(null);
       if (historyRes) {
         const entries: { outcome: 'WIN' | 'LOSS' | 'DRAW' }[] =
           historyRes.data.data.entries ?? [];
@@ -68,7 +73,7 @@ export default function HomeScreen({ navigation }: Props) {
         }
       }
     } catch {
-      // non-critical
+      setError('Failed to load home.');
     }
   }, []);
 
@@ -85,8 +90,44 @@ export default function HomeScreen({ navigation }: Props) {
 
   if (loading) {
     return (
+      <ScreenTransitionView style={{ flex: 1, backgroundColor: theme.bg }}>
+        <View style={styles.container}>
+          <View style={styles.loadingHeader}>
+            <View style={{ flex: 1, gap: 8 }}>
+              <SkeletonBlock height={30} width="70%" />
+              <SkeletonBlock height={16} width="42%" />
+            </View>
+            <SkeletonBlock height={52} width={52} radius={26} />
+          </View>
+          <SkeletonCard style={styles.loadingStatsCard}>
+            <SkeletonBlock height={30} width="28%" />
+            <SkeletonBlock height={30} width="28%" />
+            <SkeletonBlock height={30} width="28%" />
+          </SkeletonCard>
+          <SkeletonCard style={styles.loadingPlayCard}>
+            <SkeletonBlock height={14} width="64%" />
+            <SkeletonBlock height={48} width="36%" />
+            <SkeletonBlock height={18} width="78%" />
+          </SkeletonCard>
+          <SkeletonCard>
+            <SkeletonBlock height={18} width="46%" />
+            <SkeletonBlock height={14} width="62%" style={{ marginTop: 8 }} />
+          </SkeletonCard>
+        </View>
+      </ScreenTransitionView>
+    );
+  }
+
+  if (error) {
+    return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator color={theme.ink3} />
+        <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.errorHeading}>Couldn't load.</AppText.Serif>
+        <AppText.Sans preset="body" color={theme.ink3} style={styles.errorBody}>Check your connection and try again.</AppText.Sans>
+        <Button
+          label="Retry"
+          onPress={() => { setError(''); setLoading(true); fetchData().finally(() => setLoading(false)); }}
+          style={styles.retryBtn}
+        />
       </View>
     );
   }
@@ -241,7 +282,7 @@ export default function HomeScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
   container: {
     paddingHorizontal: 20,
     paddingTop: 64,
@@ -258,6 +299,24 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flex: 1, gap: 4, paddingRight: 16 },
   greetingRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  loadingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 4,
+  },
+  loadingStatsCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+  },
+  loadingPlayCard: {
+    height: 214,
+    justifyContent: 'space-between',
+  },
+  errorHeading: { marginBottom: 8 },
+  errorBody: { marginBottom: 24, textAlign: 'center' },
+  retryBtn: { width: 120 },
 
   // Stats card — override Card's default padding
   statsCard: {

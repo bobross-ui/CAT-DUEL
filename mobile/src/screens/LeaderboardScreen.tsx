@@ -1,21 +1,18 @@
 import { useState, useCallback } from 'react';
 import {
   View, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Modal, RefreshControl,
+  Modal, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { leaderboardService } from '../services/leaderboard';
 import TierBadge from '../components/TierBadge';
 import Avatar from '../components/Avatar';
+import Button from '../components/Button';
+import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
-import { MainTabParamList } from '../navigation';
-
-type Props = BottomTabScreenProps<MainTabParamList, 'Ranks'>;
-
 type Tab = 'global' | 'around' | 'tier';
 const TIERS = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
 
@@ -85,7 +82,7 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
   );
 }
 
-export default function LeaderboardScreen(_: Props) {
+export default function LeaderboardScreen() {
   const { theme } = useTheme();
   const { playHaptic } = useAppPreferences();
   const [activeTab, setActiveTab] = useState<Tab>('global');
@@ -94,6 +91,7 @@ export default function LeaderboardScreen(_: Props) {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
 
   const fetchData = useCallback(async (tab: Tab, tier: string) => {
     try {
@@ -102,8 +100,10 @@ export default function LeaderboardScreen(_: Props) {
       else if (tab === 'around') res = await leaderboardService.getAroundMe();
       else res = await leaderboardService.getTier(tier);
       setData(res.data.data);
+      setError('');
     } catch {
       setData(null);
+      setError('Failed to load ranks.');
     }
   }, []);
 
@@ -126,6 +126,12 @@ export default function LeaderboardScreen(_: Props) {
     setActiveTab(tab);
     setData(null);
   }
+
+  const retry = useCallback(() => {
+    setError('');
+    setLoading(true);
+    fetchData(activeTab, selectedTier).finally(() => setLoading(false));
+  }, [activeTab, fetchData, selectedTier]);
 
   const gamesNeeded = activeTab !== 'tier' && data?.currentUserRank == null
     ? Math.max(0, 5 - (data?.entries.find(e => e.isCurrentUser)?.gamesPlayed ?? 0))
@@ -184,7 +190,25 @@ export default function LeaderboardScreen(_: Props) {
       )}
 
       {loading ? (
-        <ActivityIndicator style={styles.loader} color={theme.ink3} />
+        <View style={styles.list}>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <SkeletonCard key={i} style={styles.loadingRow}>
+              <SkeletonBlock height={18} width={32} />
+              <SkeletonBlock height={36} width={36} radius={18} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <SkeletonBlock height={16} width={i % 2 === 0 ? '68%' : '52%'} />
+                <SkeletonBlock height={14} width="32%" />
+              </View>
+              <SkeletonBlock height={16} width={56} />
+            </SkeletonCard>
+          ))}
+        </View>
+      ) : error ? (
+        <View style={styles.errorState}>
+          <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.errorHeading}>Couldn't load.</AppText.Serif>
+          <AppText.Sans preset="body" color={theme.ink3} style={styles.errorBody}>Check your connection and try again.</AppText.Sans>
+          <Button label="Retry" onPress={retry} style={styles.retryBtn} />
+        </View>
       ) : (
         <FlatList
           data={data?.entries ?? []}
@@ -195,7 +219,9 @@ export default function LeaderboardScreen(_: Props) {
           ListEmptyComponent={
             <View style={styles.empty}>
               <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.emptyHeading}>
-                {activeTab === 'tier' ? 'Be the first.' : 'Play a few matches\nto earn your rank.'}
+                {activeTab === 'tier'
+                  ? `Be the first ${selectedTier[0]}${selectedTier.slice(1).toLowerCase()}.`
+                  : 'Play a few matches\nto earn your rank.'}
               </AppText.Serif>
               <AppText.Sans preset="body" color={theme.ink3} style={styles.emptyBody}>
                 {activeTab === 'tier'
@@ -278,8 +304,24 @@ const styles = StyleSheet.create({
   },
 
   // List
-  loader: { flex: 1, marginTop: 60 },
   list: { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 4 },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  errorState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  errorHeading: { marginBottom: 8 },
+  errorBody: { marginBottom: 24, textAlign: 'center' },
+  retryBtn: { width: 120 },
 
   // Row
   row: {

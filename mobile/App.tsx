@@ -22,6 +22,7 @@ import { AuthProvider } from './src/context/AuthContext';
 import { AppPreferencesProvider } from './src/context/AppPreferencesContext';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import RootNavigator from './src/navigation';
+import ThemedToast from './src/components/ThemedToast';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -52,6 +53,7 @@ export default function App() {
             <NavigationContainer>
               <RootNavigator />
             </NavigationContainer>
+            <ThemedToast />
           </ThemeProvider>
         </AppPreferencesProvider>
       </AuthProvider>

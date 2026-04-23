@@ -9,6 +9,8 @@ import { RootStackParamList } from '../navigation';
 import api from '../services/api';
 import TierBadge from '../components/TierBadge';
 import Avatar from '../components/Avatar';
+import Button from '../components/Button';
+import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
@@ -55,6 +57,7 @@ export default function MatchHistoryScreen({ navigation }: Props) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState('');
 
   const fetchPage = useCallback(async (p: number, replace: boolean) => {
     try {
@@ -63,7 +66,10 @@ export default function MatchHistoryScreen({ navigation }: Props) {
       setEntries(prev => replace ? newEntries : [...prev, ...newEntries]);
       setTotalPages(pagination.totalPages);
       setPage(p);
-    } catch { /* non-critical */ }
+      setError('');
+    } catch {
+      setError('Failed to load history.');
+    }
   }, []);
 
   useFocusEffect(
@@ -87,6 +93,12 @@ export default function MatchHistoryScreen({ navigation }: Props) {
     setLoadingMore(false);
   }, [fetchPage, loadingMore, page, totalPages]);
 
+  const retry = useCallback(() => {
+    setError('');
+    setLoading(true);
+    fetchPage(1, true).finally(() => setLoading(false));
+  }, [fetchPage]);
+
   const stripeColor = (outcome: 'WIN' | 'LOSS' | 'DRAW') =>
     outcome === 'WIN' ? theme.accent : outcome === 'LOSS' ? theme.coral : theme.ink3;
 
@@ -103,7 +115,24 @@ export default function MatchHistoryScreen({ navigation }: Props) {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={styles.loader} color={theme.ink3} />
+        <View style={styles.list}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <SkeletonCard key={i} style={styles.loadingCard}>
+              <SkeletonBlock height={36} width={36} radius={18} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <SkeletonBlock height={17} width={i % 2 === 0 ? '64%' : '46%'} />
+                <SkeletonBlock height={15} width="74%" />
+              </View>
+              <SkeletonBlock height={16} width={34} />
+            </SkeletonCard>
+          ))}
+        </View>
+      ) : error ? (
+        <View style={styles.errorState}>
+          <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.errorHeading}>Couldn't load.</AppText.Serif>
+          <AppText.Sans preset="body" color={theme.ink3} style={styles.errorBody}>Check your connection and try again.</AppText.Sans>
+          <Button label="Retry" onPress={retry} style={styles.retryBtn} />
+        </View>
       ) : (
         <FlatList
           data={entries}
@@ -169,6 +198,11 @@ export default function MatchHistoryScreen({ navigation }: Props) {
               <AppText.Sans preset="body" color={theme.ink3}>
                 Find your first duel.
               </AppText.Sans>
+              <Button
+                label="Find Duel"
+                onPress={() => navigation.navigate('Matchmaking')}
+                style={styles.emptyCta}
+              />
             </View>
           }
           contentContainerStyle={styles.list}
@@ -188,8 +222,24 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 14,
   },
-  loader: { flex: 1, marginTop: 60 },
   list: { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 4 },
+  loadingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  errorState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  errorHeading: { marginBottom: 8 },
+  errorBody: { marginBottom: 24, textAlign: 'center' },
+  retryBtn: { width: 120 },
 
   // Card row
   card: {
@@ -233,4 +283,5 @@ const styles = StyleSheet.create({
   // Empty
   empty: { alignItems: 'center', paddingTop: 80, gap: 10 },
   emptyHeading: { marginBottom: 4 },
+  emptyCta: { marginTop: 12, width: 160 },
 });

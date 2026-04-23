@@ -20,7 +20,7 @@ function MarkCircle({ isCorrect }: { isCorrect: boolean }) {
 }
 
 export default function PracticeSummaryScreen({ navigation, route }: Props) {
-  const { total, correct, totalTimeMs, questions } = route.params;
+  const { total, correct, questions } = route.params;
   const { theme } = useTheme();
   const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
 

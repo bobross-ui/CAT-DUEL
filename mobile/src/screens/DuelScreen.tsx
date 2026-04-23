@@ -159,9 +159,7 @@ export default function DuelScreen({ route, navigation }: Props) {
         });
       });
 
-      socket.on('answer:result', ({
-        isCorrect: _isCorrect, yourScore,
-      }: { isCorrect: boolean; correctAnswer: number; yourScore: number }) => {
+      socket.on('answer:result', ({ yourScore }: { isCorrect: boolean; correctAnswer: number; yourScore: number }) => {
         if (!mounted) return;
         pulseScore(yourScoreScale);
         setDs(prev => ({ ...prev, yourScore, showFeedback: true }));

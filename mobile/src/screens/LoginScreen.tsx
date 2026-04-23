@@ -7,11 +7,14 @@ import {
   View,
 } from 'react-native';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { z } from 'zod';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeProvider';
 import Button from '../components/Button';
 import AppText from '../components/Text';
+
+const displayNameSchema = z.string().trim().min(2, 'Display name must be at least 2 characters.').max(30, 'Display name must be 30 characters or less.');
 
 export default function LoginScreen() {
   const { signInWithEmail, signInWithGoogle } = useAuth();
@@ -28,8 +31,9 @@ export default function LoginScreen() {
       setError('Please enter email and password.');
       return;
     }
-    if (isRegistering && !displayName.trim()) {
-      setError('Please enter a display name.');
+    const parsedDisplayName = isRegistering ? displayNameSchema.safeParse(displayName) : null;
+    if (parsedDisplayName && !parsedDisplayName.success) {
+      setError(parsedDisplayName.error.issues[0]?.message ?? 'Please enter a display name.');
       return;
     }
     setError('');
@@ -37,7 +41,7 @@ export default function LoginScreen() {
     try {
       if (isRegistering) {
         const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(newUser, { displayName: displayName.trim() });
+        await updateProfile(newUser, { displayName: parsedDisplayName!.data });
       } else {
         await signInWithEmail(email, password);
       }
@@ -78,6 +82,7 @@ export default function LoginScreen() {
           value={displayName}
           onChangeText={setDisplayName}
           autoCapitalize="words"
+          maxLength={30}
         />
       )}
       <TextInput

@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, TouchableOpacity, StyleSheet,
   ScrollView, RefreshControl, Modal, TextInput,
 } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { z } from 'zod';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { MainTabParamList, RootStackParamList } from '../navigation';
@@ -13,6 +14,7 @@ import TierBadge from '../components/TierBadge';
 import Avatar from '../components/Avatar';
 import Card from '../components/Card';
 import Button from '../components/Button';
+import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
@@ -38,6 +40,8 @@ type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Me'>,
   NativeStackScreenProps<RootStackParamList>
 >;
+
+const displayNameSchema = z.string().trim().min(2, 'Name must be at least 2 characters.').max(30, 'Name must be 30 characters or less.');
 
 export default function ProfileScreen({ navigation }: Props) {
   const { signOut } = useAuth();
@@ -87,12 +91,16 @@ export default function ProfileScreen({ navigation }: Props) {
   }
 
   async function saveDisplayName() {
-    if (!editName.trim()) { setEditError('Name cannot be empty.'); return; }
+    const parsed = displayNameSchema.safeParse(editName);
+    if (!parsed.success) {
+      setEditError(parsed.error.issues[0]?.message ?? 'Enter a valid display name.');
+      return;
+    }
     setSaving(true);
     setEditError('');
     try {
-      await api.patch('/users/me', { displayName: editName.trim() });
-      setProfile((prev) => prev ? { ...prev, displayName: editName.trim() } : prev);
+      await api.patch('/users/me', { displayName: parsed.data });
+      setProfile((prev) => prev ? { ...prev, displayName: parsed.data } : prev);
       setEditVisible(false);
     } catch (err: unknown) {
       const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;
@@ -104,9 +112,26 @@ export default function ProfileScreen({ navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator color={theme.ink3} />
-      </View>
+      <ScreenTransitionView style={{ flex: 1, backgroundColor: theme.bg }}>
+        <View style={styles.container}>
+          <SkeletonBlock height={88} width={88} radius={44} />
+          <SkeletonBlock height={30} width="48%" />
+          <SkeletonBlock height={18} width="34%" />
+          <SkeletonCard style={styles.statsCard}>
+            <SkeletonBlock height={32} width="28%" />
+            <SkeletonBlock height={32} width="28%" />
+            <SkeletonBlock height={32} width="28%" />
+          </SkeletonCard>
+          <SkeletonBlock height={2} />
+          <View style={styles.listSection}>
+            {[0, 1, 2].map((i) => (
+              <SkeletonCard key={i} style={styles.loadingRow}>
+                <SkeletonBlock height={18} width={i === 2 ? '28%' : '44%'} />
+              </SkeletonCard>
+            ))}
+          </View>
+        </View>
+      </ScreenTransitionView>
     );
   }
 
@@ -256,7 +281,7 @@ export default function ProfileScreen({ navigation }: Props) {
               onChangeText={setEditName}
               autoCapitalize="words"
               autoFocus
-              maxLength={50}
+              maxLength={30}
               placeholderTextColor={theme.ink3}
             />
             {editError
@@ -357,4 +382,5 @@ const styles = StyleSheet.create({
   modalError: { marginBottom: 8 },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
   modalActionBtn: { flex: 1 },
+  loadingRow: { padding: 16 },
 });

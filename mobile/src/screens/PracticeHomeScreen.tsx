@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import Button from '../components/Button';
+import Card from '../components/Card';
+import { questionService } from '../services/questions';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeHome'>;
 
@@ -25,6 +27,14 @@ export default function PracticeHomeScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<number | undefined>(undefined);
+  const [practiceTotal, setPracticeTotal] = useState<number | null>(null);
+
+  useEffect(() => {
+    questionService
+      .getSummary()
+      .then((res) => setPracticeTotal(res.data.data.total))
+      .catch(() => setPracticeTotal(null));
+  }, []);
 
   return (
     <ScrollView
@@ -39,6 +49,22 @@ export default function PracticeHomeScreen({ navigation }: Props) {
       <AppText.Sans preset="body" color={theme.ink3} style={styles.subtitle}>
         Choose a section to begin
       </AppText.Sans>
+
+      {practiceTotal === 0 && (
+        <Card style={styles.emptyCard}>
+          <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.emptyTitle}>
+            You haven't practiced yet.
+          </AppText.Serif>
+          <AppText.Sans preset="body" color={theme.ink3} style={styles.emptyBody}>
+            Pick a section below and start with full feedback.
+          </AppText.Sans>
+          <Button
+            label="Start Practice"
+            onPress={() => navigation.navigate('Question', { category: 'QUANT', difficulty: undefined })}
+            style={styles.emptyCta}
+          />
+        </Card>
+      )}
 
       {/* ── Section chips ── */}
       <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.sectionLabel}>SECTION</AppText.Mono>
@@ -130,6 +156,10 @@ const styles = StyleSheet.create({
   },
   title: { marginTop: 24, marginBottom: 6 },
   subtitle: { marginBottom: 32 },
+  emptyCard: { marginBottom: 28 },
+  emptyTitle: { marginBottom: 8 },
+  emptyBody: { marginBottom: 16 },
+  emptyCta: {},
   sectionLabel: { marginBottom: 10 },
 
   // Section chips

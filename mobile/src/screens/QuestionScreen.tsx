@@ -32,6 +32,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
   const [question, setQuestion] = useState<Question | null>(null);
   const [loading, setLoading] = useState(true);
   const [noMore, setNoMore] = useState(false);
+  const [error, setError] = useState('');
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [result, setResult] = useState<AnswerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -50,6 +51,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
 
   async function loadNextQuestion() {
     setLoading(true);
+    setError('');
     setSelectedOption(null);
     setResult(null);
     questionStartTime.current = Date.now();
@@ -59,11 +61,13 @@ export default function QuestionScreen({ navigation, route }: Props) {
       const data = res.data.data;
       if ('noMoreQuestions' in data) {
         setNoMore(true);
+        setQuestion(null);
       } else {
+        setNoMore(false);
         setQuestion(data as Question);
       }
     } catch {
-      setNoMore(true);
+      setError('Failed to load question.');
     } finally {
       setLoading(false);
     }
@@ -124,6 +128,21 @@ export default function QuestionScreen({ navigation, route }: Props) {
           <Button label="View Summary" onPress={handleEndSession} style={styles.btnSpacing} />
         )}
         <Button label="Try a different section" variant="ghost" onPress={() => navigation.goBack()} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.centered, { backgroundColor: theme.bg }]}>
+        <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.noMoreTitle}>
+          Couldn't load.
+        </AppText.Serif>
+        <AppText.Sans preset="body" color={theme.ink3} style={styles.noMoreSub}>
+          Check your connection and try again.
+        </AppText.Sans>
+        <Button label="Retry" onPress={loadNextQuestion} style={styles.btnSpacing} />
+        <Button label="Back to Practice" variant="ghost" onPress={() => navigation.goBack()} />
       </View>
     );
   }
