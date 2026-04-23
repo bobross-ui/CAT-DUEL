@@ -10,6 +10,7 @@ const router = Router();
 const updateProfileSchema = z.object({
   displayName: z.string().min(1).max(50).optional(),
   avatarUrl: z.string().url().optional(),
+  onboardingCompletedAt: z.string().datetime().optional(),
 });
 
 router.get('/:id', authMiddleware, async (req, res, next) => {
@@ -37,9 +38,13 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
 
 router.patch('/me', authMiddleware, validate(updateProfileSchema), async (req, res, next) => {
   try {
+    const { onboardingCompletedAt, ...profileData } = req.body;
     const user = await prisma.user.update({
       where: { id: req.user.id },
-      data: req.body,
+      data: {
+        ...profileData,
+        ...(onboardingCompletedAt && { onboardingCompletedAt: new Date(onboardingCompletedAt) }),
+      },
     });
     res.json({ success: true, data: user });
   } catch (err) {

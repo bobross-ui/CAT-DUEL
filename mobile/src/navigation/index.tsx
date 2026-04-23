@@ -1,8 +1,15 @@
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { NavigatorScreenParams } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { NativeStackScreenProps, createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../theme/ThemeProvider';
+import api from '../services/api';
+import Button from '../components/Button';
+import AppText from '../components/Text';
 import LoginScreen from '../screens/LoginScreen';
+import OnboardingScreen from '../screens/OnboardingScreen';
 import HomeScreen from '../screens/HomeScreen';
 import PlayScreen from '../screens/PlayScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -80,6 +87,8 @@ export type MainTabParamList = {
 
 export type RootStackParamList = {
   Login: undefined;
+  Onboarding: undefined;
+  PostOnboardingRedirect: { target: 'home' | 'practice' | 'match' };
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Matchmaking: { notice?: string } | undefined;
   Found: { gameId: string; opponent: OpponentInfo; ratingImpact: { win: number; loss: number } | null };
@@ -101,6 +110,12 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
+type CompletionTarget = 'home' | 'practice' | 'match';
+
+interface AuthProfile {
+  onboardingCompletedAt: string | null;
+}
+
 function MainTabNavigator() {
   return (
     <Tab.Navigator
@@ -115,15 +130,107 @@ function MainTabNavigator() {
   );
 }
 
+function PostOnboardingRedirect({
+  navigation,
+  route,
+}: NativeStackScreenProps<RootStackParamList, 'PostOnboardingRedirect'>) {
+  useEffect(() => {
+    const routes: Parameters<typeof navigation.reset>[0]['routes'] = [{ name: 'MainTabs' }];
+
+    if (route.params.target === 'practice') {
+      routes.push({ name: 'PracticeHome' });
+    } else if (route.params.target === 'match') {
+      routes.push({ name: 'Matchmaking' });
+    }
+
+    navigation.reset({ index: routes.length - 1, routes });
+  }, [navigation, route.params.target]);
+
+  return null;
+}
+
 export default function RootNavigator() {
   const { user, loading } = useAuth();
+  const { theme } = useTheme();
+  const [profile, setProfile] = useState<AuthProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState(false);
+  const [postOnboardingTarget, setPostOnboardingTarget] = useState<CompletionTarget | null>(null);
 
-  if (loading) return null;
+  const fetchProfile = useCallback(async () => {
+    if (!user) {
+      setProfile(null);
+      setProfileError(false);
+      setPostOnboardingTarget(null);
+      return;
+    }
+
+    setProfileLoading(true);
+    setProfileError(false);
+    try {
+      const res = await api.get('/auth/me');
+      setProfile(res.data.data);
+    } catch {
+      setProfile(null);
+      setProfileError(true);
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void fetchProfile();
+  }, [fetchProfile]);
+
+  const handleOnboardingCompleted = useCallback((target: CompletionTarget, completedAt: string) => {
+    setPostOnboardingTarget(target);
+    setProfile((current) => ({
+      ...(current ?? {}),
+      onboardingCompletedAt: completedAt,
+    }));
+  }, []);
+
+  if (loading || (user && profileLoading)) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg }}>
+        <ActivityIndicator color={theme.ink3} />
+      </View>
+    );
+  }
+
+  if (user && profileError) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: theme.bg }}>
+        <AppText.Serif preset="h1Serif" color={theme.ink} style={{ marginBottom: 8, textAlign: 'center' }}>
+          Couldn't load.
+        </AppText.Serif>
+        <AppText.Sans preset="body" color={theme.ink2} style={{ marginBottom: 20, textAlign: 'center' }}>
+          Check your connection and try again.
+        </AppText.Sans>
+        <Button label="Retry" onPress={fetchProfile} />
+      </View>
+    );
+  }
+
+  const hasCompletedOnboarding = Boolean(profile?.onboardingCompletedAt);
+  const initialRouteName = !user
+    ? 'Login'
+    : hasCompletedOnboarding
+      ? (postOnboardingTarget ? 'PostOnboardingRedirect' : 'MainTabs')
+      : 'Onboarding';
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
+    <Stack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName={initialRouteName}
+    >
+      {user && hasCompletedOnboarding ? (
         <>
+          <Stack.Screen
+            name="PostOnboardingRedirect"
+            component={PostOnboardingRedirect}
+            initialParams={{ target: postOnboardingTarget ?? 'home' }}
+          />
           <Stack.Screen name="MainTabs" component={MainTabNavigator} />
           <Stack.Screen name="Matchmaking" component={MatchmakingScreen} />
           <Stack.Screen name="Found" component={FoundScreen} options={{ gestureEnabled: false }} />
@@ -140,6 +247,15 @@ export default function RootNavigator() {
           <Stack.Screen name="MatchDetail" component={MatchDetailScreen} />
           <Stack.Screen name="Debug" component={DebugScreen} />
         </>
+      ) : user ? (
+        <Stack.Screen name="Onboarding">
+          {(props) => (
+            <OnboardingScreen
+              {...props}
+              onCompleted={handleOnboardingCompleted}
+            />
+          )}
+        </Stack.Screen>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} />
       )}
