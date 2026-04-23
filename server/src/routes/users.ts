@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma } from '../generated/prisma/client';
+import admin from '../config/firebase';
+import { redis } from '../config/redis';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
@@ -52,6 +54,48 @@ router.patch('/me', authMiddleware, validate(updateProfileSchema), async (req, r
       res.status(409).json({ success: false, error: { code: 'DISPLAY_NAME_TAKEN', message: 'That display name is already taken.' } });
       return;
     }
+    next(err);
+  }
+});
+
+router.delete('/me', authMiddleware, async (req, res, next) => {
+  try {
+    const activeGameId = await redis.get(`active_game:${req.user.id}`);
+    if (activeGameId) {
+      res.status(409).json({
+        success: false,
+        error: { code: 'ACTIVE_MATCH', message: 'Finish your current match first.' },
+      });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.matchAnswer.deleteMany({
+        where: {
+          match: {
+            OR: [
+              { player1Id: req.user.id },
+              { player2Id: req.user.id },
+            ],
+          },
+        },
+      });
+      await tx.practiceAnswer.deleteMany({ where: { userId: req.user.id } });
+      await tx.match.deleteMany({
+        where: {
+          OR: [
+            { player1Id: req.user.id },
+            { player2Id: req.user.id },
+          ],
+        },
+      });
+      await tx.user.delete({ where: { id: req.user.id } });
+    });
+
+    await admin.auth().deleteUser(req.user.firebaseUid);
+
+    res.json({ success: true });
+  } catch (err) {
     next(err);
   }
 });

@@ -14,28 +14,38 @@ type HapticEvent =
 
 interface AppPreferencesContextValue {
   hapticsEnabled: boolean;
+  analyticsEnabled: boolean;
   reduceMotionEnabled: boolean;
   setHapticsEnabled: (enabled: boolean) => void;
+  setAnalyticsEnabled: (enabled: boolean) => void;
   playHaptic: (event: HapticEvent) => Promise<void>;
 }
 
 const HAPTICS_STORE_KEY = 'haptics_enabled';
+const ANALYTICS_STORE_KEY = 'analytics_enabled';
 
 const AppPreferencesContext = createContext<AppPreferencesContextValue>({
   hapticsEnabled: true,
+  analyticsEnabled: true,
   reduceMotionEnabled: false,
   setHapticsEnabled: () => {},
+  setAnalyticsEnabled: () => {},
   playHaptic: async () => {},
 });
 
 export function AppPreferencesProvider({ children }: { children: React.ReactNode }) {
   const [hapticsEnabled, setHapticsEnabledState] = useState(true);
+  const [analyticsEnabled, setAnalyticsEnabledState] = useState(true);
   const [reduceMotionEnabled, setReduceMotionEnabled] = useState(false);
 
   useEffect(() => {
     SecureStore.getItemAsync(HAPTICS_STORE_KEY).then((value) => {
       if (value === 'true') setHapticsEnabledState(true);
       if (value === 'false') setHapticsEnabledState(false);
+    });
+    SecureStore.getItemAsync(ANALYTICS_STORE_KEY).then((value) => {
+      if (value === 'true') setAnalyticsEnabledState(true);
+      if (value === 'false') setAnalyticsEnabledState(false);
     });
   }, []);
 
@@ -55,6 +65,11 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
   const setHapticsEnabled = (enabled: boolean) => {
     setHapticsEnabledState(enabled);
     void SecureStore.setItemAsync(HAPTICS_STORE_KEY, String(enabled));
+  };
+
+  const setAnalyticsEnabled = (enabled: boolean) => {
+    setAnalyticsEnabledState(enabled);
+    void SecureStore.setItemAsync(ANALYTICS_STORE_KEY, String(enabled));
   };
 
   const playHaptic = async (event: HapticEvent) => {
@@ -84,8 +99,10 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
     <AppPreferencesContext.Provider
       value={{
         hapticsEnabled,
+        analyticsEnabled,
         reduceMotionEnabled,
         setHapticsEnabled,
+        setAnalyticsEnabled,
         playHaptic,
       }}
     >

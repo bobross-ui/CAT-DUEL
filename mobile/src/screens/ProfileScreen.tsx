@@ -247,6 +247,7 @@ export default function ProfileScreen({ navigation }: Props) {
 
             <TouchableOpacity
               style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
+              onPress={() => navigation.navigate('Settings')}
               activeOpacity={0.7}
             >
               <AppText.Sans preset="bodyMed" color={theme.ink}>Settings</AppText.Sans>

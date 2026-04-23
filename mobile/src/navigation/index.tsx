@@ -24,6 +24,7 @@ import DuelResultsScreen from '../screens/DuelResultsScreen';
 import MatchHistoryScreen from '../screens/MatchHistoryScreen';
 import MatchDetailScreen from '../screens/MatchDetailScreen';
 import DebugScreen from '../screens/DebugScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import TabBar from '../components/TabBar';
 
 export interface ClientQuestion {
@@ -105,6 +106,7 @@ export type RootStackParamList = {
   MatchHistory: undefined;
   MatchDetail: { matchId: string; opponentName: string | null };
   Debug: undefined;
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -246,6 +248,7 @@ export default function RootNavigator() {
           <Stack.Screen name="MatchHistory" component={MatchHistoryScreen} />
           <Stack.Screen name="MatchDetail" component={MatchDetailScreen} />
           <Stack.Screen name="Debug" component={DebugScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
         </>
       ) : user ? (
         <Stack.Screen name="Onboarding">
