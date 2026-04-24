@@ -83,6 +83,8 @@ export default function LoginScreen() {
           onChangeText={setDisplayName}
           autoCapitalize="words"
           maxLength={30}
+          accessibilityLabel="Display name"
+          accessibilityHint="Enter the public name shown to other players"
         />
       )}
       <TextInput
@@ -93,6 +95,8 @@ export default function LoginScreen() {
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
+        textContentType="emailAddress"
+        accessibilityLabel="Email"
       />
       <TextInput
         style={[styles.input, { borderColor: theme.line, color: theme.ink, backgroundColor: theme.bg }]}
@@ -101,6 +105,8 @@ export default function LoginScreen() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        textContentType={isRegistering ? 'newPassword' : 'password'}
+        accessibilityLabel="Password"
       />
 
       {error ? <AppText.Sans preset="label" color={theme.coral} style={styles.error}>{error}</AppText.Sans> : null}
@@ -117,6 +123,8 @@ export default function LoginScreen() {
         color={theme.ink2}
         style={styles.toggleText}
         onPress={() => { setIsRegistering(r => !r); setError(''); setDisplayName(''); }}
+        accessibilityRole="button"
+        accessibilityLabel={isRegistering ? 'Sign in instead' : 'Register instead'}
       >
         {isRegistering ? 'Already have an account? Sign in' : "Don't have an account? Register"}
       </AppText.Sans>
@@ -127,6 +135,7 @@ export default function LoginScreen() {
           variant="ghost"
           onPress={handleGoogleSignIn}
           disabled={loading}
+          accessibilityHint="Starts Google sign in"
           style={styles.buttonSpacing}
         />
       )}

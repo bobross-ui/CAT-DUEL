@@ -108,7 +108,12 @@ export default function MatchHistoryScreen({ navigation }: Props) {
   return (
     <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <AppText.Sans preset="body" color={theme.ink}>←</AppText.Sans>
         </TouchableOpacity>
         <AppText.Serif preset="heroSerif" color={theme.ink}>Match History</AppText.Serif>
@@ -145,6 +150,9 @@ export default function MatchHistoryScreen({ navigation }: Props) {
                 opponentName: item.opponent.displayName,
               })}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.outcome.toLowerCase()} against ${item.opponent.displayName ?? 'opponent'}, ${item.yourScore} to ${item.opponentScore}`}
+              accessibilityHint="Opens match details"
             >
               {/* Left stripe */}
               <View style={[styles.stripe, { backgroundColor: stripeColor(item.outcome) }]} />

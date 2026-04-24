@@ -11,6 +11,8 @@ interface ButtonProps {
   variant?: 'primary' | 'ghost' | 'dark' | 'coral';
   loading?: boolean;
   disabled?: boolean;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -20,6 +22,8 @@ export default function Button({
   variant = 'primary',
   loading = false,
   disabled = false,
+  accessibilityLabel,
+  accessibilityHint,
   style,
 }: ButtonProps) {
   const { theme } = useTheme();
@@ -68,6 +72,10 @@ export default function Button({
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         disabled={isDisabled}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? label}
+        accessibilityHint={accessibilityHint}
+        accessibilityState={{ disabled: isDisabled, busy: loading }}
       >
         {loading ? (
           <ActivityIndicator color={textColor} />

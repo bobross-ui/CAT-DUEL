@@ -304,6 +304,10 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
                   key={q.questionId}
                   onPress={() => setExpandedId(isExpanded ? null : q.questionId)}
                   style={[styles.reviewCard, { backgroundColor: theme.card, borderColor: theme.line }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Question ${idx + 1} review, ${q.yourAnswer?.isCorrect ? 'you were correct' : 'you were incorrect'}`}
+                  accessibilityHint={isExpanded ? 'Collapses the answer explanation' : 'Expands the answer explanation'}
+                  accessibilityState={{ expanded: isExpanded }}
                 >
                   {/* Compact header row */}
                   <View style={styles.reviewRow}>
@@ -388,12 +392,16 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
           <Pressable
             onPress={() => navigation.navigate('MainTabs')}
             style={[styles.homeBtn, { backgroundColor: theme.card, borderColor: theme.line }]}
+            accessibilityRole="button"
+            accessibilityLabel="Back to home"
           >
             <Feather name="home" size={22} color={theme.ink2} />
           </Pressable>
           <Pressable
             onPress={openShareMatch}
             style={[styles.homeBtn, { backgroundColor: theme.card, borderColor: theme.line }]}
+            accessibilityRole="button"
+            accessibilityLabel="Share match"
           >
             <Feather name="share-2" size={20} color={theme.ink2} />
           </Pressable>

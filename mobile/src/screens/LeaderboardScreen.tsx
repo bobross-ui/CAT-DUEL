@@ -173,6 +173,8 @@ export default function LeaderboardScreen({ route }: Props) {
           onPress={openShareRanks}
           style={[styles.shareBtn, { borderColor: theme.line, backgroundColor: theme.card }]}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Share leaderboard"
         >
           <AppText.Mono preset="eyebrow" color={theme.ink2}>SHARE</AppText.Mono>
         </TouchableOpacity>
@@ -193,6 +195,9 @@ export default function LeaderboardScreen({ route }: Props) {
                 if (tab !== activeTab) switchTab(tab);
                 else if (tab === 'tier') setTierPickerVisible(true);
               }}
+              accessibilityRole="tab"
+              accessibilityLabel={`${label} leaderboard`}
+              accessibilityState={{ selected: isActive }}
             >
               <AppText.Mono
                 preset="chipLabel"
@@ -270,11 +275,13 @@ export default function LeaderboardScreen({ route }: Props) {
       )}
 
       {/* ── Tier picker modal ── */}
-      <Modal visible={tierPickerVisible} transparent animationType="fade">
+      <Modal visible={tierPickerVisible} transparent animationType="fade" onRequestClose={() => setTierPickerVisible(false)}>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setTierPickerVisible(false)}
+          accessibilityViewIsModal
+          accessibilityLabel="Select leaderboard tier"
         >
           <View style={[styles.tierPicker, { backgroundColor: theme.card, borderColor: theme.line }]}>
             <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.tierPickerTitle}>
@@ -293,6 +300,9 @@ export default function LeaderboardScreen({ route }: Props) {
                   setData(null);
                   setTierPickerVisible(false);
                 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Show ${tier.toLowerCase()} leaderboard`}
+                accessibilityState={{ selected: selectedTier === tier }}
               >
                 <TierBadge tier={tier} />
               </TouchableOpacity>

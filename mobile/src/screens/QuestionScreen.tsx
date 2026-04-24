@@ -158,7 +158,12 @@ export default function QuestionScreen({ navigation, route }: Props) {
             {question?.category}{question?.subTopic ? ` · ${question.subTopic}` : ''}
           </AppText.Mono>
         </View>
-        <TouchableOpacity onPress={handleEndSession} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          onPress={handleEndSession}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="End practice session"
+        >
           <AppText.Sans preset="label" color={theme.ink3}>End</AppText.Sans>
         </TouchableOpacity>
       </View>
@@ -204,6 +209,9 @@ export default function QuestionScreen({ navigation, route }: Props) {
                 onPress={() => !result && setSelectedOption(index)}
                 disabled={!!result}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`Answer ${String.fromCharCode(65 + index)}. ${option}`}
+                accessibilityState={{ selected: selectedOption === index, disabled: !!result }}
               >
                 <AppText.Serif preset="scoreLg" color={letterColor} style={styles.letterKey}>
                   {String.fromCharCode(65 + index)}

@@ -408,6 +408,9 @@ export default function DuelScreen({ route, navigation }: Props) {
                     selectedAnswer: prev.selectedAnswer === index ? null : index,
                   }))}
                   disabled={ds.showFeedback}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Answer ${String.fromCharCode(65 + index)}. ${option}`}
+                  accessibilityState={{ selected: isSelected, disabled: ds.showFeedback }}
                 >
                   <AppText.Serif
                     preset="scoreLg"
@@ -428,7 +431,14 @@ export default function DuelScreen({ route, navigation }: Props) {
 
       {/* ── Footer: quit + submit ── */}
       <View style={[styles.footer, { borderTopColor: theme.line }]}>
-        <Pressable onPress={handleQuit} style={styles.quitBtn} hitSlop={12}>
+        <Pressable
+          onPress={handleQuit}
+          style={styles.quitBtn}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Quit duel"
+          accessibilityHint="Forfeits this match"
+        >
           <AppText.Sans preset="label" color={theme.ink3}>Quit</AppText.Sans>
         </Pressable>
         {!ds.showFeedback && (

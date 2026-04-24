@@ -96,6 +96,9 @@ export default function OnboardingScreen({ onCompleted }: Props) {
           onPress={() => complete('home')}
           disabled={loadingTarget !== null}
           hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel="Skip onboarding"
+          accessibilityState={{ disabled: loadingTarget !== null }}
         >
           <AppText.Mono preset="eyebrow" color={theme.ink3}>SKIP</AppText.Mono>
         </TouchableOpacity>
@@ -145,6 +148,10 @@ export default function OnboardingScreen({ onCompleted }: Props) {
                   width: dotIndex === index ? 22 : 7,
                 },
               ]}
+              accessible
+              accessibilityRole="progressbar"
+              accessibilityLabel={`Onboarding slide ${dotIndex + 1} of ${SLIDES.length}`}
+              accessibilityState={{ selected: dotIndex === index }}
             />
           ))}
         </View>

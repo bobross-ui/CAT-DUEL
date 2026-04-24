@@ -41,7 +41,12 @@ export default function PracticeHomeScreen({ navigation }: Props) {
       style={{ backgroundColor: theme.bg }}
       contentContainerStyle={styles.content}
     >
-      <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      <TouchableOpacity
+        onPress={() => navigation.goBack()}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
         <AppText.Sans preset="body" color={theme.ink2}>← Back</AppText.Sans>
       </TouchableOpacity>
 
@@ -83,6 +88,9 @@ export default function PracticeHomeScreen({ navigation }: Props) {
               ]}
               onPress={() => setSelectedCategory(cat.key)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Select ${cat.label}`}
+              accessibilityState={{ selected: isSelected }}
             >
               <AppText.Mono
                 preset="chipLabel"
@@ -121,6 +129,9 @@ export default function PracticeHomeScreen({ navigation }: Props) {
               ]}
               onPress={() => setSelectedDifficulty(d.value)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Select ${d.label} difficulty`}
+              accessibilityState={{ selected: isSelected }}
             >
               <AppText.Sans preset="label" color={isSelected ? theme.bg : theme.ink2}>
                 {d.label}
@@ -141,6 +152,7 @@ export default function PracticeHomeScreen({ navigation }: Props) {
           }
         }}
         disabled={selectedCategory === null}
+        accessibilityHint="Starts practice with the selected section and difficulty"
         style={styles.cta}
       />
     </ScrollView>

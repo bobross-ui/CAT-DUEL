@@ -182,6 +182,8 @@ export default function ProfileScreen({ navigation }: Props) {
               setDebugTaps(next);
               if (next >= 5) { setDebugTaps(0); navigation.navigate('Debug'); }
             }}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="Profile avatar"
           >
             <Avatar name={profile?.displayName ?? '?'} size="xl" />
           </TouchableOpacity>
@@ -191,7 +193,12 @@ export default function ProfileScreen({ navigation }: Props) {
           <AppText.Serif preset="h1Serif" color={theme.ink}>
             {profile?.displayName ?? 'Anonymous'}
           </AppText.Serif>
-          <TouchableOpacity onPress={openEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity
+            onPress={openEdit}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit display name"
+          >
             <AppText.Sans preset="label" color={theme.ink3}>edit</AppText.Sans>
           </TouchableOpacity>
         </View>
@@ -250,6 +257,8 @@ export default function ProfileScreen({ navigation }: Props) {
               style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
               onPress={() => navigation.navigate('MatchHistory')}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Open match history"
             >
               <AppText.Sans preset="bodyMed" color={theme.ink}>Match History</AppText.Sans>
               <AppText.Sans preset="body" color={theme.ink3}>→</AppText.Sans>
@@ -259,6 +268,8 @@ export default function ProfileScreen({ navigation }: Props) {
               style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
               onPress={openShareProfile}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Share profile"
             >
               <AppText.Sans preset="bodyMed" color={theme.ink}>Share Profile</AppText.Sans>
               <AppText.Sans preset="body" color={theme.ink3}>→</AppText.Sans>
@@ -268,6 +279,8 @@ export default function ProfileScreen({ navigation }: Props) {
               style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
               onPress={() => navigation.navigate('Settings')}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
             >
               <AppText.Sans preset="bodyMed" color={theme.ink}>Settings</AppText.Sans>
               <AppText.Sans preset="body" color={theme.ink3}>→</AppText.Sans>
@@ -277,6 +290,8 @@ export default function ProfileScreen({ navigation }: Props) {
               style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
               onPress={signOut}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
             >
               <AppText.Sans preset="bodyMed" color={theme.coral}>Sign Out</AppText.Sans>
             </TouchableOpacity>
@@ -285,8 +300,8 @@ export default function ProfileScreen({ navigation }: Props) {
       </ScreenTransitionView>
 
       {/* ── Edit name modal ── */}
-      <Modal visible={editVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      <Modal visible={editVisible} transparent animationType="fade" onRequestClose={() => setEditVisible(false)}>
+        <View style={styles.modalOverlay} accessibilityViewIsModal accessibilityLabel="Edit display name">
           <View style={[styles.modalCard, { backgroundColor: theme.bg, borderColor: theme.line }]}>
             <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.modalTitle}>
               Edit Display Name
@@ -303,6 +318,7 @@ export default function ProfileScreen({ navigation }: Props) {
               autoFocus
               maxLength={30}
               placeholderTextColor={theme.ink3}
+              accessibilityLabel="Display name"
             />
             {editError
               ? <AppText.Sans preset="small" color={theme.coral} style={styles.modalError}>{editError}</AppText.Sans>

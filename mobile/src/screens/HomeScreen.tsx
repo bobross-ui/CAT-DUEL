@@ -177,6 +177,8 @@ export default function HomeScreen({ navigation }: Props) {
         <TouchableOpacity
           onPress={() => navigation.navigate('Me')}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
         >
           <Avatar name={profile?.displayName ?? '?'} size="md" />
         </TouchableOpacity>
@@ -229,6 +231,9 @@ export default function HomeScreen({ navigation }: Props) {
           { backgroundColor: playCardBg, opacity: pressed ? 0.92 : 1 },
         ]}
         onPress={() => navigation.navigate('Matchmaking')}
+        accessibilityRole="button"
+        accessibilityLabel="Find a ranked duel"
+        accessibilityHint="Opens matchmaking"
       >
         {/* Eyebrow row */}
         <View style={styles.playCardTop}>
@@ -269,6 +274,9 @@ export default function HomeScreen({ navigation }: Props) {
           style={[styles.practiceRow, { borderColor: theme.line, backgroundColor: theme.bg2 }]}
           onPress={() => navigation.navigate('PracticeHome')}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Solo Practice"
+          accessibilityHint="Opens practice setup"
         >
           <View>
             <AppText.Sans preset="bodyMed" color={theme.ink}>Solo Practice</AppText.Sans>

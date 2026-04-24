@@ -173,7 +173,12 @@ export default function SettingsScreen({ navigation }: Props) {
           contentContainerStyle={styles.container}
         >
           <View style={styles.header}>
-            <TouchableOpacity onPress={navigation.goBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <TouchableOpacity
+              onPress={navigation.goBack}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
               <AppText.Sans preset="bodyMed" color={theme.ink2}>← Back</AppText.Sans>
             </TouchableOpacity>
             <AppText.Serif preset="heroSerif" color={theme.ink}>Settings</AppText.Serif>
@@ -203,6 +208,9 @@ export default function SettingsScreen({ navigation }: Props) {
                   ]}
                   onPress={() => setPreference(item)}
                   activeOpacity={0.75}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item} theme`}
+                  accessibilityState={{ selected: preference === item }}
                 >
                   <AppText.Sans
                     preset="label"
@@ -226,14 +234,19 @@ export default function SettingsScreen({ navigation }: Props) {
           </Section>
 
           <View style={styles.actions}>
-            <Button label="Sign out" variant="ghost" onPress={confirmSignOut} />
-            <Button label="Delete account" variant="coral" onPress={() => setDeleteVisible(true)} />
+            <Button label="Sign out" variant="ghost" onPress={confirmSignOut} accessibilityHint="Signs out of this device" />
+            <Button
+              label="Delete account"
+              variant="coral"
+              onPress={() => setDeleteVisible(true)}
+              accessibilityHint="Opens account deletion confirmation"
+            />
           </View>
         </ScrollView>
       </ScreenTransitionView>
 
-      <Modal visible={editVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      <Modal visible={editVisible} transparent animationType="fade" onRequestClose={() => setEditVisible(false)}>
+        <View style={styles.modalOverlay} accessibilityViewIsModal accessibilityLabel="Edit display name">
           <View style={[styles.modalCard, { backgroundColor: theme.bg, borderColor: theme.line }]}>
             <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.modalTitle}>
               Edit display name
@@ -246,6 +259,7 @@ export default function SettingsScreen({ navigation }: Props) {
               autoFocus
               maxLength={30}
               placeholderTextColor={theme.ink3}
+              accessibilityLabel="Display name"
             />
             {editError ? <AppText.Sans preset="small" color={theme.coral}>{editError}</AppText.Sans> : null}
             <View style={styles.modalActions}>
@@ -256,8 +270,8 @@ export default function SettingsScreen({ navigation }: Props) {
         </View>
       </Modal>
 
-      <Modal visible={deleteVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      <Modal visible={deleteVisible} transparent animationType="fade" onRequestClose={() => setDeleteVisible(false)}>
+        <View style={styles.modalOverlay} accessibilityViewIsModal accessibilityLabel="Delete account confirmation">
           <View style={[styles.modalCard, { backgroundColor: theme.bg, borderColor: theme.line }]}>
             <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.modalTitle}>
               Delete account
@@ -272,6 +286,8 @@ export default function SettingsScreen({ navigation }: Props) {
               autoCapitalize="characters"
               placeholder="DELETE"
               placeholderTextColor={theme.ink3}
+              accessibilityLabel="Delete confirmation"
+              accessibilityHint="Type DELETE to confirm permanent account deletion"
             />
             {deleteError ? <AppText.Sans preset="small" color={theme.coral}>{deleteError}</AppText.Sans> : null}
             <View style={styles.modalActions}>
@@ -310,7 +326,12 @@ function SettingsRow({ label, value, onPress }: { label: string; value: string; 
   if (!onPress) return content;
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}, ${value}`}
+    >
       {content}
     </TouchableOpacity>
   );
@@ -324,6 +345,9 @@ function ToggleRow({ label, value, onValueChange }: { label: string; value: bool
       <Switch
         value={value}
         onValueChange={onValueChange}
+        accessibilityRole="switch"
+        accessibilityLabel={label}
+        accessibilityState={{ checked: value }}
         trackColor={{ false: theme.ink4, true: theme.accentSoft }}
         thumbColor={value ? theme.accent : theme.ink3}
       />

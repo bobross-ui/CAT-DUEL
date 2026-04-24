@@ -48,6 +48,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
             onPress={onPress}
             style={styles.tab}
             accessibilityRole="button"
+            accessibilityLabel={`${config.label.toLowerCase()} tab`}
             accessibilityState={{ selected: isFocused }}
           >
             <Feather name={config.icon} size={20} color={color} />

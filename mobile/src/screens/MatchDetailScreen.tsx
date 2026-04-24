@@ -102,7 +102,12 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
   return (
     <ScrollView style={{ backgroundColor: theme.bg }} contentContainerStyle={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <AppText.Sans preset="body" color={theme.ink} style={styles.backText}>←</AppText.Sans>
         </TouchableOpacity>
         <AppText.Serif preset="h1Serif" color={theme.ink} numberOfLines={1} style={styles.title}>

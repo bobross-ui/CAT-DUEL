@@ -19,7 +19,7 @@ interface Props {
   onClose: () => void;
 }
 
-export default function ShareLinkModal({ visible, message, url, onClose }: Props) {
+export default function ShareLinkModal({ visible, title, message, url, onClose }: Props) {
   const { theme } = useTheme();
   const [copying, setCopying] = useState(false);
 
@@ -55,10 +55,14 @@ export default function ShareLinkModal({ visible, message, url, onClose }: Props
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View
+        style={styles.overlay}
+        accessibilityViewIsModal
+        accessibilityLabel={title}
+      >
         <View style={[styles.card, { backgroundColor: theme.bg, borderColor: theme.line }]}>
           <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.title}>
-            Share link
+            {title}
           </AppText.Serif>
           <AppText.Sans preset="body" color={theme.ink2} style={styles.body}>
             {message}
@@ -68,6 +72,8 @@ export default function ShareLinkModal({ visible, message, url, onClose }: Props
             editable={false}
             selectTextOnFocus
             multiline
+            accessibilityLabel="Share link URL"
+            accessibilityHint="Selects the generated share link for copying"
             style={[
               styles.urlBox,
               {
@@ -79,7 +85,13 @@ export default function ShareLinkModal({ visible, message, url, onClose }: Props
           />
           <View style={styles.actions}>
             <Button label="Close" variant="ghost" onPress={onClose} style={styles.actionBtn} />
-            <Button label="Copy" onPress={copyLink} loading={copying} style={styles.actionBtn} />
+            <Button
+              label="Copy"
+              onPress={copyLink}
+              loading={copying}
+              accessibilityLabel="Copy share link"
+              style={styles.actionBtn}
+            />
           </View>
         </View>
       </View>
