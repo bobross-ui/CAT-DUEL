@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Haptics from 'expo-haptics';
+import { setEnabled as setAnalyticsServiceEnabled } from '../services/analytics';
 
 type HapticEvent =
   | 'match_found'
@@ -44,8 +45,14 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
       if (value === 'false') setHapticsEnabledState(false);
     });
     SecureStore.getItemAsync(ANALYTICS_STORE_KEY).then((value) => {
-      if (value === 'true') setAnalyticsEnabledState(true);
-      if (value === 'false') setAnalyticsEnabledState(false);
+      if (value === 'true') {
+        setAnalyticsEnabledState(true);
+        setAnalyticsServiceEnabled(true);
+      }
+      if (value === 'false') {
+        setAnalyticsEnabledState(false);
+        setAnalyticsServiceEnabled(false);
+      }
     });
   }, []);
 
@@ -69,6 +76,7 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
 
   const setAnalyticsEnabled = (enabled: boolean) => {
     setAnalyticsEnabledState(enabled);
+    setAnalyticsServiceEnabled(enabled);
     void SecureStore.setItemAsync(ANALYTICS_STORE_KEY, String(enabled));
   };
 

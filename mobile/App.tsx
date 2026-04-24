@@ -23,7 +23,9 @@ import { AppPreferencesProvider } from './src/context/AppPreferencesContext';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import RootNavigator, { type RootStackParamList } from './src/navigation';
 import { linking } from './src/navigation/linking';
+import AppErrorBoundary from './src/components/AppErrorBoundary';
 import ThemedToast from './src/components/ThemedToast';
+import { init as initAnalytics } from './src/services/analytics';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,27 +45,33 @@ export default function App() {
   });
 
   useEffect(() => {
+    initAnalytics();
+  }, []);
+
+  useEffect(() => {
     if (fontsLoaded) SplashScreen.hideAsync();
   }, [fontsLoaded]);
 
   if (!fontsLoaded) return null;
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <AppPreferencesProvider>
-          <ThemeProvider>
-            <NavigationContainer
-              ref={navigationRef}
-              linking={linking}
-              onReady={() => setNavigationReady(true)}
-            >
-              <RootNavigator navigationRef={navigationRef} navigationReady={navigationReady} />
-            </NavigationContainer>
-            <ThemedToast />
-          </ThemeProvider>
-        </AppPreferencesProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <AppErrorBoundary>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <AppPreferencesProvider>
+            <ThemeProvider>
+              <NavigationContainer
+                ref={navigationRef}
+                linking={linking}
+                onReady={() => setNavigationReady(true)}
+              >
+                <RootNavigator navigationRef={navigationRef} navigationReady={navigationReady} />
+              </NavigationContainer>
+              <ThemedToast />
+            </ThemeProvider>
+          </AppPreferencesProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </AppErrorBoundary>
   );
 }

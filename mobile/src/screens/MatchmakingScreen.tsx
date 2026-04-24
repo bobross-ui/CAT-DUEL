@@ -170,7 +170,7 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
         }: {
           gameId: string;
           opponent: { userId: string; displayName: string | null; avatarUrl: string | null; eloRating: number };
-          ratingImpact?: { win: number; loss: number };
+          ratingImpact?: { win: number; loss: number; draw?: number };
         }) => {
           if (!mounted) return;
           setPhase('FOUND');

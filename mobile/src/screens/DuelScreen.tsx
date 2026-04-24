@@ -16,6 +16,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import { radii } from '../theme/tokens';
+import { track } from '../services/analytics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Duel'>;
 type ClientQuestion = NavClientQuestion;
@@ -103,6 +104,7 @@ export default function DuelScreen({ route, navigation }: Props) {
   const questionStartTime = useRef(Date.now());
   const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerWarningSentRef = useRef(initialState.duration <= 60);
+  const matchStartedTrackedRef = useRef(false);
 
   // Animations
   const questionOpacity    = useRef(new Animated.Value(1)).current;
@@ -116,6 +118,12 @@ export default function DuelScreen({ route, navigation }: Props) {
       Animated.timing(anim, { toValue: 1,    duration: 90, useNativeDriver: true }),
     ]).start();
   }
+
+  useEffect(() => {
+    if (matchStartedTrackedRef.current) return;
+    matchStartedTrackedRef.current = true;
+    track('match_started', { matchId: gameId, mode: 'ranked_10_min' });
+  }, [gameId]);
 
   // ── Socket setup ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -231,6 +239,18 @@ export default function DuelScreen({ route, navigation }: Props) {
       socket.on('game:finished', (results: GameFinishedPayload) => {
         if (!mounted) return;
         setOpponentDisconnectNotice(null);
+        const isPlayer1 = results.player1.userId === results.currentUserId;
+        const currentPlayer = isPlayer1 ? results.player1 : results.player2;
+        const result = results.isDraw
+          ? 'draw'
+          : results.winnerId === results.currentUserId
+            ? 'win'
+            : 'loss';
+        track('match_ended', {
+          matchId: results.gameId,
+          result,
+          ratingDelta: currentPlayer.eloDelta,
+        });
         if (!results.isDraw) {
           const didWin = results.winnerId === results.currentUserId;
           void playHaptic(didWin ? 'game_won' : 'game_lost');

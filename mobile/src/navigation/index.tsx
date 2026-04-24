@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import * as Linking from 'expo-linking';
 import type {
@@ -34,7 +34,7 @@ import DebugScreen from '../screens/DebugScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PublicProfileScreen from '../screens/PublicProfileScreen';
 import TabBar from '../components/TabBar';
-import { track } from '../services/analytics';
+import { identify, reset as resetAnalytics, track } from '../services/analytics';
 import { parseAppLink } from './linking';
 
 export interface ClientQuestion {
@@ -113,7 +113,7 @@ export type RootStackParamList = {
   DeepLinkedLeaderboard: { tier?: string };
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Matchmaking: { notice?: string } | undefined;
-  Found: { gameId: string; opponent: OpponentInfo; ratingImpact: { win: number; loss: number } | null };
+  Found: { gameId: string; opponent: OpponentInfo; ratingImpact: { win: number; loss: number; draw?: number } | null };
   Duel: { gameId: string; opponent: OpponentInfo; initialState: InitialGameState };
   DuelResults: { results: GameFinishedPayload; userId: string; opponent: OpponentInfo };
   PracticeHome: undefined;
@@ -135,7 +135,17 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 interface AuthProfile {
+  id?: string;
+  rankTier?: string;
+  gamesPlayed?: number;
+  currentStreak?: number;
+  longestStreak?: number;
   onboardingCompletedAt: string | null;
+}
+
+function analyticsRouteForTarget(target: DeepLinkTarget) {
+  if (target.kind === 'leaderboard') return target.tier ? 'leaderboard_tier' : 'leaderboard';
+  return target.kind;
 }
 
 function resetToTarget(
@@ -211,11 +221,13 @@ export default function RootNavigator({
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState(false);
   const [postOnboardingTarget, setPostOnboardingTarget] = useState<RedirectTarget | null>(null);
+  const previousStreakRef = useRef<number | null>(null);
 
   const fetchProfile = useCallback(async () => {
     if (!user) {
       setProfile(null);
       setProfileError(false);
+      previousStreakRef.current = null;
       return;
     }
 
@@ -223,7 +235,27 @@ export default function RootNavigator({
     setProfileError(false);
     try {
       const res = await api.get('/auth/me');
-      setProfile(res.data.data);
+      const nextProfile = res.data.data as AuthProfile;
+      setProfile(nextProfile);
+      if (nextProfile.id) {
+        identify(nextProfile.id, {
+          tier: nextProfile.rankTier,
+          gamesPlayed: nextProfile.gamesPlayed,
+          currentStreak: nextProfile.currentStreak,
+        });
+      }
+
+      if (typeof nextProfile.currentStreak === 'number') {
+        const previousStreak = previousStreakRef.current;
+        if (previousStreak !== null && previousStreak !== nextProfile.currentStreak) {
+          track('streak_changed', {
+            currentStreak: nextProfile.currentStreak,
+            longestStreak: nextProfile.longestStreak,
+            broken: nextProfile.currentStreak < previousStreak,
+          });
+        }
+        previousStreakRef.current = nextProfile.currentStreak;
+      }
     } catch {
       setProfile(null);
       setProfileError(true);
@@ -237,13 +269,17 @@ export default function RootNavigator({
   }, [fetchProfile]);
 
   useEffect(() => {
+    if (!user) resetAnalytics();
+  }, [user]);
+
+  useEffect(() => {
     let mounted = true;
 
     Linking.getInitialURL().then((url) => {
       if (!mounted || !url) return;
       const target = parseAppLink(url);
       if (target) {
-        track('deeplink_opened', { path: target.path });
+        track('deeplink_opened', { route: analyticsRouteForTarget(target) });
         setPostOnboardingTarget((current) => current ?? target);
       }
     });
@@ -262,6 +298,7 @@ export default function RootNavigator({
   }, []);
 
   const handleOnboardingCompleted = useCallback((target: CompletionTarget, completedAt: string) => {
+    track('onboarding_completed', { destination: target });
     setPostOnboardingTarget((current) => current ?? target);
     setProfile((current) => ({
       ...(current ?? {}),
@@ -274,7 +311,7 @@ export default function RootNavigator({
   const handleDeepLink = useCallback((
     target: DeepLinkTarget,
   ) => {
-    track('deeplink_opened', { path: target.path });
+    track('deeplink_opened', { route: analyticsRouteForTarget(target) });
     setPostOnboardingTarget(target);
 
     if (!user || !hasCompletedOnboarding) {

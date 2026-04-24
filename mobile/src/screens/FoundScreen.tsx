@@ -13,6 +13,7 @@ import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
 import { getTier } from '../constants';
+import { track } from '../services/analytics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Found'>;
 type PreStartStatus = 'waiting_for_opponent' | 'countdown';
@@ -144,6 +145,7 @@ export default function FoundScreen({ navigation, route }: Props) {
   const navigatedRef = useRef(false);
   const shouldKeepSocketRef = useRef(false);
   const requeueingRef = useRef(false);
+  const trackedRatingPreviewRef = useRef(false);
 
   function reasonToNotice(reason: 'join_timeout' | 'opponent_left' | 'cancelled') {
     if (reason === 'join_timeout') return 'Opponent didn’t connect. Finding another match...';
@@ -152,6 +154,16 @@ export default function FoundScreen({ navigation, route }: Props) {
   }
 
   // Connect, join game, store initialState when server fires game:start
+  useEffect(() => {
+    if (!ratingImpact || trackedRatingPreviewRef.current) return;
+    trackedRatingPreviewRef.current = true;
+    track('rating_preview_shown', {
+      winDelta: ratingImpact.win,
+      lossDelta: ratingImpact.loss,
+      drawDelta: ratingImpact.draw,
+    });
+  }, [ratingImpact]);
+
   useEffect(() => {
     let mounted = true;
     let removeListeners: (() => void) | null = null;

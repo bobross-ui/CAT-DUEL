@@ -150,7 +150,7 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
   }
 
   function openShareMatch() {
-    track('share_initiated', { surface: 'duel_results', matchId: results.gameId });
+    track('share_initiated', { surface: 'results' });
     setShareVisible(true);
   }
 

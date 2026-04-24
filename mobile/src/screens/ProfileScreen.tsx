@@ -116,7 +116,7 @@ export default function ProfileScreen({ navigation }: Props) {
 
   function openShareProfile() {
     if (!profile) return;
-    track('share_initiated', { surface: 'profile', userId: profile.id });
+    track('share_initiated', { surface: 'profile' });
     setShareVisible(true);
   }
 

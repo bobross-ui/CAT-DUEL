@@ -150,8 +150,7 @@ export default function LeaderboardScreen({ route }: Props) {
   }
 
   function openShareRanks() {
-    const tier = activeTab === 'tier' ? selectedTier : undefined;
-    track('share_initiated', { surface: 'leaderboard', tier: tier ?? null });
+    track('share_initiated', { surface: 'ranks' });
     setShareVisible(true);
   }
 
