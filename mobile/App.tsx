@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { useEffect, useState } from 'react';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
@@ -21,12 +21,15 @@ import {
 import { AuthProvider } from './src/context/AuthContext';
 import { AppPreferencesProvider } from './src/context/AppPreferencesContext';
 import { ThemeProvider } from './src/theme/ThemeProvider';
-import RootNavigator from './src/navigation';
+import RootNavigator, { type RootStackParamList } from './src/navigation';
+import { linking } from './src/navigation/linking';
 import ThemedToast from './src/components/ThemedToast';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
+  const navigationRef = useNavigationContainerRef<RootStackParamList>();
+  const [navigationReady, setNavigationReady] = useState(false);
   const [fontsLoaded] = useFonts({
     'SourceSerif-Medium':       SourceSerif4_500Medium,
     'SourceSerif-SemiBold':     SourceSerif4_600SemiBold,
@@ -50,8 +53,12 @@ export default function App() {
       <AuthProvider>
         <AppPreferencesProvider>
           <ThemeProvider>
-            <NavigationContainer>
-              <RootNavigator />
+            <NavigationContainer
+              ref={navigationRef}
+              linking={linking}
+              onReady={() => setNavigationReady(true)}
+            >
+              <RootNavigator navigationRef={navigationRef} navigationReady={navigationReady} />
             </NavigationContainer>
             <ThemedToast />
           </ThemeProvider>

@@ -14,7 +14,10 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "associatedDomains": [
+        "applinks:catduel.app"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +25,34 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "catduel.app",
+              "pathPrefix": "/profile"
+            },
+            {
+              "scheme": "https",
+              "host": "catduel.app",
+              "pathPrefix": "/match"
+            },
+            {
+              "scheme": "https",
+              "host": "catduel.app",
+              "pathPrefix": "/leaderboard"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -13,12 +13,15 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import api from '../services/api';
 import Button from '../components/Button';
+import ShareLinkModal from '../components/ShareLinkModal';
 import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
+import { matchUrl } from '../navigation/linking';
+import { track } from '../services/analytics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DuelResults'>;
 
@@ -100,6 +103,7 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
   const [breakdownError, setBreakdownError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [shareVisible, setShareVisible] = useState(false);
 
   useEffect(() => {
     if (splitBarWidth <= 0) return;
@@ -143,6 +147,11 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
       })
       .catch(() => setBreakdownError('Failed to load breakdown.'))
       .finally(() => setLoadingBreakdown(false));
+  }
+
+  function openShareMatch() {
+    track('share_initiated', { surface: 'duel_results', matchId: results.gameId });
+    setShareVisible(true);
   }
 
   useEffect(() => {
@@ -382,12 +391,25 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
           >
             <Feather name="home" size={22} color={theme.ink2} />
           </Pressable>
+          <Pressable
+            onPress={openShareMatch}
+            style={[styles.homeBtn, { backgroundColor: theme.card, borderColor: theme.line }]}
+          >
+            <Feather name="share-2" size={20} color={theme.ink2} />
+          </Pressable>
           <View style={styles.rematchWrap}>
             <Button label="Rematch →" onPress={() => navigation.replace('Matchmaking')} />
           </View>
         </View>
 
       </ScrollView>
+      <ShareLinkModal
+        visible={shareVisible}
+        title="CAT Duel match"
+        message="Review this CAT Duel match:"
+        url={matchUrl(results.gameId)}
+        onClose={() => setShareVisible(false)}
+      />
     </ScreenTransitionView>
   );
 }

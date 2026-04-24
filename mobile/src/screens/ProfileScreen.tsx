@@ -14,12 +14,15 @@ import TierBadge from '../components/TierBadge';
 import Avatar from '../components/Avatar';
 import Card from '../components/Card';
 import Button from '../components/Button';
+import ShareLinkModal from '../components/ShareLinkModal';
 import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { getTier, getTierToNext } from '../constants';
+import { profileUrl } from '../navigation/linking';
+import { track } from '../services/analytics';
 
 interface UserProfile {
   id: string;
@@ -58,6 +61,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState('');
+  const [shareVisible, setShareVisible] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -108,6 +112,12 @@ export default function ProfileScreen({ navigation }: Props) {
     } finally {
       setSaving(false);
     }
+  }
+
+  function openShareProfile() {
+    if (!profile) return;
+    track('share_initiated', { surface: 'profile', userId: profile.id });
+    setShareVisible(true);
   }
 
   if (loading) {
@@ -247,6 +257,15 @@ export default function ProfileScreen({ navigation }: Props) {
 
             <TouchableOpacity
               style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
+              onPress={openShareProfile}
+              activeOpacity={0.7}
+            >
+              <AppText.Sans preset="bodyMed" color={theme.ink}>Share Profile</AppText.Sans>
+              <AppText.Sans preset="body" color={theme.ink3}>→</AppText.Sans>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.listRow, { backgroundColor: theme.card, borderColor: theme.line }]}
               onPress={() => navigation.navigate('Settings')}
               activeOpacity={0.7}
             >
@@ -306,6 +325,16 @@ export default function ProfileScreen({ navigation }: Props) {
           </View>
         </View>
       </Modal>
+
+      {profile && (
+        <ShareLinkModal
+          visible={shareVisible}
+          title="CAT Duel profile"
+          message={`Check out ${profile.displayName ?? 'this player'} on CAT Duel:`}
+          url={profileUrl(profile.id)}
+          onClose={() => setShareVisible(false)}
+        />
+      )}
     </>
   );
 }

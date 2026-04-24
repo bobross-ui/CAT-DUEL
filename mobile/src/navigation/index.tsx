@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { NavigatorScreenParams } from '@react-navigation/native';
-import { NativeStackScreenProps, createNativeStackNavigator } from '@react-navigation/native-stack';
+import * as Linking from 'expo-linking';
+import type {
+  NavigationContainerRefWithCurrent,
+  NavigatorScreenParams,
+} from '@react-navigation/native';
+import {
+  NativeStackScreenProps,
+  createNativeStackNavigator,
+} from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeProvider';
@@ -25,7 +32,10 @@ import MatchHistoryScreen from '../screens/MatchHistoryScreen';
 import MatchDetailScreen from '../screens/MatchDetailScreen';
 import DebugScreen from '../screens/DebugScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import PublicProfileScreen from '../screens/PublicProfileScreen';
 import TabBar from '../components/TabBar';
+import { track } from '../services/analytics';
+import { parseAppLink } from './linking';
 
 export interface ClientQuestion {
   id: string;
@@ -82,14 +92,25 @@ export type ActiveGamePayload = {
 export type MainTabParamList = {
   Home: undefined;
   Play: undefined;
-  Ranks: undefined;
+  Ranks: { tier?: string } | undefined;
   Me: undefined;
 };
+
+export type CompletionTarget = 'home' | 'practice' | 'match';
+
+export type DeepLinkTarget =
+  | { kind: 'profile'; userId: string; path: string }
+  | { kind: 'match'; matchId: string; path: string }
+  | { kind: 'leaderboard'; tier?: string; path: string };
+
+type RedirectTarget = CompletionTarget | DeepLinkTarget;
 
 export type RootStackParamList = {
   Login: undefined;
   Onboarding: undefined;
-  PostOnboardingRedirect: { target: 'home' | 'practice' | 'match' };
+  DeepLinkedProfile: { userId: string };
+  DeepLinkedMatch: { matchId: string };
+  DeepLinkedLeaderboard: { tier?: string };
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Matchmaking: { notice?: string } | undefined;
   Found: { gameId: string; opponent: OpponentInfo; ratingImpact: { win: number; loss: number } | null };
@@ -104,7 +125,8 @@ export type RootStackParamList = {
     questions?: { category: string; subTopic: string | null; isCorrect: boolean }[];
   };
   MatchHistory: undefined;
-  MatchDetail: { matchId: string; opponentName: string | null };
+  MatchDetail: { matchId: string; opponentName?: string | null };
+  PublicProfile: { userId: string };
   Debug: undefined;
   Settings: undefined;
 };
@@ -112,10 +134,54 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-type CompletionTarget = 'home' | 'practice' | 'match';
-
 interface AuthProfile {
   onboardingCompletedAt: string | null;
+}
+
+function resetToTarget(
+  navigation: NavigationContainerRefWithCurrent<RootStackParamList>,
+  target: RedirectTarget,
+) {
+  if (typeof target === 'string') {
+    if (target === 'practice') {
+      navigation.resetRoot({
+        index: 1,
+        routes: [{ name: 'MainTabs' }, { name: 'PracticeHome' }],
+      });
+      return;
+    }
+
+    if (target === 'match') {
+      navigation.resetRoot({
+        index: 1,
+        routes: [{ name: 'MainTabs' }, { name: 'Matchmaking' }],
+      });
+      return;
+    }
+
+    navigation.resetRoot({ index: 0, routes: [{ name: 'MainTabs' }] });
+    return;
+  }
+
+  if (target.kind === 'leaderboard') {
+    navigation.resetRoot({
+      index: 0,
+      routes: [{
+        name: 'MainTabs',
+        params: { screen: 'Ranks', params: target.tier ? { tier: target.tier } : undefined },
+      }],
+    });
+    return;
+  }
+
+  const nextRoute = target.kind === 'profile'
+    ? { name: 'PublicProfile' as const, params: { userId: target.userId } }
+    : { name: 'MatchDetail' as const, params: { matchId: target.matchId } };
+
+  navigation.resetRoot({
+    index: 1,
+    routes: [{ name: 'MainTabs' }, nextRoute],
+  });
 }
 
 function MainTabNavigator() {
@@ -132,38 +198,24 @@ function MainTabNavigator() {
   );
 }
 
-function PostOnboardingRedirect({
-  navigation,
-  route,
-}: NativeStackScreenProps<RootStackParamList, 'PostOnboardingRedirect'>) {
-  useEffect(() => {
-    const routes: Parameters<typeof navigation.reset>[0]['routes'] = [{ name: 'MainTabs' }];
-
-    if (route.params.target === 'practice') {
-      routes.push({ name: 'PracticeHome' });
-    } else if (route.params.target === 'match') {
-      routes.push({ name: 'Matchmaking' });
-    }
-
-    navigation.reset({ index: routes.length - 1, routes });
-  }, [navigation, route.params.target]);
-
-  return null;
-}
-
-export default function RootNavigator() {
+export default function RootNavigator({
+  navigationRef,
+  navigationReady,
+}: {
+  navigationRef: NavigationContainerRefWithCurrent<RootStackParamList>;
+  navigationReady: boolean;
+}) {
   const { user, loading } = useAuth();
   const { theme } = useTheme();
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState(false);
-  const [postOnboardingTarget, setPostOnboardingTarget] = useState<CompletionTarget | null>(null);
+  const [postOnboardingTarget, setPostOnboardingTarget] = useState<RedirectTarget | null>(null);
 
   const fetchProfile = useCallback(async () => {
     if (!user) {
       setProfile(null);
       setProfileError(false);
-      setPostOnboardingTarget(null);
       return;
     }
 
@@ -184,13 +236,109 @@ export default function RootNavigator() {
     void fetchProfile();
   }, [fetchProfile]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    Linking.getInitialURL().then((url) => {
+      if (!mounted || !url) return;
+      const target = parseAppLink(url);
+      if (target) {
+        track('deeplink_opened', { path: target.path });
+        setPostOnboardingTarget((current) => current ?? target);
+      }
+    });
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      const target = parseAppLink(url);
+      if (target) {
+        setPostOnboardingTarget(target);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+
   const handleOnboardingCompleted = useCallback((target: CompletionTarget, completedAt: string) => {
-    setPostOnboardingTarget(target);
+    setPostOnboardingTarget((current) => current ?? target);
     setProfile((current) => ({
       ...(current ?? {}),
       onboardingCompletedAt: completedAt,
     }));
   }, []);
+
+  const hasCompletedOnboarding = Boolean(profile?.onboardingCompletedAt);
+
+  const handleDeepLink = useCallback((
+    target: DeepLinkTarget,
+  ) => {
+    track('deeplink_opened', { path: target.path });
+    setPostOnboardingTarget(target);
+
+    if (!user || !hasCompletedOnboarding) {
+      navigationRef.resetRoot({ index: 0, routes: [{ name: user ? 'Onboarding' : 'Login' }] });
+    }
+  }, [hasCompletedOnboarding, navigationRef, user]);
+
+  useEffect(() => {
+    if (!navigationReady || !user || !hasCompletedOnboarding || !postOnboardingTarget) return;
+
+    const target = postOnboardingTarget;
+    setPostOnboardingTarget(null);
+    resetToTarget(navigationRef, target);
+  }, [
+    hasCompletedOnboarding,
+    navigationReady,
+    navigationRef,
+    postOnboardingTarget,
+    user,
+  ]);
+
+  function DeepLinkedProfileRedirect({
+    route,
+  }: NativeStackScreenProps<RootStackParamList, 'DeepLinkedProfile'>) {
+    useEffect(() => {
+      handleDeepLink({
+        kind: 'profile',
+        userId: route.params.userId,
+        path: `/profile/${route.params.userId}`,
+      });
+    }, [handleDeepLink, route.params.userId]);
+
+    return null;
+  }
+
+  function DeepLinkedMatchRedirect({
+    route,
+  }: NativeStackScreenProps<RootStackParamList, 'DeepLinkedMatch'>) {
+    useEffect(() => {
+      handleDeepLink({
+        kind: 'match',
+        matchId: route.params.matchId,
+        path: `/match/${route.params.matchId}`,
+      });
+    }, [handleDeepLink, route.params.matchId]);
+
+    return null;
+  }
+
+  function DeepLinkedLeaderboardRedirect({
+    route,
+  }: NativeStackScreenProps<RootStackParamList, 'DeepLinkedLeaderboard'>) {
+    const tier = route.params?.tier?.toUpperCase();
+
+    useEffect(() => {
+      handleDeepLink({
+        kind: 'leaderboard',
+        tier,
+        path: tier ? `/leaderboard/${tier.toLowerCase()}` : '/leaderboard',
+      });
+    }, [handleDeepLink, tier]);
+
+    return null;
+  }
 
   if (loading || (user && profileLoading)) {
     return (
@@ -214,25 +362,23 @@ export default function RootNavigator() {
     );
   }
 
-  const hasCompletedOnboarding = Boolean(profile?.onboardingCompletedAt);
   const initialRouteName = !user
     ? 'Login'
     : hasCompletedOnboarding
-      ? (postOnboardingTarget ? 'PostOnboardingRedirect' : 'MainTabs')
+      ? 'MainTabs'
       : 'Onboarding';
 
   return (
     <Stack.Navigator
+      key={`${user ? 'user' : 'guest'}-${hasCompletedOnboarding ? 'ready' : 'onboarding'}`}
       screenOptions={{ headerShown: false }}
       initialRouteName={initialRouteName}
     >
+      <Stack.Screen name="DeepLinkedProfile" component={DeepLinkedProfileRedirect} />
+      <Stack.Screen name="DeepLinkedMatch" component={DeepLinkedMatchRedirect} />
+      <Stack.Screen name="DeepLinkedLeaderboard" component={DeepLinkedLeaderboardRedirect} />
       {user && hasCompletedOnboarding ? (
         <>
-          <Stack.Screen
-            name="PostOnboardingRedirect"
-            component={PostOnboardingRedirect}
-            initialParams={{ target: postOnboardingTarget ?? 'home' }}
-          />
           <Stack.Screen name="MainTabs" component={MainTabNavigator} />
           <Stack.Screen name="Matchmaking" component={MatchmakingScreen} />
           <Stack.Screen name="Found" component={FoundScreen} options={{ gestureEnabled: false }} />
@@ -247,6 +393,7 @@ export default function RootNavigator() {
           <Stack.Screen name="PracticeSummary" component={PracticeSummaryScreen} />
           <Stack.Screen name="MatchHistory" component={MatchHistoryScreen} />
           <Stack.Screen name="MatchDetail" component={MatchDetailScreen} />
+          <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />
           <Stack.Screen name="Debug" component={DebugScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </>

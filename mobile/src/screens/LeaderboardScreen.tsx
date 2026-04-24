@@ -1,20 +1,27 @@
-import { useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   View, FlatList, TouchableOpacity, StyleSheet,
   Modal, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { leaderboardService } from '../services/leaderboard';
+import { MainTabParamList } from '../navigation';
 import TierBadge from '../components/TierBadge';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
+import ShareLinkModal from '../components/ShareLinkModal';
 import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
+import { leaderboardUrl } from '../navigation/linking';
+import { track } from '../services/analytics';
 type Tab = 'global' | 'around' | 'tier';
 const TIERS = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
+
+type Props = BottomTabScreenProps<MainTabParamList, 'Ranks'>;
 
 interface LeaderboardEntry {
   rank: number;
@@ -82,16 +89,23 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
   );
 }
 
-export default function LeaderboardScreen() {
+function normalizeTier(tier?: string) {
+  const upper = tier?.toUpperCase();
+  return upper && TIERS.includes(upper) ? upper : null;
+}
+
+export default function LeaderboardScreen({ route }: Props) {
   const { theme } = useTheme();
   const { playHaptic } = useAppPreferences();
-  const [activeTab, setActiveTab] = useState<Tab>('global');
-  const [selectedTier, setSelectedTier] = useState('SILVER');
+  const initialTier = normalizeTier(route.params?.tier);
+  const [activeTab, setActiveTab] = useState<Tab>(initialTier ? 'tier' : 'global');
+  const [selectedTier, setSelectedTier] = useState(initialTier ?? 'SILVER');
   const [tierPickerVisible, setTierPickerVisible] = useState(false);
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [shareVisible, setShareVisible] = useState(false);
 
   const fetchData = useCallback(async (tab: Tab, tier: string) => {
     try {
@@ -106,6 +120,14 @@ export default function LeaderboardScreen() {
       setError('Failed to load ranks.');
     }
   }, []);
+
+  useEffect(() => {
+    const nextTier = normalizeTier(route.params?.tier);
+    if (!nextTier) return;
+    setSelectedTier(nextTier);
+    setActiveTab('tier');
+    setData(null);
+  }, [route.params?.tier]);
 
   useFocusEffect(
     useCallback(() => {
@@ -127,6 +149,12 @@ export default function LeaderboardScreen() {
     setData(null);
   }
 
+  function openShareRanks() {
+    const tier = activeTab === 'tier' ? selectedTier : undefined;
+    track('share_initiated', { surface: 'leaderboard', tier: tier ?? null });
+    setShareVisible(true);
+  }
+
   const retry = useCallback(() => {
     setError('');
     setLoading(true);
@@ -141,6 +169,13 @@ export default function LeaderboardScreen() {
     <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
         <AppText.Serif preset="heroSerif" color={theme.ink}>Ranks</AppText.Serif>
+        <TouchableOpacity
+          onPress={openShareRanks}
+          style={[styles.shareBtn, { borderColor: theme.line, backgroundColor: theme.card }]}
+          activeOpacity={0.7}
+        >
+          <AppText.Mono preset="eyebrow" color={theme.ink2}>SHARE</AppText.Mono>
+        </TouchableOpacity>
       </View>
 
       {/* ── Tab control ── */}
@@ -265,6 +300,17 @@ export default function LeaderboardScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+      <ShareLinkModal
+        visible={shareVisible}
+        title="CAT Duel ranks"
+        message={
+          activeTab === 'tier'
+            ? `Climb the ${selectedTier.toLowerCase()} ranks on CAT Duel:`
+            : 'Climb the CAT Duel ranks:'
+        }
+        url={leaderboardUrl(activeTab === 'tier' ? selectedTier : undefined)}
+        onClose={() => setShareVisible(false)}
+      />
     </ScreenTransitionView>
   );
 }
@@ -272,9 +318,18 @@ export default function LeaderboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 12,
+  },
+  shareBtn: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
 
   // Tabs

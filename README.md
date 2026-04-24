@@ -133,6 +133,12 @@ EXPO_PUBLIC_FIREBASE_APP_ID=your-app-id
 
 # Your machine's local IP (not localhost — phone needs to reach your machine)
 EXPO_PUBLIC_API_URL=http://192.168.x.x:3000
+
+# Share/deep-link base URL.
+# For local testing, use the Expo web URL prefix:
+EXPO_PUBLIC_APP_URL=http://192.168.x.x:8081/--
+# For production builds, use:
+# EXPO_PUBLIC_APP_URL=https://catduel.app
 ```
 
 > **Note:** Use your machine's local network IP (e.g. `192.168.1.5`), not `localhost`, so the phone can reach the backend over Wi-Fi.
