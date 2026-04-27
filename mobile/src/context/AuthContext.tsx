@@ -1,12 +1,16 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   User,
+  getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithCredential,
+  signInWithPopup,
+  signInWithRedirect,
   signOut as firebaseSignOut,
   GoogleAuthProvider,
 } from 'firebase/auth';
+import { Platform } from 'react-native';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
@@ -15,6 +19,7 @@ import { auth } from '../config/firebase';
 WebBrowser.maybeCompleteAuthSession();
 
 const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID!;
+const googleProvider = new GoogleAuthProvider();
 
 interface AuthContextValue {
   user: User | null;
@@ -46,6 +51,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    getRedirectResult(auth).catch((error) => {
+      console.warn('Google redirect sign-in failed', error);
+    });
+  }, []);
+
+  useEffect(() => {
     if (response?.type === 'success') {
       const { accessToken } = response.authentication!;
       const credential = GoogleAuthProvider.credential(null, accessToken);
@@ -58,6 +71,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
+    if (Platform.OS === 'web') {
+      try {
+        await signInWithPopup(auth, googleProvider);
+      } catch (error) {
+        if (isPopupFallbackError(error)) {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        }
+        throw error;
+      }
+      return;
+    }
+
     await promptAsync();
   };
 
@@ -70,6 +96,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
+}
+
+function isPopupFallbackError(error: unknown) {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String(error.code)
+    : '';
+
+  return code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user';
 }
 
 export function useAuth() {

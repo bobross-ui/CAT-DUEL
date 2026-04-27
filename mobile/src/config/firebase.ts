@@ -1,6 +1,11 @@
 import { Platform } from 'react-native';
 import { initializeApp } from 'firebase/app';
-import { initializeAuth, browserLocalPersistence, indexedDBLocalPersistence } from 'firebase/auth';
+import {
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  indexedDBLocalPersistence,
+  initializeAuth,
+} from 'firebase/auth';
 // @ts-expect-error: getReactNativePersistence exists in the RN bundle
 import { getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,8 +21,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-const persistence = Platform.OS === 'web'
-  ? [indexedDBLocalPersistence, browserLocalPersistence]
-  : getReactNativePersistence(AsyncStorage);
-
-export const auth = initializeAuth(app, { persistence });
+export const auth = Platform.OS === 'web'
+  ? initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+    popupRedirectResolver: browserPopupRedirectResolver,
+  })
+  : initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+  });
