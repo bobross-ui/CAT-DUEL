@@ -56,6 +56,7 @@ export type PendingMatchPayload = {
   opponent: GamePlayerProfile;
   ratingImpact: RatingImpact;
 };
+type MatchPersistUserStats = { gamesPlayed: number; wins: number };
 
 function buildOpponentProgress(answered: number, totalQuestions: number) {
   if (answered <= 0) return null;
@@ -536,11 +537,11 @@ export async function endGame(
   const [p1, p2] = await Promise.all([
     prisma.user.findUnique({
       where: { id: state.player1Id },
-      select: { eloRating: true, gamesPlayed: true },
+      select: { eloRating: true, gamesPlayed: true, wins: true },
     }),
     prisma.user.findUnique({
       where: { id: state.player2Id },
-      select: { eloRating: true, gamesPlayed: true },
+      select: { eloRating: true, gamesPlayed: true, wins: true },
     }),
   ]);
 
@@ -611,7 +612,13 @@ export async function endGame(
     `active_game:${state.player2Id}`,
   );
 
-  persistMatch(state, winnerId, isForfeit, eloResult).catch((err) =>
+  persistMatch(
+    state,
+    winnerId,
+    isForfeit,
+    eloResult,
+    { player1: p1, player2: p2 },
+  ).catch((err) =>
     console.error(`persistMatch error [${gameId}]:`, err),
   );
 }
@@ -621,6 +628,7 @@ async function persistMatch(
   winnerId: string | null,
   isForfeit: boolean,
   eloResult: MatchEloResult,
+  userStats: { player1: MatchPersistUserStats; player2: MatchPersistUserStats },
 ): Promise<void> {
   const answerRows: {
     matchId: string;
@@ -678,12 +686,19 @@ async function persistMatch(
 
         await tx.matchAnswer.createMany({ data: answerRows });
 
+        const player1GamesPlayed = userStats.player1.gamesPlayed + 1;
+        const player1Wins = userStats.player1.wins + (winnerId === state.player1Id ? 1 : 0);
+        const player2GamesPlayed = userStats.player2.gamesPlayed + 1;
+        const player2Wins = userStats.player2.wins + (winnerId === state.player2Id ? 1 : 0);
+
         await tx.user.update({
           where: { id: state.player1Id },
           data: {
             eloRating: eloResult.player1.newRating,
             rankTier: getRankTier(eloResult.player1.newRating),
             gamesPlayed: { increment: 1 },
+            wins: player1Wins,
+            winRate: player1Wins / player1GamesPlayed,
           },
         });
         await tx.user.update({
@@ -692,6 +707,8 @@ async function persistMatch(
             eloRating: eloResult.player2.newRating,
             rankTier: getRankTier(eloResult.player2.newRating),
             gamesPlayed: { increment: 1 },
+            wins: player2Wins,
+            winRate: player2Wins / player2GamesPlayed,
           },
         });
       });
