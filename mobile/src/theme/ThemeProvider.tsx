@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import { Theme, lightTheme, darkTheme } from './themes';
+import { getStoredValue, setStoredValue } from '../services/storage';
 
 type Preference = 'system' | 'light' | 'dark';
 
@@ -26,14 +26,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [preference, setPref] = useState<Preference>('system');
 
   useEffect(() => {
-    SecureStore.getItemAsync(STORE_KEY).then((v) => {
+    getStoredValue(STORE_KEY).then((v) => {
       if (v === 'light' || v === 'dark' || v === 'system') setPref(v);
     });
   }, []);
 
   const setPreference = (p: Preference) => {
     setPref(p);
-    SecureStore.setItemAsync(STORE_KEY, p);
+    void setStoredValue(STORE_KEY, p);
   };
 
   const mode = preference === 'system' ? (system ?? 'light') : preference;

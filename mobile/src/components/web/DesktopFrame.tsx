@@ -7,6 +7,9 @@ interface DesktopFrameProps {
   rightRail?: React.ReactNode;
   activeRoute?: string;
   contentStyle?: StyleProp<ViewStyle>;
+  rightRailStyle?: StyleProp<ViewStyle>;
+  rightRailContentStyle?: StyleProp<ViewStyle>;
+  showLeftRail?: boolean;
 }
 
 export default function DesktopFrame({
@@ -14,12 +17,15 @@ export default function DesktopFrame({
   rightRail,
   activeRoute,
   contentStyle,
+  rightRailStyle,
+  rightRailContentStyle,
+  showLeftRail = true,
 }: DesktopFrameProps) {
   const { theme } = useTheme();
 
   return (
     <View style={[styles.shell, { backgroundColor: theme.bg }]}>
-      <LeftRail activeRoute={activeRoute} />
+      {showLeftRail ? <LeftRail activeRoute={activeRoute} /> : null}
       <ScrollView
         style={styles.main}
         contentContainerStyle={[styles.mainContent, contentStyle]}
@@ -29,8 +35,8 @@ export default function DesktopFrame({
       </ScrollView>
       {rightRail ? (
         <ScrollView
-          style={[styles.rightRail, { backgroundColor: theme.bg2, borderLeftColor: theme.line }]}
-          contentContainerStyle={styles.rightRailContent}
+          style={[styles.rightRail, { backgroundColor: theme.bg2, borderLeftColor: theme.line }, rightRailStyle]}
+          contentContainerStyle={[styles.rightRailContent, rightRailContentStyle]}
         >
           {rightRail}
         </ScrollView>
