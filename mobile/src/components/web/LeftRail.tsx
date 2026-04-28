@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute, type NavigationProp } from '@react-navigation/native';
-import { Feather } from '@expo/vector-icons';
 import Avatar from '../Avatar';
 import Text from '../Text';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -40,7 +39,7 @@ export default function LeftRail({ activeRoute }: LeftRailProps) {
     navigation.navigate('MainTabs', { screen });
   };
 
-  const navigateStack = (screen: 'Matchmaking' | 'PracticeHome' | 'MatchHistory') => {
+  const navigateStack = (screen: 'PracticeHome' | 'MatchHistory') => {
     if (inDuel && screen !== 'MatchHistory') return;
     navigation.navigate(screen);
   };
@@ -55,28 +54,6 @@ export default function LeftRail({ activeRoute }: LeftRailProps) {
           <Text.Serif preset="h1Serif" color={theme.ink}>CAT-Duel</Text.Serif>
           <Text.Mono preset="chipLabel" color={theme.ink3}>RANKED PREP</Text.Mono>
         </View>
-      </View>
-
-      <View style={styles.group}>
-        <EyebrowLabel>play</EyebrowLabel>
-        <Pressable
-          onPress={() => navigateStack('Matchmaking')}
-          disabled={inDuel}
-          accessibilityRole="button"
-          accessibilityLabel="Play ranked duel"
-          accessibilityState={{ disabled: inDuel }}
-          style={({ pressed }) => [
-            styles.playCard,
-            { backgroundColor: theme.ink, opacity: inDuel ? 0.4 : pressed ? 0.86 : 1 },
-          ]}
-        >
-          <View style={styles.playMetaRow}>
-            <Text.Mono preset="eyebrow" color="rgba(255,255,255,0.58)">10-MIN</Text.Mono>
-            <Feather name="play" size={15} color={theme.bg} />
-          </View>
-          <Text.Serif preset="display" color={theme.bg} style={styles.playTitle}>Play</Text.Serif>
-          <Text.Sans preset="small" color="rgba(255,255,255,0.62)">mixed · ranked</Text.Sans>
-        </Pressable>
       </View>
 
       <View style={styles.group}>
@@ -175,20 +152,6 @@ const styles = StyleSheet.create({
   group: {
     gap: 8,
     marginBottom: 22,
-  },
-  playCard: {
-    minHeight: 118,
-    borderRadius: radii.lg,
-    padding: 16,
-    justifyContent: 'space-between',
-  },
-  playMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  playTitle: {
-    marginTop: 8,
   },
   spacer: {
     flex: 1,

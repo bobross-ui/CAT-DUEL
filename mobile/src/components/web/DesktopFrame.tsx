@@ -46,13 +46,19 @@ const styles = StyleSheet.create({
     minHeight: '100%',
   },
   main: {
-    flex: 1,
+    flexBasis: 0,
+    flexGrow: 3,
+    flexShrink: 1,
+    minWidth: 0,
   },
   mainContent: {
     flexGrow: 1,
   },
   rightRail: {
-    width: 320,
+    flexBasis: 0,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
     borderLeftWidth: 1,
   },
   rightRailContent: {

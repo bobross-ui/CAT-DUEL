@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeProvider';
 import { type } from '../theme/tokens';
+import { useDesktopLayout } from '../hooks/useDesktopLayout';
 
 const TAB_CONFIG: Record<string, { label: string; icon: React.ComponentProps<typeof Feather>['name'] }> = {
   Home:  { label: 'HOME',  icon: 'home' },
@@ -15,6 +16,9 @@ const TAB_CONFIG: Record<string, { label: string; icon: React.ComponentProps<typ
 export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const isDesktop = useDesktopLayout();
+
+  if (isDesktop) return null;
 
   return (
     <View style={[
