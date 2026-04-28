@@ -78,7 +78,6 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
   const [phase, setPhase] = useState<Phase>('CONNECTING');
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<{ displayName: string | null; eloRating: number } | null>(null);
-  const [matchStats, setMatchStats] = useState<{ onlineCount: number; avgWaitSec: number } | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const socketRef = useRef<Socket | null>(null);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -115,17 +114,13 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
     };
   }, [phase]);
 
-  // Fetch profile + matchmaking stats, then connect socket
+  // Fetch profile, then connect socket
   useEffect(() => {
     let mounted = true;
 
-    Promise.all([
-      api.get('/auth/me').catch(() => null),
-      api.get('/matchmaking/stats').catch(() => null),
-    ]).then(([profileRes, statsRes]) => {
+    api.get('/auth/me').catch(() => null).then((profileRes) => {
       if (!mounted) return;
       if (profileRes) setProfile(profileRes.data.data);
-      if (statsRes)   setMatchStats(statsRes.data.data);
     });
 
     async function connect() {
@@ -254,13 +249,6 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
           10-min duel · mixed
         </AppText.Mono>
 
-        {/* Live stats — shown once fetched */}
-        {matchStats && (
-          <AppText.Mono preset="statusBar" color={theme.ink4} style={styles.statsText}>
-            {matchStats.onlineCount.toLocaleString()} online · avg wait {matchStats.avgWaitSec}s
-          </AppText.Mono>
-        )}
-
         {/* Error */}
         {error && (
           <AppText.Sans preset="label" color={theme.coral} style={styles.errorText}>
@@ -345,10 +333,6 @@ const styles = StyleSheet.create({
   },
   hint: {
     textAlign: 'center',
-  },
-  statsText: {
-    textAlign: 'center',
-    marginTop: 2,
   },
   errorText: {
     textAlign: 'center',
