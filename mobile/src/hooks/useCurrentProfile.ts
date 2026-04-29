@@ -13,6 +13,9 @@ export interface CurrentProfile {
   currentStreak?: number;
   longestStreak?: number;
   ratingChangeToday?: number;
+  createdAt?: string;
+  wins?: number;
+  winRate?: number;
 }
 
 let cachedProfile: CurrentProfile | null = null;
