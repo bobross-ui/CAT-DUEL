@@ -165,6 +165,7 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
               select: {
                 id: true,
                 category: true,
+                subTopic: true,
                 text: true,
                 options: true,
                 correctAnswer: true,
