@@ -249,10 +249,6 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
                 <EyebrowLabel>Answer breakdown</EyebrowLabel>
                 <Text.Serif preset="h1Serif" color={theme.ink}>Question table</Text.Serif>
               </View>
-              <View style={styles.legend}>
-                <Text.Mono preset="eyebrow" color={theme.ink3}>YOU</Text.Mono>
-                <Text.Mono preset="eyebrow" color={theme.ink4}>THEM</Text.Mono>
-              </View>
             </View>
 
             <View style={[styles.qtableHead, { borderBottomColor: theme.line }]}>
@@ -262,6 +258,7 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
               <Text.Mono preset="eyebrow" color={theme.ink3} style={[styles.uppercase, styles.col_you]}>you</Text.Mono>
               <Text.Mono preset="eyebrow" color={theme.ink3} style={[styles.uppercase, styles.col_them]}>them</Text.Mono>
               <Text.Mono preset="eyebrow" color={theme.ink3} style={[styles.uppercase, styles.col_time]}>time</Text.Mono>
+              <View style={styles.col_chevron} />
             </View>
 
             {loadingBreakdown ? (
@@ -316,10 +313,10 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
                       <View style={styles.col_them}>
                         <MarkCircle correct={row.theirAnswer ? row.theirAnswer.isCorrect : null} dim />
                       </View>
-                      <View style={styles.col_timeWrap}>
-                        <Text.Mono preset="mono" color={theme.ink3} style={styles.col_time}>
-                          {formatTime(row.yourAnswer?.timeTakenMs)}
-                        </Text.Mono>
+                      <Text.Mono preset="mono" color={theme.ink3} style={styles.col_time}>
+                        {formatTime(row.yourAnswer?.timeTakenMs)}
+                      </Text.Mono>
+                      <View style={styles.col_chevron}>
                         <Feather
                           name={isExpanded ? 'chevron-up' : 'chevron-down'}
                           size={14}
@@ -576,11 +573,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 16,
   },
-  legend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   qtableHead: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -619,12 +611,11 @@ const styles = StyleSheet.create({
     width: 58,
     textAlign: 'right',
   },
-  col_timeWrap: {
-    width: 58,
-    flexDirection: 'row',
+  col_chevron: {
+    width: 22,
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 4,
+    justifyContent: 'center',
+    marginLeft: 6,
   },
   markCircle: {
     width: 24,
