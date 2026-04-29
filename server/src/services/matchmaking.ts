@@ -9,7 +9,7 @@ import {
   getPendingMatchForUser,
   RatingImpact,
 } from './gameSession';
-import { calculateElo } from './elo';
+import { calculateMatchElo } from './elo';
 
 export type QueuePlayer = GamePlayer;
 
@@ -61,20 +61,28 @@ export async function createMatch(
 
   const matchData = { gameId, duration: 120 }; // TODO: restore to 600 after testing
 
-  function ratingImpactFor(
-    self: { eloRating: number; gamesPlayed: number },
-    opp: { eloRating: number },
-  ): RatingImpact {
-    return {
-      win:  calculateElo({ playerElo: self.eloRating, opponentElo: opp.eloRating, playerGamesPlayed: self.gamesPlayed, actualScore: 1 }).delta,
-      loss: calculateElo({ playerElo: self.eloRating, opponentElo: opp.eloRating, playerGamesPlayed: self.gamesPlayed, actualScore: 0 }).delta,
-    };
-  }
-
   const p1Profile = publicProfile(p1User);
   const p2Profile = publicProfile(p2User);
-  const p1RatingImpact = ratingImpactFor(p1User, p2User);
-  const p2RatingImpact = ratingImpactFor(p2User, p1User);
+  const p1WinElo = calculateMatchElo({
+    player1: { elo: p1User.eloRating, gamesPlayed: p1User.gamesPlayed },
+    player2: { elo: p2User.eloRating, gamesPlayed: p2User.gamesPlayed },
+    player1Score: 1,
+    player2Score: 0,
+  });
+  const p2WinElo = calculateMatchElo({
+    player1: { elo: p1User.eloRating, gamesPlayed: p1User.gamesPlayed },
+    player2: { elo: p2User.eloRating, gamesPlayed: p2User.gamesPlayed },
+    player1Score: 0,
+    player2Score: 1,
+  });
+  const p1RatingImpact: RatingImpact = {
+    win: p1WinElo.player1.delta,
+    loss: p2WinElo.player1.delta,
+  };
+  const p2RatingImpact: RatingImpact = {
+    win: p2WinElo.player2.delta,
+    loss: p1WinElo.player2.delta,
+  };
 
   await initializeGame(gameId, player1, player2, {
     player1Profile: p1Profile,

@@ -93,6 +93,30 @@ describe('calculateMatchElo', () => {
       expect(result.player1.delta).toBe(-result.player2.delta);
       expect(result.outcome).toBe('player1_win');
     });
+
+    it('stays zero-sum when one player is new and the other is established', () => {
+      const result = calculateMatchElo({
+        player1: p(1162, 5),
+        player2: p(1260, 50),
+        player1Score: 1,
+        player2Score: 0,
+      });
+      expect(result.player1.delta).toBe(20);
+      expect(result.player2.delta).toBe(-20);
+      expect(result.player1.delta + result.player2.delta).toBe(0);
+    });
+
+    it('uses the actual Elo lost when the loser is at the rating floor', () => {
+      const result = calculateMatchElo({
+        player1: p(100, 5),
+        player2: p(1200, 5),
+        player1Score: 0,
+        player2Score: 1,
+      });
+      expect(result.player1.delta).toBe(0);
+      expect(result.player2.delta).toBe(0);
+      expect(result.player1.delta + result.player2.delta).toBe(0);
+    });
   });
 
   describe('verification example from spec', () => {
