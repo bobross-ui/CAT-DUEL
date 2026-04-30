@@ -158,6 +158,16 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
   const preventContextMenu = Platform.OS === 'web'
     ? { onContextMenu: (event: { preventDefault: () => void }) => event.preventDefault() }
     : {};
+  const handleFocusedOptionEnter = Platform.OS === 'web'
+    ? {
+      onKeyDown: (event: { key: string; preventDefault: () => void; stopPropagation: () => void }) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        event.stopPropagation();
+        handleEnter();
+      },
+    }
+    : {};
 
   if (loading) {
     return (
@@ -311,6 +321,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
                       accessibilityRole="button"
                       accessibilityLabel={`Answer ${OPTION_KEYS[index]}. ${option}`}
                       accessibilityState={{ selected: selectedOption === index, disabled: !!result }}
+                      {...handleFocusedOptionEnter}
                       style={({ pressed }) => [
                         styles.option,
                         {
