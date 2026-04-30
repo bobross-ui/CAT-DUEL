@@ -97,42 +97,4 @@ router.post('/:id/answer', validate(answerSchema), async (req: Request, res: Res
   });
 });
 
-// ── GET /api/questions/practice/summary ───────────────────────────────────
-
-router.get('/practice/summary', async (req: Request, res: Response) => {
-  const { since } = req.query;
-
-  const where: Record<string, unknown> = { userId: req.user.id };
-  if (since) where.createdAt = { gte: new Date(since as string) };
-
-  const [answers, byCategory] = await Promise.all([
-    prisma.practiceAnswer.aggregate({
-      where,
-      _count: { id: true },
-      _sum: { timeTakenMs: true },
-    }),
-    prisma.practiceAnswer.groupBy({
-      by: ['isCorrect'],
-      where,
-      _count: { id: true },
-    }),
-  ]);
-
-  const total = answers._count.id;
-  const correct = byCategory.find((r) => r.isCorrect)?._count.id ?? 0;
-  const totalTimeMs = answers._sum.timeTakenMs ?? 0;
-
-  res.json({
-    success: true,
-    data: {
-      total,
-      correct,
-      incorrect: total - correct,
-      accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
-      totalTimeMs,
-      avgTimePerQuestionMs: total > 0 ? Math.round(totalTimeMs / total) : 0,
-    },
-  });
-});
-
 export default router;

@@ -16,15 +16,6 @@ export interface AnswerResult {
   timeTakenMs: number;
 }
 
-export interface PracticeSummary {
-  total: number;
-  correct: number;
-  incorrect: number;
-  accuracy: number;
-  totalTimeMs: number;
-  avgTimePerQuestionMs: number;
-}
-
 export const questionService = {
   getNext: (filters: { category?: string; difficulty?: number }) =>
     api.get<{ success: boolean; data: Question | { noMoreQuestions: boolean } }>(
@@ -37,7 +28,4 @@ export const questionService = {
       `/questions/${questionId}/answer`,
       { selectedAnswer, timeTakenMs }
     ),
-
-  getSummary: () =>
-    api.get<{ success: boolean; data: PracticeSummary }>('/questions/practice/summary'),
 };
