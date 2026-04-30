@@ -23,8 +23,16 @@ const DIFFICULTIES: { label: string; value: number | undefined }[] = [
 
 export default function PracticeHomeScreen({ navigation }: Props) {
   const { theme } = useTheme();
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedDifficulty, setSelectedDifficulty] = useState<number | undefined>(undefined);
+
+  function toggleCategory(category: string) {
+    setSelectedCategories((current) => (
+      current.includes(category)
+        ? current.filter((item) => item !== category)
+        : [...current, category]
+    ));
+  }
 
   return (
     <ScrollView
@@ -42,14 +50,14 @@ export default function PracticeHomeScreen({ navigation }: Props) {
 
       <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.title}>Practice</AppText.Serif>
       <AppText.Sans preset="body" color={theme.ink3} style={styles.subtitle}>
-        Choose a section to begin
+        Choose one or more sections to begin
       </AppText.Sans>
 
       {/* ── Section chips ── */}
       <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.sectionLabel}>SECTION</AppText.Mono>
       <View style={styles.chipRow}>
         {CATEGORIES.map((cat) => {
-          const isSelected = selectedCategory === cat.key;
+          const isSelected = selectedCategories.includes(cat.key);
           return (
             <TouchableOpacity
               key={cat.key}
@@ -60,10 +68,10 @@ export default function PracticeHomeScreen({ navigation }: Props) {
                   borderColor: isSelected ? theme.accent : theme.line,
                 },
               ]}
-              onPress={() => setSelectedCategory(cat.key)}
+              onPress={() => toggleCategory(cat.key)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`Select ${cat.label}`}
+              accessibilityLabel={`${isSelected ? 'Deselect' : 'Select'} ${cat.label}`}
               accessibilityState={{ selected: isSelected }}
             >
               <AppText.Mono
@@ -118,15 +126,15 @@ export default function PracticeHomeScreen({ navigation }: Props) {
       <Button
         label="Begin Practice →"
         onPress={() => {
-          if (selectedCategory) {
+          if (selectedCategories.length > 0) {
             navigation.navigate('Question', {
-              category: selectedCategory,
+              categories: selectedCategories,
               difficulty: selectedDifficulty,
             });
           }
         }}
-        disabled={selectedCategory === null}
-        accessibilityHint="Starts practice with the selected section and difficulty"
+        disabled={selectedCategories.length === 0}
+        accessibilityHint="Starts practice with the selected sections and difficulty"
         style={styles.cta}
       />
     </ScrollView>

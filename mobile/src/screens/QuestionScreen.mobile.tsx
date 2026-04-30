@@ -25,8 +25,15 @@ interface SessionStats {
   answeredQuestions: AnsweredQ[];
 }
 
+function getCategoryCounts(questions: AnsweredQ[]): Record<string, number> {
+  return questions.reduce<Record<string, number>>((counts, question) => {
+    counts[question.category] = (counts[question.category] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
 export default function QuestionScreen({ navigation, route }: Props) {
-  const { category, difficulty } = route.params;
+  const { categories, difficulty } = route.params;
   const { theme } = useTheme();
 
   const [question, setQuestion] = useState<Question | null>(null);
@@ -57,7 +64,11 @@ export default function QuestionScreen({ navigation, route }: Props) {
     questionStartTime.current = Date.now();
 
     try {
-      const res = await questionService.getNext({ category, difficulty });
+      const res = await questionService.getNext({
+        categories,
+        categoryCounts: getCategoryCounts(session.current.answeredQuestions),
+        difficulty,
+      });
       const data = res.data.data;
       if ('noMoreQuestions' in data) {
         setNoMore(true);

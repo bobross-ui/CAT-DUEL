@@ -117,7 +117,7 @@ export type RootStackParamList = {
   Duel: { gameId: string; opponent: OpponentInfo; initialState: InitialGameState };
   DuelResults: { results: GameFinishedPayload; userId: string; opponent: OpponentInfo };
   PracticeHome: undefined;
-  Question: { category: string; difficulty?: number };
+  Question: { categories: string[]; difficulty?: number };
   PracticeSummary: {
     total: number;
     correct: number;

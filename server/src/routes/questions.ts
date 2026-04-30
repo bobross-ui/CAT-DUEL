@@ -5,39 +5,22 @@ import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 
 const router = Router();
+const SECTION_ORDER = ['QUANT', 'DILR', 'VARC'];
 
 router.use(authMiddleware);
 
 // ── GET /api/questions/next ────────────────────────────────────────────────
 
 router.get('/next', async (req: Request, res: Response) => {
-  const { category, difficulty } = req.query;
+  const { categories, categoryCounts, difficulty } = req.query;
 
-  const where: Record<string, unknown> = { isVerified: true };
-  if (category) where.category = category;
-  if (difficulty) where.difficulty = parseInt(difficulty as string);
-
-  // Exclude questions this user has already answered
-  const answered = await prisma.practiceAnswer.findMany({
-    where: { userId: req.user.id },
-    select: { questionId: true },
-  });
-  const seenIds = answered.map((a) => a.questionId);
-  if (seenIds.length > 0) where.id = { notIn: seenIds };
-
-  const question = await prisma.question.findFirst({
-    where,
-    select: {
-      id: true,
-      category: true,
-      subTopic: true,
-      difficulty: true,
-      text: true,
-      options: true,
-      // correctAnswer and explanation are intentionally excluded
-    },
-    orderBy: { timesServed: 'asc' },
-  });
+  const requestedCategories = parseCategories(categories);
+  const counts = parseCategoryCounts(categoryCounts);
+  const question = await findNextPracticeQuestion(
+    requestedCategories.length > 0 ? requestedCategories : SECTION_ORDER,
+    counts,
+    difficulty ? parseInt(difficulty as string) : undefined,
+  );
 
   if (!question) {
     res.json({ success: true, data: { noMoreQuestions: true } });
@@ -51,6 +34,68 @@ router.get('/next', async (req: Request, res: Response) => {
 
   res.json({ success: true, data: question });
 });
+
+function parseCategories(value: unknown): string[] {
+  if (!value) return [];
+  const values = Array.isArray(value) ? value : [value];
+  return values
+    .flatMap((item) => String(item).split(','))
+    .map((item) => item.trim())
+    .filter((item) => SECTION_ORDER.includes(item));
+}
+
+function parseCategoryCounts(value: unknown): Record<string, number> {
+  const counts: Record<string, number> = {};
+  if (!value) return counts;
+
+  const values = Array.isArray(value) ? value : [value];
+  for (const part of values.flatMap((item) => String(item).split(','))) {
+    const [category, rawCount] = part.split(':');
+    if (!category || !SECTION_ORDER.includes(category)) continue;
+    counts[category] = Math.max(0, parseInt(rawCount, 10) || 0);
+  }
+
+  return counts;
+}
+
+function getRoundRobinCategories(categories: string[], counts: Record<string, number>): string[] {
+  return [...categories].sort((a, b) => {
+    const countDiff = (counts[a] ?? 0) - (counts[b] ?? 0);
+    if (countDiff !== 0) return countDiff;
+    return SECTION_ORDER.indexOf(a) - SECTION_ORDER.indexOf(b);
+  });
+}
+
+async function findNextPracticeQuestion(
+  categories: string[],
+  counts: Record<string, number>,
+  difficulty?: number,
+) {
+  for (const category of getRoundRobinCategories(categories, counts)) {
+    const where: Record<string, unknown> = { isVerified: true, category };
+    if (difficulty) where.difficulty = difficulty;
+
+    const questionCount = await prisma.question.count({ where });
+    if (questionCount === 0) continue;
+
+    return prisma.question.findFirst({
+      where,
+      select: {
+        id: true,
+        category: true,
+        subTopic: true,
+        difficulty: true,
+        text: true,
+        options: true,
+        // correctAnswer and explanation are intentionally excluded
+      },
+      orderBy: { createdAt: 'asc' },
+      skip: Math.floor(Math.random() * questionCount),
+    });
+  }
+
+  return null;
+}
 
 // ── POST /api/questions/:id/answer ─────────────────────────────────────────
 

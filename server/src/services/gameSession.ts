@@ -75,6 +75,7 @@ const COUNTDOWN_SECONDS = 3;
 const PRESTART_TIMEOUT_MS = 10_000;
 const PRESTART_TTL_SECONDS = 30;
 const ACTIVE_FORFEIT_GRACE_SECONDS = 15;
+const SECTION_ORDER = ['QUANT', 'DILR', 'VARC'];
 
 // In-memory timer maps. Both are lost on server restart; active games in Redis
 // would need their timers re-initialized by scanning active_game:* keys on startup
@@ -262,9 +263,12 @@ function balanceByCategory<T extends { category: string }>(
   for (const q of questions) {
     (groups[q.category] ??= []).push(q);
   }
+  for (const category of Object.keys(groups)) {
+    groups[category] = shuffle(groups[category]);
+  }
 
   const result: T[] = [];
-  const categories = Object.keys(groups);
+  const categories = SECTION_ORDER.filter((category) => groups[category]?.length);
   let round = 0;
 
   while (result.length < total) {
@@ -301,16 +305,13 @@ async function selectQuestionsForMatch(
       difficulty: { gte: minDiff, lte: maxDiff },
     },
     select: { id: true, category: true, correctAnswer: true },
-    orderBy: { timesServed: 'asc' },
-    take: 60,
   });
 
   const balanced = balanceByCategory(questions, QUESTION_COUNT);
-  const shuffled = shuffle(balanced);
 
-  const questionIds = shuffled.map((q) => q.id);
+  const questionIds = balanced.map((q) => q.id);
   const correctAnswers: Record<string, number> = {};
-  for (const q of shuffled) correctAnswers[q.id] = q.correctAnswer;
+  for (const q of balanced) correctAnswers[q.id] = q.correctAnswer;
 
   return { questionIds, correctAnswers };
 }
@@ -330,6 +331,15 @@ async function getQuestionForClient(questionId: string) {
       // correctAnswer intentionally excluded — never sent before submission
       // explanation intentionally excluded — shown in results screen only
     },
+  });
+}
+
+async function incrementQuestionServeCounts(questionIds: string[]): Promise<void> {
+  if (questionIds.length === 0) return;
+
+  await prisma.question.updateMany({
+    where: { id: { in: questionIds } },
+    data: { timesServed: { increment: 1 } },
   });
 }
 
@@ -375,6 +385,7 @@ async function startCountdown(
 
     const [firstQuestion] = await Promise.all([
       getQuestionForClient(current.questionIds[0]),
+      incrementQuestionServeCounts(current.questionIds),
       saveGameState(current, getStateTtlSeconds(current)),
     ]);
 

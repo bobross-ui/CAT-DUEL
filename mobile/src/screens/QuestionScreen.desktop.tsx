@@ -34,9 +34,17 @@ interface SessionStats {
 
 const OPTION_KEYS = ['A', 'B', 'C', 'D'];
 
+function getCategoryCounts(questions: AnsweredQ[]): Record<string, number> {
+  return questions.reduce<Record<string, number>>((counts, question) => {
+    counts[question.category] = (counts[question.category] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
 export default function QuestionScreenDesktop({ navigation, route }: Props) {
-  const { category, difficulty } = route.params;
+  const { categories, difficulty } = route.params;
   const { theme } = useTheme();
+  const categoryLabel = categories.join(' · ');
 
   const [question, setQuestion] = useState<Question | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,7 +84,11 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
     questionStartTime.current = Date.now();
 
     try {
-      const res = await questionService.getNext({ category, difficulty });
+      const res = await questionService.getNext({
+        categories,
+        categoryCounts: getCategoryCounts(session.current.answeredQuestions),
+        difficulty,
+      });
       const data = res.data.data;
       if ('noMoreQuestions' in data) {
         setNoMore(true);
@@ -90,7 +102,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [category, difficulty]);
+  }, [categories, difficulty]);
 
   useEffect(() => {
     void loadNextQuestion();
@@ -225,7 +237,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
           >
             <View style={styles.panelHeader}>
               <Text.Mono preset="eyebrow" color={theme.ink3} style={styles.uppercase}>
-                {question?.category || category}
+                {question?.category || categoryLabel}
               </Text.Mono>
               {question?.subTopic ? (
                 <Text.Mono preset="chipLabel" color={theme.ink3}>{question.subTopic}</Text.Mono>

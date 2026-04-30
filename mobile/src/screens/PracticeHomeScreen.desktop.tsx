@@ -47,18 +47,28 @@ const DIFFICULTIES: { label: string; value: number | undefined }[] = [
 
 export default function PracticeHomeScreenDesktop({ navigation }: Props) {
   const { theme } = useTheme();
-  const [selectedCategory, setSelectedCategory] = useState<CategoryKey | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<CategoryKey[]>([]);
   const [hoveredCategory, setHoveredCategory] = useState<CategoryKey | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<number | undefined>(undefined);
 
   useDocumentTitle('Practice · CAT Duel');
 
-  const startPractice = useCallback((category: CategoryKey) => {
+  const toggleCategory = useCallback((category: CategoryKey) => {
+    setSelectedCategories((current) => (
+      current.includes(category)
+        ? current.filter((item) => item !== category)
+        : [...current, category]
+    ));
+  }, []);
+
+  const startPractice = useCallback(() => {
     navigation.navigate('Question', {
-      category,
+      categories: selectedCategories,
       difficulty: selectedDifficulty,
     });
-  }, [navigation, selectedDifficulty]);
+  }, [navigation, selectedCategories, selectedDifficulty]);
+
+  const hasSelectedCategories = selectedCategories.length > 0;
 
   return (
     <DesktopFrame activeRoute="PracticeHome">
@@ -78,17 +88,17 @@ export default function PracticeHomeScreenDesktop({ navigation }: Props) {
 
         <View style={styles.categoryGrid}>
           {CATEGORIES.map((category) => {
-            const isSelected = selectedCategory === category.key;
+            const isSelected = selectedCategories.includes(category.key);
             const isHovered = hoveredCategory === category.key;
             const isHighlighted = isSelected || isHovered;
             return (
               <Pressable
                 key={category.key}
-                onPress={() => setSelectedCategory(category.key)}
+                onPress={() => toggleCategory(category.key)}
                 onHoverIn={() => setHoveredCategory(category.key)}
                 onHoverOut={() => setHoveredCategory(null)}
                 accessibilityRole="button"
-                accessibilityLabel={`Select ${category.title} practice`}
+                accessibilityLabel={`${isSelected ? 'Deselect' : 'Select'} ${category.title} practice`}
                 accessibilityState={{ selected: isSelected }}
                 style={({ pressed }) => [
                   styles.categoryCard,
@@ -149,23 +159,23 @@ export default function PracticeHomeScreenDesktop({ navigation }: Props) {
 
         <Pressable
           onPress={() => {
-            if (selectedCategory) startPractice(selectedCategory);
+            if (hasSelectedCategories) startPractice();
           }}
-          disabled={!selectedCategory}
+          disabled={!hasSelectedCategories}
           accessibilityRole="button"
           accessibilityLabel="Start practice"
-          accessibilityState={{ disabled: !selectedCategory }}
+          accessibilityState={{ disabled: !hasSelectedCategories }}
           style={({ pressed }) => [
             styles.startButton,
             {
-              backgroundColor: selectedCategory ? theme.ink : theme.bg2,
-              borderColor: selectedCategory ? theme.ink : theme.line,
+              backgroundColor: hasSelectedCategories ? theme.ink : theme.bg2,
+              borderColor: hasSelectedCategories ? theme.ink : theme.line,
               opacity: pressed ? 0.84 : 1,
             },
           ]}
         >
-          <Text.Sans preset="bodyMed" color={selectedCategory ? theme.bg : theme.ink3}>Start Practice</Text.Sans>
-          <Feather name="arrow-right" size={18} color={selectedCategory ? theme.bg : theme.ink3} />
+          <Text.Sans preset="bodyMed" color={hasSelectedCategories ? theme.bg : theme.ink3}>Start Practice</Text.Sans>
+          <Feather name="arrow-right" size={18} color={hasSelectedCategories ? theme.bg : theme.ink3} />
         </Pressable>
       </PageContainer>
     </DesktopFrame>
