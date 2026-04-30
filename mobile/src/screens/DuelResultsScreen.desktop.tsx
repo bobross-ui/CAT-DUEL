@@ -170,7 +170,7 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
   const yourAverageTimeMs = average(yourTimes);
   const opponentAverageTimeMs = average(theirTimes);
   const totalQuestions = results.totalQuestions || grouped.length;
-  const accuracy = totalQuestions > 0 ? Math.round((yours.score / totalQuestions) * 100) : 0;
+  const accuracy = totalQuestions > 0 ? Math.round((yours.score / yours.questionsAnswered) * 100) : 0;
   const unanswered = Math.max(totalQuestions - yours.questionsAnswered, 0);
   const scoreGap = yours.score - theirs.score;
 
