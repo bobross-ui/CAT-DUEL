@@ -161,7 +161,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   const selectAnswer = useCallback((index: number) => {
     setDs(prev => {
       if (prev.showFeedback) return prev;
-      return { ...prev, selectedAnswer: prev.selectedAnswer === index ? null : index };
+      return { ...prev, selectedAnswer: index };
     });
   }, []);
 
@@ -367,6 +367,16 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   const preventContextMenu = Platform.OS === 'web'
     ? { onContextMenu: (event: { preventDefault: () => void }) => event.preventDefault() }
     : {};
+  const submitOnEnter = Platform.OS === 'web'
+    ? {
+      onKeyDown: (event: { key: string; preventDefault: () => void; stopPropagation: () => void }) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        event.stopPropagation();
+        submitAnswer();
+      },
+    }
+    : {};
 
   const rightRail = (
     <View style={styles.rightRailStack}>
@@ -538,6 +548,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
                     accessibilityRole="button"
                     accessibilityLabel={`Answer ${String.fromCharCode(65 + index)}. ${option}`}
                     accessibilityState={{ selected: isSelected, disabled: ds.showFeedback }}
+                    {...submitOnEnter}
                   >
                     <View style={[
                       styles.optionKey,
