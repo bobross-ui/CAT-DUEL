@@ -63,6 +63,7 @@ export default function App() {
               <NavigationContainer
                 ref={navigationRef}
                 linking={linking}
+                documentTitle={{ enabled: false }}
                 onReady={() => setNavigationReady(true)}
               >
                 <RootNavigator navigationRef={navigationRef} navigationReady={navigationReady} />

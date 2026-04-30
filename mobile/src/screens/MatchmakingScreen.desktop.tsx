@@ -262,6 +262,7 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
   const [initialState, setInitialState] = useState<InitialGameState | null>(null);
   const [statusMessage, setStatusMessage] = useState(route.params?.notice ?? '');
   const [documentHidden, setDocumentHidden] = useState(false);
+  const [matchFoundWhileHidden, setMatchFoundWhileHidden] = useState(false);
   const matchmakingSocketRef = useRef<Socket | null>(null);
   const shouldKeepGameSocketRef = useRef(false);
   const navigatedRef = useRef(false);
@@ -273,16 +274,20 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
   const eloHigh = user ? user.eloRating + range : null;
 
   const title = useMemo(() => {
+    if (matchFoundWhileHidden && documentHidden) return '(!) Match found — CAT Duel';
     if (phase === 'COUNTDOWN') return 'Starting · CAT Duel';
-    if (phase === 'FOUND') return documentHidden ? '(!) Match found! · CAT Duel' : 'Match found! · CAT Duel';
+    if (phase === 'FOUND') return 'Match found! · CAT Duel';
     return 'Searching · CAT Duel';
-  }, [documentHidden, phase]);
+  }, [documentHidden, matchFoundWhileHidden, phase]);
   useDocumentTitle(title);
 
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
 
-    const syncHidden = () => setDocumentHidden(document.hidden);
+    const syncHidden = () => {
+      setDocumentHidden(document.hidden);
+      if (!document.hidden) setMatchFoundWhileHidden(false);
+    };
     syncHidden();
     document.addEventListener('visibilitychange', syncHidden);
     return () => document.removeEventListener('visibilitychange', syncHidden);
@@ -341,6 +346,7 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
 
         socket.on('match:found', (match: FoundMatch) => {
           if (!mounted) return;
+          setMatchFoundWhileHidden(typeof document !== 'undefined' && document.hidden);
           setFoundMatch({
             gameId: match.gameId,
             opponent: match.opponent,
