@@ -19,6 +19,7 @@ import { getTier, getTierToNext } from '../constants';
 import MobileHomeScreen from './HomeScreen.mobile';
 
 type Props = ComponentProps<typeof MobileHomeScreen>;
+const INITIAL_MATCHMAKING_RANGE = 150;
 
 interface MatchHistoryEntry {
   matchId: string;
@@ -161,6 +162,9 @@ export default function HomeScreenDesktop({ navigation }: Props) {
   const heroBodyColor = heroIsLight ? palette.light.ink2 : 'rgba(255,255,255,0.68)';
   const heroMutedColor = heroIsLight ? palette.light.ink3 : 'rgba(255,255,255,0.58)';
   const heroMetaColor = heroIsLight ? palette.light.ink3 : 'rgba(255,255,255,0.52)';
+  const queueEloLow = user ? Math.max(0, user.eloRating - INITIAL_MATCHMAKING_RANGE) : null;
+  const queueEloHigh = user ? user.eloRating + INITIAL_MATCHMAKING_RANGE : null;
+  const queueMeta = queueEloLow !== null ? `◆ ${queueEloLow}-${queueEloHigh} · ~12S WAIT` : '◆ — · ~12S WAIT';
 
   const rightRail = (
     <View style={styles.rightRailStack}>
@@ -334,7 +338,7 @@ export default function HomeScreenDesktop({ navigation }: Props) {
                     <Feather name="play" size={18} color="#FFFFFF" />
                     <Text.Sans preset="bodyMed" color="#FFFFFF">Enter queue</Text.Sans>
                   </View>
-                  <Text.Mono preset="chipLabel" color={heroMetaColor}>◆ 820-865 · ~12S WAIT</Text.Mono>
+                  <Text.Mono preset="chipLabel" color={heroMetaColor}>{queueMeta}</Text.Mono>
                 </View>
               </View>
             )}
