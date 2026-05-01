@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import admin from '../config/firebase';
 import { prisma } from '../models/prisma';
 import { touchStreak } from '../services/streak';
+import { cacheUser, getCachedUserByFirebaseUid } from '../services/userCache';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -15,7 +16,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   try {
     const decoded = await admin.auth().verifyIdToken(token);
 
-    let user = await prisma.user.findUnique({ where: { firebaseUid: decoded.uid } });
+    let user = await getCachedUserByFirebaseUid(decoded.uid);
     if (!user) {
       user = await prisma.user.create({
         data: {
@@ -25,6 +26,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
           avatarUrl: decoded.picture ?? null,
         },
       });
+      await cacheUser(user);
     }
 
     const streakUpdated = await touchStreak(user.id).catch((error) => {

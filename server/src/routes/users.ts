@@ -6,6 +6,7 @@ import { redis } from '../config/redis';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
+import { invalidateUserByFirebaseUid, invalidateUserById } from '../services/userCache';
 
 const router = Router();
 
@@ -48,6 +49,7 @@ router.patch('/me', authMiddleware, validate(updateProfileSchema), async (req, r
         ...(onboardingCompletedAt && { onboardingCompletedAt: new Date(onboardingCompletedAt) }),
       },
     });
+    await invalidateUserById(req.user.id);
     res.json({ success: true, data: user });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -92,6 +94,7 @@ router.delete('/me', authMiddleware, async (req, res, next) => {
       await tx.user.delete({ where: { id: req.user.id } });
     });
 
+    await invalidateUserByFirebaseUid(req.user.firebaseUid);
     await admin.auth().deleteUser(req.user.firebaseUid);
 
     res.json({ success: true });

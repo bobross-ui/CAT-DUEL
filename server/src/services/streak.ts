@@ -1,5 +1,6 @@
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
+import { invalidateUserById } from './userCache';
 
 export function startOfUtcDay(date: Date): Date {
   const normalized = new Date(date);
@@ -53,6 +54,7 @@ export async function touchStreak(userId: string): Promise<boolean> {
       lastActiveDate: today,
     },
   });
+  await invalidateUserById(userId);
 
   return true;
 }

@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import admin from '../config/firebase';
-import { prisma } from '../models/prisma';
+import { getCachedUserByFirebaseUid } from '../services/userCache';
 
 export async function socketAuthMiddleware(
   socket: Socket,
@@ -11,7 +11,7 @@ export async function socketAuthMiddleware(
 
   try {
     const decoded = await admin.auth().verifyIdToken(token);
-    const user = await prisma.user.findUnique({ where: { firebaseUid: decoded.uid } });
+    const user = await getCachedUserByFirebaseUid(decoded.uid);
     if (!user) return next(new Error('USER_NOT_FOUND'));
     socket.data.user = user;
     next();
