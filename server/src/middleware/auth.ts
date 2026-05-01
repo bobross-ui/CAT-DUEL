@@ -14,7 +14,11 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
+    const decoded = await admin.auth().verifyIdToken(token).catch(() => null);
+    if (!decoded) {
+      res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
+      return;
+    }
 
     let user = await getCachedUserByFirebaseUid(decoded.uid);
     if (!user) {
@@ -35,7 +39,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
 
     req.user = user;
     next();
-  } catch {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
+  } catch (err) {
+    next(err);
   }
 }
