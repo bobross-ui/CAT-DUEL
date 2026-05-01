@@ -253,7 +253,11 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
                 <Text.Mono preset="chipLabel" color={theme.ink3}>{question.subTopic}</Text.Mono>
               ) : null}
             </View>
-            <ScrollView contentContainerStyle={styles.questionScroll} showsVerticalScrollIndicator>
+            <ScrollView
+              style={styles.questionScrollView}
+              contentContainerStyle={styles.questionScroll}
+              showsVerticalScrollIndicator
+            >
               <Text.Serif
                 preset="questionLg"
                 color={theme.ink2}
@@ -280,7 +284,11 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
               </View>
             </View>
 
-            <ScrollView contentContainerStyle={styles.answerScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.answerScrollView}
+              contentContainerStyle={styles.answerScroll}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.options}>
                 {question?.options.map((option, index) => {
                   let borderColor = theme.line;
@@ -412,7 +420,6 @@ const styles = StyleSheet.create({
   },
   page: {
     flex: 1,
-    minHeight: 720,
     paddingHorizontal: 32,
     paddingTop: 26,
     paddingBottom: 28,
@@ -440,6 +447,7 @@ const styles = StyleSheet.create({
   },
   practiceBody: {
     flex: 1,
+    minHeight: 0,
     flexDirection: 'row',
     borderWidth: 1,
     borderRadius: 16,
@@ -447,11 +455,13 @@ const styles = StyleSheet.create({
   },
   questionPanel: {
     flex: 1.05,
+    minHeight: 0,
     borderRightWidth: 1,
     minWidth: 0,
   },
   answerPanel: {
     flex: 1,
+    minHeight: 0,
     minWidth: 0,
   },
   panelHeader: {
@@ -466,6 +476,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingTop: 12,
     paddingBottom: 32,
+  },
+  questionScrollView: {
+    flex: 1,
   },
   uppercase: {
     textTransform: 'uppercase',
@@ -490,6 +503,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: 24,
+  },
+  answerScrollView: {
+    flex: 1,
   },
   options: {
     gap: 12,

@@ -507,7 +507,11 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
               </Text.Mono>
               <Text.Mono preset="chipLabel" color={theme.ink3}>Q{ds.questionNumber}</Text.Mono>
             </View>
-            <ScrollView showsVerticalScrollIndicator contentContainerStyle={styles.passageScroll}>
+            <ScrollView
+              style={styles.passageScrollView}
+              showsVerticalScrollIndicator
+              contentContainerStyle={styles.passageScroll}
+            >
               <Text.Serif preset="questionLg" color={theme.ink2} style={styles.passageText} selectable={false}>
                 {ds.currentQuestion.text}
               </Text.Serif>
@@ -529,7 +533,11 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
               </View>
             </View>
 
-            <View style={styles.optionsContainer}>
+            <ScrollView
+              style={styles.optionsScroll}
+              contentContainerStyle={styles.optionsContainer}
+              showsVerticalScrollIndicator
+            >
               {(ds.currentQuestion.options as string[]).map((option, index) => {
                 const isSelected = ds.selectedAnswer === index;
                 return (
@@ -570,7 +578,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
                   </Pressable>
                 );
               })}
-            </View>
+            </ScrollView>
           </View>
         </Animated.View>
 
@@ -649,7 +657,6 @@ const styles = StyleSheet.create({
   },
   page: {
     flex: 1,
-    minHeight: 760,
     paddingHorizontal: 32,
     paddingTop: 24,
   },
@@ -719,18 +726,20 @@ const styles = StyleSheet.create({
   },
   duelBody: {
     flex: 1,
-    minHeight: 520,
+    minHeight: 0,
     flexDirection: 'row',
     borderRadius: radii.xl,
     overflow: 'hidden',
   },
   passagePanel: {
     flex: 1.05,
+    minHeight: 0,
     borderRightWidth: 1,
     paddingRight: 24,
   },
   questionPanel: {
     flex: 1,
+    minHeight: 0,
     paddingLeft: 24,
     paddingBottom: 18,
   },
@@ -747,6 +756,9 @@ const styles = StyleSheet.create({
   },
   passageScroll: {
     paddingBottom: 24,
+  },
+  passageScrollView: {
+    flex: 1,
   },
   passageText: {
     lineHeight: 32,
@@ -765,6 +777,9 @@ const styles = StyleSheet.create({
   },
   optionsContainer: {
     gap: 10,
+  },
+  optionsScroll: {
+    flex: 1,
   },
   option: {
     minHeight: 66,
