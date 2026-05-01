@@ -14,15 +14,10 @@ import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
 import { getTier } from '../constants';
 import { track } from '../services/analytics';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Found'>;
 type PreStartStatus = 'waiting_for_opponent' | 'countdown';
-
-interface UserProfile {
-  displayName: string | null;
-  eloRating: number;
-  rankTier: string;
-}
 
 // ── Countdown digit — scales in from 1.2 on each tick ────────────────────────
 function CountdownDigit({ count, animate }: { count: number; animate: boolean }) {
@@ -136,7 +131,7 @@ export default function FoundScreen({ navigation, route }: Props) {
   const { playHaptic, reduceMotionEnabled } = useAppPreferences();
   const insets = useSafeAreaInsets();
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const { user: profile } = useCurrentProfile();
   const [winRate, setWinRate] = useState<number | null>(null);
   const [preStartStatus, setPreStartStatus] = useState<PreStartStatus>('waiting_for_opponent');
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -250,13 +245,9 @@ export default function FoundScreen({ navigation, route }: Props) {
     };
   }, [gameId, navigation]);
 
-  // Fetch user profile + win rate
+  // Fetch win rate
   useEffect(() => {
-    Promise.all([
-      api.get('/auth/me').catch(() => null),
-      api.get('/games/stats').catch(() => null),
-    ]).then(([profileRes, statsRes]) => {
-      if (profileRes) setProfile(profileRes.data.data);
+    api.get('/games/stats').catch(() => null).then((statsRes) => {
       if (statsRes)   setWinRate(statsRes.data.data?.winRate ?? null);
     });
   }, []);

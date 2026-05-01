@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
 import api from '../services/api';
 
 export interface CurrentProfile {
@@ -16,12 +15,13 @@ export interface CurrentProfile {
   createdAt?: string;
   wins?: number;
   winRate?: number;
+  onboardingCompletedAt?: string | null;
 }
 
 let cachedProfile: CurrentProfile | null = null;
 let inflight: Promise<CurrentProfile> | null = null;
 
-async function fetchProfile() {
+export async function fetchCurrentProfile() {
   if (!inflight) {
     inflight = api.get('/auth/me')
       .then((res) => {
@@ -38,6 +38,7 @@ async function fetchProfile() {
 
 export function clearCurrentProfileCache() {
   cachedProfile = null;
+  inflight = null;
 }
 
 export function useCurrentProfile() {
@@ -49,7 +50,7 @@ export function useCurrentProfile() {
     setLoading(!cachedProfile);
     setError('');
     try {
-      const nextProfile = await fetchProfile();
+      const nextProfile = await fetchCurrentProfile();
       setUser(nextProfile);
       return nextProfile;
     } catch {
@@ -64,12 +65,6 @@ export function useCurrentProfile() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  useFocusEffect(
-    useCallback(() => {
-      void refresh();
-    }, [refresh]),
-  );
 
   return { user, loading, error, refresh };
 }

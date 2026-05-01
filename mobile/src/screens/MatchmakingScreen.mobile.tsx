@@ -4,13 +4,13 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Socket } from 'socket.io-client';
 import { ActiveGamePayload, RootStackParamList } from '../navigation';
 import { createMatchmakingSocket } from '../services/socket';
-import api from '../services/api';
 import Avatar from '../components/Avatar';
 import AppText from '../components/Text';
 import Button from '../components/Button';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Matchmaking'>;
 type Phase = 'CONNECTING' | 'SEARCHING' | 'FOUND';
@@ -77,7 +77,7 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
   const { playHaptic, reduceMotionEnabled } = useAppPreferences();
   const [phase, setPhase] = useState<Phase>('CONNECTING');
   const [error, setError] = useState<string | null>(null);
-  const [profile, setProfile] = useState<{ displayName: string | null; eloRating: number } | null>(null);
+  const { user: profile } = useCurrentProfile();
   const [elapsed, setElapsed] = useState(0);
   const socketRef = useRef<Socket | null>(null);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -114,14 +114,9 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
     };
   }, [phase]);
 
-  // Fetch profile, then connect socket
+  // Connect socket
   useEffect(() => {
     let mounted = true;
-
-    api.get('/auth/me').catch(() => null).then((profileRes) => {
-      if (!mounted) return;
-      if (profileRes) setProfile(profileRes.data.data);
-    });
 
     async function connect() {
       try {

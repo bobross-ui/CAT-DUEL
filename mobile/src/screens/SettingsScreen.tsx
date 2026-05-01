@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -25,11 +25,12 @@ import Card from '../components/Card';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 interface SettingsProfile {
-  email: string;
+  email?: string;
   displayName: string | null;
 }
 
@@ -46,8 +47,8 @@ export default function SettingsScreen({ navigation }: Props) {
     setHapticsEnabled,
     setAnalyticsEnabled,
   } = useAppPreferences();
-  const [profile, setProfile] = useState<SettingsProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user: currentProfile, loading } = useCurrentProfile();
+  const [profile, setProfile] = useState<SettingsProfile | null>(currentProfile);
   const [editVisible, setEditVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editError, setEditError] = useState('');
@@ -62,22 +63,9 @@ export default function SettingsScreen({ navigation }: Props) {
     [user],
   );
 
-  const fetchProfile = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.get('/auth/me');
-      setProfile({
-        email: res.data.data.email,
-        displayName: res.data.data.displayName,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    void fetchProfile();
-  }, [fetchProfile]);
+    setProfile(currentProfile);
+  }, [currentProfile]);
 
   function openEditName() {
     setEditName(profile?.displayName ?? '');

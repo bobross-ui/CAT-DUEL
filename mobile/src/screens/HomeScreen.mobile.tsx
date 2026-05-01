@@ -17,20 +17,12 @@ import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { getTier, getTierToNext } from '../constants';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Home'>,
   NativeStackScreenProps<RootStackParamList>
 >;
-
-interface UserProfile {
-  displayName: string | null;
-  eloRating: number;
-  rankTier: string;
-  gamesPlayed: number;
-  currentStreak?: number;
-  ratingChangeToday?: number;
-}
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -49,7 +41,7 @@ function getStreakCopy(streak: number) {
 export default function HomeScreen({ navigation }: Props) {
   const { theme, mode } = useTheme();
   const { playHaptic } = useAppPreferences();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const { user: profile, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
   const [winRate, setWinRate] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -57,11 +49,7 @@ export default function HomeScreen({ navigation }: Props) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [profileRes, historyRes] = await Promise.all([
-        api.get('/auth/me'),
-        api.get('/games/history?page=1&limit=20').catch(() => null),
-      ]);
-      setProfile(profileRes.data.data);
+      const historyRes = await api.get('/games/history?page=1&limit=20').catch(() => null);
       setError('');
       setWinRate(null);
       if (historyRes) {
@@ -84,11 +72,11 @@ export default function HomeScreen({ navigation }: Props) {
   const onRefresh = useCallback(async () => {
     void playHaptic('pull_refresh');
     setRefreshing(true);
-    await fetchData();
+    await Promise.all([refresh(), fetchData()]);
     setRefreshing(false);
-  }, [fetchData, playHaptic]);
+  }, [fetchData, playHaptic, refresh]);
 
-  if (loading) {
+  if (loading || profileLoading) {
     return (
       <ScreenTransitionView style={{ flex: 1, backgroundColor: theme.bg }}>
         <View style={styles.container}>
@@ -118,14 +106,18 @@ export default function HomeScreen({ navigation }: Props) {
     );
   }
 
-  if (error) {
+  if (error || profileError) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
         <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.errorHeading}>Couldn't load.</AppText.Serif>
         <AppText.Sans preset="body" color={theme.ink3} style={styles.errorBody}>Check your connection and try again.</AppText.Sans>
         <Button
           label="Retry"
-          onPress={() => { setError(''); setLoading(true); fetchData().finally(() => setLoading(false)); }}
+          onPress={() => {
+            setError('');
+            setLoading(true);
+            Promise.all([refresh(), fetchData()]).finally(() => setLoading(false));
+          }}
           style={styles.retryBtn}
         />
       </View>

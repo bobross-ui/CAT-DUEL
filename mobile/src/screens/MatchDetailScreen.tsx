@@ -8,6 +8,7 @@ import { RootStackParamList } from '../navigation';
 import api from '../services/api';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MatchDetail'>;
 
@@ -50,23 +51,21 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
   const { matchId, opponentName } = route.params;
   const { theme } = useTheme();
   const [match, setMatch] = useState<MatchData | null>(null);
-  const [myId, setMyId] = useState<string | null>(null);
+  const { user: profile, loading: profileLoading } = useCurrentProfile();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      api.get(`/games/${matchId}`),
-      api.get('/auth/me'),
-    ])
-      .then(([matchRes, meRes]) => {
+    api.get(`/games/${matchId}`)
+      .then((matchRes) => {
         setMatch(matchRes.data.data);
-        setMyId(meRes.data.data.id);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [matchId]);
 
-  if (loading) {
+  const myId = profile?.id ?? null;
+
+  if (loading || profileLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
         <ActivityIndicator size="large" color={theme.ink} />

@@ -12,7 +12,6 @@ import {
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeProvider';
-import api from '../services/api';
 import Button from '../components/Button';
 import AppText from '../components/Text';
 import LoginScreen from '../screens/LoginScreen';
@@ -35,6 +34,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import PublicProfileScreen from '../screens/PublicProfileScreen';
 import TabBar from '../components/TabBar';
 import { identify, reset as resetAnalytics, track } from '../services/analytics';
+import { clearCurrentProfileCache, fetchCurrentProfile } from '../hooks/useCurrentProfile';
 import { parseAppLink } from './linking';
 
 export interface ClientQuestion {
@@ -234,8 +234,7 @@ export default function RootNavigator({
     setProfileLoading(true);
     setProfileError(false);
     try {
-      const res = await api.get('/auth/me');
-      const nextProfile = res.data.data as AuthProfile;
+      const nextProfile = await fetchCurrentProfile() as AuthProfile;
       setProfile(nextProfile);
       if (nextProfile.id) {
         identify(nextProfile.id, {
@@ -269,7 +268,10 @@ export default function RootNavigator({
   }, [fetchProfile]);
 
   useEffect(() => {
-    if (!user) resetAnalytics();
+    if (!user) {
+      clearCurrentProfileCache();
+      resetAnalytics();
+    }
   }, [user]);
 
   useEffect(() => {
