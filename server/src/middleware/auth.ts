@@ -29,15 +29,9 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       await cacheUser(user);
     }
 
-    const streakUpdated = await touchStreak(user.id).catch((error) => {
+    void touchStreak(user.id).catch((error) => {
       console.error('[authMiddleware] touchStreak failed:', error);
-      return false;
     });
-
-    if (streakUpdated) {
-      const refreshedUser = await prisma.user.findUnique({ where: { id: user.id } });
-      if (refreshedUser) user = refreshedUser;
-    }
 
     req.user = user;
     next();
