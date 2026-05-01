@@ -1,10 +1,12 @@
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
+import type { User } from '../generated/prisma/client';
 import { RankTier } from './elo';
 
 const MIN_GAMES_TO_RANK = 5;
 const GLOBAL_CACHE_KEY = 'leaderboard:global:v2:top100';
 const GLOBAL_CACHE_TTL = 60; // seconds
+const USER_GLOBAL_RANK_CACHE_TTL = 60; // seconds
 const RANK_TIERS: RankTier[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
 
 export interface LeaderboardEntry {
@@ -31,13 +33,33 @@ interface CachedGlobalLeaderboard {
   tierCounts: Record<RankTier, number>;
 }
 
+function userGlobalRankCacheKey(userId: string): string {
+  return `user:rank:global:${userId}`;
+}
+
 export async function getUserGlobalRank(userId: string): Promise<number | null> {
+  const cacheKey = userGlobalRankCacheKey(userId);
+
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) return JSON.parse(cached) as number | null;
+  } catch (err) {
+    console.error('[leaderboard] global rank cache read failed:', err);
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { eloRating: true, gamesPlayed: true, createdAt: true },
   });
 
-  if (!user || user.gamesPlayed < MIN_GAMES_TO_RANK) return null;
+  if (!user || user.gamesPlayed < MIN_GAMES_TO_RANK) {
+    try {
+      await redis.set(cacheKey, JSON.stringify(null), 'EX', USER_GLOBAL_RANK_CACHE_TTL);
+    } catch (err) {
+      console.error('[leaderboard] global rank cache write failed:', err);
+    }
+    return null;
+  }
 
   const higherCount = await prisma.user.count({
     where: {
@@ -54,7 +76,22 @@ export async function getUserGlobalRank(userId: string): Promise<number | null> 
     },
   });
 
-  return higherCount + 1;
+  const rank = higherCount + 1;
+  try {
+    await redis.set(cacheKey, JSON.stringify(rank), 'EX', USER_GLOBAL_RANK_CACHE_TTL);
+  } catch (err) {
+    console.error('[leaderboard] global rank cache write failed:', err);
+  }
+
+  return rank;
+}
+
+export async function invalidateUserGlobalRank(userId: string): Promise<void> {
+  try {
+    await redis.del(userGlobalRankCacheKey(userId));
+  } catch (err) {
+    console.error('[leaderboard] global rank cache invalidate failed:', err);
+  }
 }
 
 export async function getGlobalLeaderboard(currentUserId: string): Promise<LeaderboardResponse> {
@@ -154,7 +191,7 @@ export async function getAroundMeLeaderboard(userId: string): Promise<Leaderboar
   return { entries, currentUserRank: userRank, totalRanked };
 }
 
-export async function getTierLeaderboard(tier: RankTier, userId: string): Promise<LeaderboardResponse> {
+export async function getTierLeaderboard(tier: RankTier, user: User): Promise<LeaderboardResponse> {
   const cacheKey = `leaderboard:tier:${tier}:v2:top100`;
   let entries: LeaderboardEntry[];
 
@@ -187,20 +224,14 @@ export async function getTierLeaderboard(tier: RankTier, userId: string): Promis
     await redis.set(cacheKey, JSON.stringify(entries), 'EX', 120);
   }
 
-  const withFlag = entries.map(e => ({ ...e, isCurrentUser: e.userId === userId }));
+  const withFlag = entries.map(e => ({ ...e, isCurrentUser: e.userId === user.id }));
 
   const totalRanked = await prisma.user.count({
     where: { rankTier: tier, gamesPlayed: { gte: MIN_GAMES_TO_RANK } },
   });
 
-  // Rank within this tier only
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { eloRating: true, gamesPlayed: true, createdAt: true, rankTier: true },
-  });
-
   let currentUserRank: number | null = null;
-  if (user && user.rankTier === tier && user.gamesPlayed >= MIN_GAMES_TO_RANK) {
+  if (user.rankTier === tier && user.gamesPlayed >= MIN_GAMES_TO_RANK) {
     const higherInTier = await prisma.user.count({
       where: {
         rankTier: tier,

@@ -29,7 +29,7 @@ router.get('/tier/:tier', authMiddleware, async (req, res, next) => {
         error: { code: 'INVALID_TIER', message: 'Invalid rank tier' },
       });
     }
-    const data = await getTierLeaderboard(tier as RankTier, req.user.id);
+    const data = await getTierLeaderboard(tier as RankTier, req.user);
     res.json({ success: true, data });
   } catch (e) { next(e); }
 });

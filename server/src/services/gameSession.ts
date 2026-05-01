@@ -2,6 +2,7 @@ import { Namespace, Socket } from 'socket.io';
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
 import { calculateMatchElo, getRankTier, MatchEloResult } from './elo';
+import { invalidateUserGlobalRank } from './leaderboard';
 import { invalidateUserById } from './userCache';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -732,6 +733,8 @@ async function persistMatch(
       await Promise.all([
         invalidateUserById(state.player1Id),
         invalidateUserById(state.player2Id),
+        invalidateUserGlobalRank(state.player1Id),
+        invalidateUserGlobalRank(state.player2Id),
       ]);
 
       return;
