@@ -57,7 +57,7 @@ export type PendingMatchPayload = {
   opponent: GamePlayerProfile;
   ratingImpact: RatingImpact;
 };
-type MatchPersistUserStats = { gamesPlayed: number; wins: number };
+type MatchPersistUserStats = { gamesPlayed: number; wins: number; draws: number };
 
 function buildOpponentProgress(answered: number, totalQuestions: number) {
   if (answered <= 0) return null;
@@ -549,11 +549,11 @@ export async function endGame(
   const [p1, p2] = await Promise.all([
     prisma.user.findUnique({
       where: { id: state.player1Id },
-      select: { eloRating: true, gamesPlayed: true, wins: true },
+      select: { eloRating: true, gamesPlayed: true, wins: true, draws: true },
     }),
     prisma.user.findUnique({
       where: { id: state.player2Id },
-      select: { eloRating: true, gamesPlayed: true, wins: true },
+      select: { eloRating: true, gamesPlayed: true, wins: true, draws: true },
     }),
   ]);
 
@@ -700,8 +700,10 @@ async function persistMatch(
 
         const player1GamesPlayed = userStats.player1.gamesPlayed + 1;
         const player1Wins = userStats.player1.wins + (winnerId === state.player1Id ? 1 : 0);
+        const player1Draws = userStats.player1.draws + (winnerId === null ? 1 : 0);
         const player2GamesPlayed = userStats.player2.gamesPlayed + 1;
         const player2Wins = userStats.player2.wins + (winnerId === state.player2Id ? 1 : 0);
+        const player2Draws = userStats.player2.draws + (winnerId === null ? 1 : 0);
 
         await tx.user.update({
           where: { id: state.player1Id },
@@ -710,6 +712,7 @@ async function persistMatch(
             rankTier: getRankTier(eloResult.player1.newRating),
             gamesPlayed: { increment: 1 },
             wins: player1Wins,
+            draws: player1Draws,
             winRate: player1Wins / player1GamesPlayed,
           },
         });
@@ -720,6 +723,7 @@ async function persistMatch(
             rankTier: getRankTier(eloResult.player2.newRating),
             gamesPlayed: { increment: 1 },
             wins: player2Wins,
+            draws: player2Draws,
             winRate: player2Wins / player2GamesPlayed,
           },
         });

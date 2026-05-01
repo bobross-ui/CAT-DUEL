@@ -38,6 +38,7 @@ model User {
   rankTier              RankTier  @default(SILVER) @map("rank_tier")
   gamesPlayed           Int       @default(0) @map("games_played")
   wins                  Int       @default(0)
+  draws                 Int       @default(0)
   winRate               Float     @default(0) @map("win_rate")
   currentStreak         Int       @default(0) @map("current_streak")
   longestStreak         Int       @default(0) @map("longest_streak")

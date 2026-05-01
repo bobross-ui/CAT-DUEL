@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { getActiveGameForUser } from '../services/gameSession';
 import { prisma } from '../models/prisma';
+import { redis } from '../config/redis';
 
 const router = Router();
 
@@ -87,50 +88,68 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    const [user, matches] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { eloRating: true, gamesPlayed: true, rankTier: true },
-      }),
-      prisma.match.findMany({
-        where: { OR: [{ player1Id: userId }, { player2Id: userId }] },
-        select: {
-          player1Id: true,
-          winnerId: true,
-          player1EloChange: true,
-          player2EloChange: true,
-          finishedAt: true,
-        },
-        orderBy: { finishedAt: 'asc' },
-      }),
-    ]);
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { eloRating: true, gamesPlayed: true, rankTier: true, wins: true, winRate: true, draws: true },
+    });
 
     if (!user) {
       return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
     }
 
-    let wins = 0, losses = 0, draws = 0;
-    const deltas = matches.map((m) =>
-      m.player1Id === userId ? m.player1EloChange : m.player2EloChange,
-    );
-    const totalDelta = deltas.reduce((a, b) => a + b, 0);
-    let runningElo = user.eloRating - totalDelta;
+    const eloCacheKey = `stats:elo:${userId}:${user.gamesPlayed}`;
+    let eloStats: {
+      peakElo: number;
+      eloHistory: { finishedAt: Date | string; elo: number }[];
+    } | null = null;
 
-    const eloHistory: { finishedAt: Date; elo: number }[] = [];
-
-    for (let i = 0; i < matches.length; i++) {
-      const m = matches[i];
-      runningElo += deltas[i];
-      eloHistory.push({ finishedAt: m.finishedAt, elo: runningElo });
-
-      if (m.winnerId === userId) wins++;
-      else if (m.winnerId == null) draws++;
-      else losses++;
+    try {
+      const cached = await redis.get(eloCacheKey);
+      if (cached) eloStats = JSON.parse(cached);
+    } catch (err) {
+      console.error('[games/stats] elo cache read failed:', err);
     }
 
-    const peakElo = eloHistory.length
-      ? Math.max(...eloHistory.map((h) => h.elo), user.eloRating)
-      : user.eloRating;
+    if (!eloStats) {
+      const matches = await prisma.match.findMany({
+        where: { OR: [{ player1Id: userId }, { player2Id: userId }] },
+        select: {
+          player1Id: true,
+          player1EloChange: true,
+          player2EloChange: true,
+          finishedAt: true,
+        },
+        orderBy: { finishedAt: 'asc' },
+      });
+
+      const deltas = matches.map((m) =>
+        m.player1Id === userId ? m.player1EloChange : m.player2EloChange,
+      );
+      const totalDelta = deltas.reduce((a, b) => a + b, 0);
+      let runningElo = user.eloRating - totalDelta;
+
+      const eloHistory: { finishedAt: Date; elo: number }[] = [];
+
+      for (let i = 0; i < matches.length; i++) {
+        runningElo += deltas[i];
+        eloHistory.push({ finishedAt: matches[i].finishedAt, elo: runningElo });
+      }
+
+      eloStats = {
+        peakElo: eloHistory.length
+          ? Math.max(...eloHistory.map((h) => h.elo), user.eloRating)
+          : user.eloRating,
+        eloHistory,
+      };
+
+      try {
+        await redis.set(eloCacheKey, JSON.stringify(eloStats), 'EX', 300);
+      } catch (err) {
+        console.error('[games/stats] elo cache write failed:', err);
+      }
+    }
+
+    const losses = Math.max(0, user.gamesPlayed - user.wins - user.draws);
 
     res.json({
       success: true,
@@ -138,12 +157,12 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
         currentElo: user.eloRating,
         rankTier: user.rankTier,
         gamesPlayed: user.gamesPlayed,
-        wins,
+        wins: user.wins,
         losses,
-        draws,
-        winRate: user.gamesPlayed > 0 ? wins / user.gamesPlayed : 0,
-        peakElo,
-        eloHistory,
+        draws: user.draws,
+        winRate: user.winRate,
+        peakElo: eloStats.peakElo,
+        eloHistory: eloStats.eloHistory,
       },
     });
   } catch (err) {

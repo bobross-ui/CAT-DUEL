@@ -18,6 +18,7 @@ function reviveUser(raw: string): User {
 
   return {
     ...user,
+    draws: user.draws ?? 0,
     createdAt: new Date(user.createdAt),
     updatedAt: new Date(user.updatedAt),
     lastActiveDate: user.lastActiveDate ? new Date(user.lastActiveDate) : null,
