@@ -3,7 +3,6 @@ import express from 'express';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import { env } from './config/env';
-import { redis } from './config/redis';
 import { socketAuthMiddleware } from './middleware/socketAuth';
 import { registerMatchmakingHandlers } from './services/matchmaking';
 import { startMatchmakingLoop } from './services/matchmakingLoop';
@@ -33,26 +32,6 @@ export const gameNs = io.of('/game');
 
 matchmakingNs.use(socketAuthMiddleware);
 gameNs.use(socketAuthMiddleware);
-
-// Track online users in Redis for both namespaces
-function trackOnlineUser(userId: string) {
-  return {
-    onConnect: () => redis.sadd('online_users', userId),
-    onDisconnect: () => redis.srem('online_users', userId),
-  };
-}
-
-matchmakingNs.on('connection', async (socket) => {
-  const { onConnect, onDisconnect } = trackOnlineUser(socket.data.user.id);
-  await onConnect();
-  socket.on('disconnect', onDisconnect);
-});
-
-gameNs.on('connection', async (socket) => {
-  const { onConnect, onDisconnect } = trackOnlineUser(socket.data.user.id);
-  await onConnect();
-  socket.on('disconnect', onDisconnect);
-});
 
 registerMatchmakingHandlers(matchmakingNs);
 registerGameHandlers(gameNs);
