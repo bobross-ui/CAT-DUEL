@@ -3,6 +3,7 @@ import {
   Alert,
   Linking,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -119,6 +120,13 @@ export default function SettingsScreen({ navigation }: Props) {
   }
 
   function confirmSignOut() {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Sign out? You can sign back in any time.')) {
+        void signOut();
+      }
+      return;
+    }
+
     Alert.alert('Sign out?', 'You can sign back in any time.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign out', style: 'destructive', onPress: signOut },
