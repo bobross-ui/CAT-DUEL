@@ -3,9 +3,7 @@ import {
   View, FlatList, TouchableOpacity, StyleSheet,
   Modal, RefreshControl,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { leaderboardService } from '../services/leaderboard';
 import { MainTabParamList } from '../navigation';
 import TierBadge from '../components/TierBadge';
 import Avatar from '../components/Avatar';
@@ -18,27 +16,19 @@ import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { leaderboardUrl } from '../navigation/linking';
 import { track } from '../services/analytics';
+import {
+  type LeaderboardData,
+  type LeaderboardEntry,
+  type RankTier,
+  useLeaderboardAroundMe,
+  useLeaderboardGlobal,
+  useLeaderboardTier,
+} from '../queries/leaderboard';
+
 type Tab = 'global' | 'around' | 'tier';
-const TIERS = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
+const TIERS: RankTier[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Ranks'>;
-
-interface LeaderboardEntry {
-  rank: number;
-  userId: string;
-  displayName: string;
-  avatarUrl: string | null;
-  eloRating: number;
-  rankTier: string;
-  gamesPlayed: number;
-  isCurrentUser: boolean;
-}
-
-interface LeaderboardData {
-  entries: LeaderboardEntry[];
-  currentUserRank: number | null;
-  totalRanked: number;
-}
 
 function getMedal(rank: number) {
   if (rank === 1) return '🥇';
@@ -91,7 +81,7 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
 
 function normalizeTier(tier?: string) {
   const upper = tier?.toUpperCase();
-  return upper && TIERS.includes(upper) ? upper : null;
+  return upper && TIERS.includes(upper as RankTier) ? upper as RankTier : null;
 }
 
 export default function LeaderboardScreen({ route }: Props) {
@@ -101,52 +91,35 @@ export default function LeaderboardScreen({ route }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>(initialTier ? 'tier' : 'global');
   const [selectedTier, setSelectedTier] = useState(initialTier ?? 'SILVER');
   const [tierPickerVisible, setTierPickerVisible] = useState(false);
-  const [data, setData] = useState<LeaderboardData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
   const [shareVisible, setShareVisible] = useState(false);
-
-  const fetchData = useCallback(async (tab: Tab, tier: string) => {
-    try {
-      let res;
-      if (tab === 'global') res = await leaderboardService.getGlobal();
-      else if (tab === 'around') res = await leaderboardService.getAroundMe();
-      else res = await leaderboardService.getTier(tier);
-      setData(res.data.data);
-      setError('');
-    } catch {
-      setData(null);
-      setError('Failed to load ranks.');
-    }
-  }, []);
+  const globalQuery = useLeaderboardGlobal({ enabled: activeTab === 'global' });
+  const aroundMeQuery = useLeaderboardAroundMe({ enabled: activeTab === 'around' });
+  const tierQuery = useLeaderboardTier(selectedTier, { enabled: activeTab === 'tier' });
+  const activeQuery = activeTab === 'global'
+    ? globalQuery
+    : activeTab === 'around'
+      ? aroundMeQuery
+      : tierQuery;
+  const data = activeQuery.data as LeaderboardData | undefined;
 
   useEffect(() => {
     const nextTier = normalizeTier(route.params?.tier);
     if (!nextTier) return;
     setSelectedTier(nextTier);
     setActiveTab('tier');
-    setData(null);
   }, [route.params?.tier]);
-
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      fetchData(activeTab, selectedTier).finally(() => setLoading(false));
-    }, [activeTab, selectedTier, fetchData]),
-  );
 
   const onRefresh = useCallback(async () => {
     void playHaptic('pull_refresh');
     setRefreshing(true);
-    await fetchData(activeTab, selectedTier);
+    await activeQuery.refetch();
     setRefreshing(false);
-  }, [activeTab, selectedTier, fetchData, playHaptic]);
+  }, [activeQuery, playHaptic]);
 
   function switchTab(tab: Tab) {
     if (tab === activeTab) return;
     setActiveTab(tab);
-    setData(null);
   }
 
   function openShareRanks() {
@@ -155,10 +128,8 @@ export default function LeaderboardScreen({ route }: Props) {
   }
 
   const retry = useCallback(() => {
-    setError('');
-    setLoading(true);
-    fetchData(activeTab, selectedTier).finally(() => setLoading(false));
-  }, [activeTab, fetchData, selectedTier]);
+    void activeQuery.refetch();
+  }, [activeQuery]);
 
   const gamesNeeded = activeTab !== 'tier' && data?.currentUserRank == null
     ? Math.max(0, 5 - (data?.entries.find(e => e.isCurrentUser)?.gamesPlayed ?? 0))
@@ -228,7 +199,7 @@ export default function LeaderboardScreen({ route }: Props) {
         </View>
       )}
 
-      {loading ? (
+      {activeQuery.isLoading ? (
         <View style={styles.list}>
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <SkeletonCard key={i} style={styles.loadingRow}>
@@ -242,7 +213,7 @@ export default function LeaderboardScreen({ route }: Props) {
             </SkeletonCard>
           ))}
         </View>
-      ) : error ? (
+      ) : activeQuery.isError ? (
         <View style={styles.errorState}>
           <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.errorHeading}>Couldn't load.</AppText.Serif>
           <AppText.Sans preset="body" color={theme.ink3} style={styles.errorBody}>Check your connection and try again.</AppText.Sans>
@@ -296,7 +267,6 @@ export default function LeaderboardScreen({ route }: Props) {
                 onPress={() => {
                   setSelectedTier(tier);
                   setActiveTab('tier');
-                  setData(null);
                   setTierPickerVisible(false);
                 }}
                 accessibilityRole="button"

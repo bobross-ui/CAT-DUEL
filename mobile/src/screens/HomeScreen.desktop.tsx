@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { useCallback, useMemo, useRef, type ComponentProps } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import DesktopFrame from '../components/web/DesktopFrame';
@@ -9,9 +9,9 @@ import Button from '../components/Button';
 import Card from '../components/Card';
 import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import Text from '../components/Text';
-import api from '../services/api';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { type MatchHistoryEntry, useGamesHistory, useGamesStats } from '../queries/games';
+import { useLeaderboardGlobal } from '../queries/leaderboard';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useTheme } from '../theme/ThemeProvider';
@@ -21,15 +21,6 @@ import MobileHomeScreen from './HomeScreen.mobile';
 
 type Props = ComponentProps<typeof MobileHomeScreen>;
 const INITIAL_MATCHMAKING_RANGE = 150;
-
-interface LeaderboardEntry {
-  rank: number;
-  userId: string;
-  displayName: string;
-  avatarUrl: string | null;
-  eloRating: number;
-  isCurrentUser: boolean;
-}
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -75,9 +66,7 @@ export default function HomeScreenDesktop({ navigation }: Props) {
   const { user, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
   const statsQuery = useGamesStats();
   const historyQuery = useGamesHistory(1, 5);
-  const [leaders, setLeaders] = useState<LeaderboardEntry[]>([]);
-  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
-  const [error, setError] = useState('');
+  const leaderboardQuery = useLeaderboardGlobal();
   const pulse = useRef(new Animated.Value(1)).current;
 
   useDocumentTitle('CAT Duel');
@@ -102,30 +91,14 @@ export default function HomeScreenDesktop({ navigation }: Props) {
   }], [navigateToMatchmaking, runPlayPulse]);
   useKeyboardShortcuts(shortcuts);
 
-  const fetchLeaderboard = useCallback(async () => {
-    try {
-      const leaderboardRes = await api.get('/leaderboard/global').catch(() => null);
-      setLeaders((leaderboardRes?.data.data.entries ?? []).slice(0, 5));
-      setError('');
-    } catch {
-      setError('Failed to load home.');
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchLeaderboard().finally(() => setLeaderboardLoading(false));
-  }, [fetchLeaderboard]);
-
   const retry = useCallback(() => {
-    setLeaderboardLoading(true);
-    setError('');
     void Promise.all([
       refresh(),
       statsQuery.refetch(),
       historyQuery.refetch(),
-      fetchLeaderboard(),
-    ]).finally(() => setLeaderboardLoading(false));
-  }, [fetchLeaderboard, historyQuery, refresh, statsQuery]);
+      leaderboardQuery.refetch(),
+    ]);
+  }, [historyQuery, leaderboardQuery, refresh, statsQuery]);
 
   const displayName = user?.displayName ?? 'there';
   const tier = user ? getTier(user.eloRating) : null;
@@ -137,6 +110,7 @@ export default function HomeScreenDesktop({ navigation }: Props) {
       : theme.ink3;
   const stats = statsQuery.data ?? null;
   const recentMatches = historyQuery.data?.entries ?? [];
+  const leaders = leaderboardQuery.data?.entries.slice(0, 5) ?? [];
   const winRate = stats ? Math.round(stats.winRate * 100) : null;
   const todaysMatches = recentMatches.filter((match) => isToday(match.finishedAt)).length;
   const heroIsLight = mode === 'dark';
@@ -209,7 +183,7 @@ export default function HomeScreenDesktop({ navigation }: Props) {
     </View>
   );
 
-  if (leaderboardLoading || statsQuery.isLoading || historyQuery.isLoading || profileLoading) {
+  if (leaderboardQuery.isLoading || statsQuery.isLoading || historyQuery.isLoading || profileLoading) {
     return (
       <DesktopFrame activeRoute="Home" rightRail={rightRail}>
         <PageContainer style={styles.page}>
@@ -233,7 +207,7 @@ export default function HomeScreenDesktop({ navigation }: Props) {
     );
   }
 
-  if (error || statsQuery.isError || historyQuery.isError || profileError) {
+  if (leaderboardQuery.isError || statsQuery.isError || historyQuery.isError || profileError) {
     return (
       <DesktopFrame activeRoute="Home" rightRail={rightRail}>
         <PageContainer maxWidth={760} style={styles.errorPage}>

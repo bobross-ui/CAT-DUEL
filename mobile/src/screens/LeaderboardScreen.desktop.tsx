@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import DesktopFrame from '../components/web/DesktopFrame';
 import PageContainer from '../components/web/PageContainer';
@@ -10,37 +10,24 @@ import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import Text from '../components/Text';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { leaderboardService } from '../services/leaderboard';
+import {
+  type LeaderboardData,
+  type LeaderboardEntry,
+  type RankTier,
+  useLeaderboardAroundMe,
+  useLeaderboardGlobal,
+  useLeaderboardTier,
+} from '../queries/leaderboard';
 import { useTheme } from '../theme/ThemeProvider';
 import { tierColors } from '../theme/tokens';
 import MobileLeaderboardScreen from './LeaderboardScreen.mobile';
 
 type Props = ComponentProps<typeof MobileLeaderboardScreen>;
 type RankView = 'global' | 'around' | 'tier';
-type Tier = 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND';
 
-interface LeaderboardEntry {
-  rank: number;
-  userId: string;
-  displayName: string;
-  avatarUrl: string | null;
-  eloRating: number;
-  rankTier: Tier;
-  gamesPlayed: number;
-  winRate: number;
-  isCurrentUser: boolean;
-}
-
-interface LeaderboardData {
-  entries: LeaderboardEntry[];
-  currentUserRank: number | null;
-  totalRanked: number;
-  tierCounts?: Record<Tier, number>;
-}
-
-const TIERS: Tier[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
+const TIERS: RankTier[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
 const PAGE_SIZE = 10;
-const TIER_RANGES: Record<Tier, string> = {
+const TIER_RANGES: Record<RankTier, string> = {
   BRONZE: '0-999',
   SILVER: '1000-1299',
   GOLD: '1300-1599',
@@ -48,9 +35,9 @@ const TIER_RANGES: Record<Tier, string> = {
   DIAMOND: '1900+',
 };
 
-function normalizeTier(tier?: string): Tier | null {
+function normalizeTier(tier?: string): RankTier | null {
   const upper = tier?.toUpperCase();
-  return upper && TIERS.includes(upper as Tier) ? upper as Tier : null;
+  return upper && TIERS.includes(upper as RankTier) ? upper as RankTier : null;
 }
 
 function titleCaseTier(tier: string) {
@@ -181,15 +168,21 @@ export default function LeaderboardScreenDesktop({ route }: Props) {
   const { user } = useCurrentProfile();
   const initialTier = normalizeTier(route.params?.tier);
   const [activeView, setActiveView] = useState<RankView>(initialTier ? 'tier' : 'global');
-  const [selectedTier, setSelectedTier] = useState<Tier>(initialTier ?? 'SILVER');
-  const [globalData, setGlobalData] = useState<LeaderboardData | null>(null);
-  const [tableData, setTableData] = useState<LeaderboardData | null>(null);
+  const [selectedTier, setSelectedTier] = useState<RankTier>(initialTier ?? 'SILVER');
   const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const globalQuery = useLeaderboardGlobal();
+  const aroundMeQuery = useLeaderboardAroundMe({ enabled: activeView === 'around' });
+  const tierQuery = useLeaderboardTier(selectedTier, { enabled: activeView === 'tier' });
+  const tableQuery = activeView === 'global'
+    ? globalQuery
+    : activeView === 'around'
+      ? aroundMeQuery
+      : tierQuery;
 
   useDocumentTitle('Leaderboard · CAT Duel');
 
+  const globalData = globalQuery.data ?? null;
+  const tableData = tableQuery.data ?? null;
   const podiumEntries = useMemo(() => {
     const entries = globalData?.entries ?? [];
     return [2, 1, 3].map((rank) => entries.find((entry) => entry.rank === rank) ?? null);
@@ -197,38 +190,12 @@ export default function LeaderboardScreenDesktop({ route }: Props) {
 
   const callerTier = normalizeTier(user?.rankTier);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const globalRes = await leaderboardService.getGlobal();
-      const tableRes = activeView === 'global'
-        ? globalRes
-        : activeView === 'around'
-          ? await leaderboardService.getAroundMe()
-          : await leaderboardService.getTier(selectedTier);
-
-      setGlobalData(globalRes.data.data);
-      setTableData(tableRes.data.data);
-      setError('');
-    } catch {
-      setGlobalData(null);
-      setTableData(null);
-      setError('Failed to load leaderboard.');
-    } finally {
-      setLoading(false);
-    }
-  }, [activeView, selectedTier]);
-
   useEffect(() => {
     const nextTier = normalizeTier(route.params?.tier);
     if (!nextTier) return;
     setSelectedTier(nextTier);
     setActiveView('tier');
   }, [route.params?.tier]);
-
-  useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
 
   useEffect(() => {
     setPage(0);
@@ -293,7 +260,7 @@ export default function LeaderboardScreenDesktop({ route }: Props) {
           </View>
         </View>
 
-        {loading ? (
+        {globalQuery.isLoading || tableQuery.isLoading ? (
           <View style={styles.bodyGrid}>
             <SkeletonCard style={styles.leftPanelLoading}>
               <SkeletonBlock height={14} width="32%" />
@@ -306,11 +273,18 @@ export default function LeaderboardScreenDesktop({ route }: Props) {
               {[0, 1, 2, 3, 4, 5, 6, 7].map((item) => <SkeletonBlock key={item} height={44} width="100%" />)}
             </SkeletonCard>
           </View>
-        ) : error ? (
+        ) : globalQuery.isError || tableQuery.isError ? (
           <Card style={styles.errorCard}>
             <Text.Serif preset="h1Serif" color={theme.ink}>Couldn't load leaderboard.</Text.Serif>
             <Text.Sans preset="body" color={theme.ink3}>Check your connection and try again.</Text.Sans>
-            <Button label="Retry" onPress={fetchData} style={styles.retryButton} />
+            <Button
+              label="Retry"
+              onPress={() => {
+                void globalQuery.refetch();
+                void tableQuery.refetch();
+              }}
+              style={styles.retryButton}
+            />
           </Card>
         ) : (
           <View style={styles.bodyGrid}>
