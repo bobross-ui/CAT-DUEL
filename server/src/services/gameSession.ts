@@ -13,6 +13,24 @@ interface PlayerAnswerRecord {
   timeMs: number;
 }
 
+interface ResultsAnswerDetail {
+  id: string;
+  userId: string;
+  questionId: string;
+  selectedAnswer: number;
+  isCorrect: boolean;
+  timeTakenMs: number;
+  question: {
+    id: string;
+    category: string;
+    subTopic: string | null;
+    text: string;
+    options: unknown;
+    correctAnswer: number;
+    explanation: string;
+  };
+}
+
 export interface RatingImpact {
   win: number;
   loss: number;
@@ -67,6 +85,47 @@ function buildOpponentProgress(answered: number, totalQuestions: number) {
     currentQuestion: Math.min(answered + 1, totalQuestions),
     questionsAnswered: answered,
   };
+}
+
+async function buildResultsAnswers(state: GameState): Promise<ResultsAnswerDetail[]> {
+  const questions = await prisma.question.findMany({
+    where: { id: { in: state.questionIds } },
+    select: {
+      id: true,
+      category: true,
+      subTopic: true,
+      text: true,
+      options: true,
+      correctAnswer: true,
+      explanation: true,
+    },
+  });
+  const questionById = new Map(questions.map((question) => [question.id, question]));
+  const answers: ResultsAnswerDetail[] = [];
+
+  function addAnswer(userId: string, questionId: string, record: PlayerAnswerRecord) {
+    const question = questionById.get(questionId);
+    if (!question) return;
+
+    answers.push({
+      id: `${state.gameId}:${userId}:${questionId}`,
+      userId,
+      questionId,
+      selectedAnswer: record.selected,
+      isCorrect: record.correct,
+      timeTakenMs: record.timeMs,
+      question,
+    });
+  }
+
+  for (const questionId of state.questionIds) {
+    const player1Answer = state.player1Answers[questionId];
+    const player2Answer = state.player2Answers[questionId];
+    if (player1Answer) addAnswer(state.player1Id, questionId, player1Answer);
+    if (player2Answer) addAnswer(state.player2Id, questionId, player2Answer);
+  }
+
+  return answers;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -573,6 +632,7 @@ export async function endGame(
     player1Score: p1MatchScore,
     player2Score: p2MatchScore,
   });
+  const answers = await buildResultsAnswers(state);
 
   const results = {
     gameId,
@@ -603,6 +663,7 @@ export async function endGame(
     },
     totalQuestions: state.questionIds.length,
     durationSeconds: state.durationSeconds,
+    answers,
   };
 
   // Persist results per player so game:join can replay them on reconnect.

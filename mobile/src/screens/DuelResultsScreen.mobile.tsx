@@ -11,10 +11,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
-import api from '../services/api';
 import Button from '../components/Button';
 import ShareLinkModal from '../components/ShareLinkModal';
-import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
@@ -99,9 +97,6 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
   const yourBarWidth = useState(() => new Animated.Value(0))[0];
   const theirBarWidth = useState(() => new Animated.Value(0))[0];
 
-  const [rawAnswers, setRawAnswers] = useState<AnswerDetail[]>([]);
-  const [loadingBreakdown, setLoadingBreakdown] = useState(true);
-  const [breakdownError, setBreakdownError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [shareVisible, setShareVisible] = useState(false);
 
@@ -137,31 +132,15 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
     ]).start();
   }, [gapWidth, reduceMotionEnabled, splitBarWidth, theirBarWidth, theirFrac, yourBarWidth, yourFrac]);
 
-  function loadBreakdown() {
-    setLoadingBreakdown(true);
-    setBreakdownError('');
-    api
-      .get(`/games/${results.gameId}`)
-      .then((res) => {
-        setRawAnswers(res.data.data.answers ?? []);
-      })
-      .catch(() => setBreakdownError('Failed to load breakdown.'))
-      .finally(() => setLoadingBreakdown(false));
-  }
-
   function openShareMatch() {
     track('share_initiated', { surface: 'results' });
     setShareVisible(true);
   }
 
-  useEffect(() => {
-    loadBreakdown();
-  }, [results.gameId]);
-
   // Group answers by questionId — one entry per unique question, preserving order
   const grouped = useMemo<GroupedQuestion[]>(() => {
     const map = new Map<string, GroupedQuestion>();
-    for (const a of rawAnswers) {
+    for (const a of results.answers ?? []) {
       if (!map.has(a.questionId)) {
         map.set(a.questionId, {
           questionId: a.questionId,
@@ -178,7 +157,7 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
       }
     }
     return Array.from(map.values());
-  }, [rawAnswers, userId]);
+  }, [results.answers, userId]);
 
   const oppName = opponent.displayName ?? 'Opponent';
 
@@ -276,27 +255,7 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
             </View>
           </View>
 
-          {loadingBreakdown ? (
-            <View style={styles.skeletonList}>
-              {[0, 1, 2, 3].map((i) => (
-                <SkeletonCard key={i} style={styles.loadingReviewCard}>
-                  <SkeletonBlock height={16} width={30} />
-                  <View style={{ flex: 1, gap: 6 }}>
-                    <SkeletonBlock height={16} width={i % 2 === 0 ? '62%' : '46%'} />
-                    <SkeletonBlock height={12} width="28%" />
-                  </View>
-                  <SkeletonBlock height={22} width={22} radius={11} />
-                  <SkeletonBlock height={22} width={22} radius={11} />
-                </SkeletonCard>
-              ))}
-            </View>
-          ) : breakdownError ? (
-            <View style={[styles.breakdownError, { backgroundColor: theme.card, borderColor: theme.line }]}>
-              <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.breakdownErrorHeading}>Couldn't load.</AppText.Serif>
-              <AppText.Sans preset="body" color={theme.ink3} style={styles.breakdownErrorBody}>Check your connection and try again.</AppText.Sans>
-              <Button label="Retry" onPress={loadBreakdown} style={styles.breakdownRetryBtn} />
-            </View>
-          ) : (
+          {(
             grouped.map((q, idx) => {
               const isExpanded = expandedId === q.questionId;
               return (
@@ -484,25 +443,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
-  skeletonList: {
-    gap: 8,
-  },
-  loadingReviewCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 12,
-  },
-  breakdownError: {
-    alignItems: 'center',
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    padding: 20,
-  },
-  breakdownErrorHeading: { marginBottom: 8 },
-  breakdownErrorBody: { marginBottom: 16, textAlign: 'center' },
-  breakdownRetryBtn: { width: 120 },
-
   // Review card (wraps header + optional expanded section)
   reviewCard: {
     borderWidth: 1,

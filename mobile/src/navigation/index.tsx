@@ -71,6 +71,24 @@ type PlayerResult = {
   tierChanged: boolean;
 };
 
+type AnswerDetail = {
+  id: string;
+  userId: string;
+  questionId: string;
+  selectedAnswer: number;
+  isCorrect: boolean;
+  timeTakenMs: number;
+  question: {
+    id: string;
+    category: string;
+    subTopic: string | null;
+    text: string;
+    options: string[];
+    correctAnswer: number;
+    explanation: string;
+  };
+};
+
 export type GameFinishedPayload = {
   gameId: string;
   winnerId: string | null;
@@ -81,6 +99,7 @@ export type GameFinishedPayload = {
   player2: PlayerResult;
   totalQuestions: number;
   durationSeconds: number;
+  answers: AnswerDetail[];
 };
 
 export type ActiveGamePayload = {

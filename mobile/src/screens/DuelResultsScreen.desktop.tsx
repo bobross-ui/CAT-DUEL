@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useCallback, useMemo, useState, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import ShareLinkModal from '../components/ShareLinkModal';
-import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import Text from '../components/Text';
 import DesktopFrame from '../components/web/DesktopFrame';
 import DesktopHero from '../components/web/DesktopHero';
@@ -13,7 +12,6 @@ import EyebrowLabel from '../components/web/EyebrowLabel';
 import PageContainer from '../components/web/PageContainer';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import api from '../services/api';
 import { track } from '../services/analytics';
 import { matchUrl } from '../navigation/linking';
 import { useTheme } from '../theme/ThemeProvider';
@@ -47,23 +45,7 @@ interface GroupedQuestion {
   theirAnswer: AnswerDetail | null;
 }
 
-interface MatchData {
-  finishedAt?: string;
-  answers?: AnswerDetail[];
-}
-
 const SECTIONS = ['QUANT', 'DILR', 'VARC'];
-
-function formatAgo(value?: string) {
-  if (!value) return 'just now';
-  const diff = Math.max(0, Date.now() - new Date(value).getTime());
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
 
 function formatTime(ms?: number) {
   if (ms == null) return '--';
@@ -97,9 +79,6 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
   const { results, userId, opponent } = route.params;
   const { theme } = useTheme();
   const { user } = useCurrentProfile();
-  const [match, setMatch] = useState<MatchData | null>(null);
-  const [loadingBreakdown, setLoadingBreakdown] = useState(true);
-  const [breakdownError, setBreakdownError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [shareVisible, setShareVisible] = useState(false);
 
@@ -115,23 +94,9 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
   const deltaText = yours.eloDelta >= 0 ? `+${yours.eloDelta}` : `${yours.eloDelta}`;
   const titleOutcome = isDraw ? 'Draw' : youWon ? 'Won' : 'Lost';
 
-  const loadBreakdown = useCallback(() => {
-    setLoadingBreakdown(true);
-    setBreakdownError('');
-    api
-      .get(`/games/${results.gameId}`)
-      .then((res) => setMatch(res.data.data ?? null))
-      .catch(() => setBreakdownError('Failed to load breakdown.'))
-      .finally(() => setLoadingBreakdown(false));
-  }, [results.gameId]);
-
-  useEffect(() => {
-    loadBreakdown();
-  }, [loadBreakdown]);
-
   const grouped = useMemo<GroupedQuestion[]>(() => {
     const map = new Map<string, GroupedQuestion>();
-    for (const answer of match?.answers ?? []) {
+    for (const answer of results.answers ?? []) {
       if (!map.has(answer.questionId)) {
         map.set(answer.questionId, {
           questionId: answer.questionId,
@@ -147,7 +112,7 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
     }
 
     return Array.from(map.values());
-  }, [match?.answers, userId]);
+  }, [results.answers, userId]);
 
   const sectionStats = useMemo(() => SECTIONS.map((section) => {
     const rows = grouped.filter((row) => row.question.category === section);
@@ -188,7 +153,7 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
           <View style={styles.heroContent}>
             <View style={styles.heroMain}>
               <Text.Mono preset="eyebrow" color={theme.ink3} style={styles.uppercase}>
-                MATCH #{results.gameId.slice(0, 8)} · {formatAgo(match?.finishedAt)} · RANKED
+                MATCH #{results.gameId.slice(0, 8)} · JUST NOW · RANKED
               </Text.Mono>
               <Text.Serif preset="display" color={verdictColor} style={styles.verdict}>
                 {verdictText}
@@ -261,26 +226,7 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
               <View style={styles.col_chevron} />
             </View>
 
-            {loadingBreakdown ? (
-              <View style={styles.loadingRows}>
-                {[0, 1, 2, 3, 4].map((item) => (
-                  <SkeletonCard key={item} style={styles.loadingRow}>
-                    <SkeletonBlock height={14} width={30} />
-                    <SkeletonBlock height={18} width="34%" />
-                    <SkeletonBlock height={14} width={54} />
-                    <SkeletonBlock height={24} width={24} radius={12} />
-                    <SkeletonBlock height={24} width={24} radius={12} />
-                    <SkeletonBlock height={14} width={44} />
-                  </SkeletonCard>
-                ))}
-              </View>
-            ) : breakdownError ? (
-              <View style={styles.errorState}>
-                <Text.Serif preset="h1Serif" color={theme.ink}>Could not load the table.</Text.Serif>
-                <Text.Sans preset="body" color={theme.ink3}>Check your connection and try again.</Text.Sans>
-                <Button label="Retry" onPress={loadBreakdown} style={styles.retryButton} />
-              </View>
-            ) : (
+            {(
               grouped.map((row, index) => {
                 const isExpanded = expandedId === row.questionId;
                 return (
@@ -664,24 +610,6 @@ const styles = StyleSheet.create({
   explanationBlock: {
     gap: 6,
     maxWidth: 760,
-  },
-  loadingRows: {
-    padding: 14,
-    gap: 8,
-  },
-  loadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    padding: 12,
-  },
-  errorState: {
-    alignItems: 'center',
-    padding: 32,
-    gap: 12,
-  },
-  retryButton: {
-    width: 140,
   },
   sidePanel: {
     width: 320,
