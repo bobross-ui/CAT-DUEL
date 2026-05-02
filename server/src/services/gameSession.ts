@@ -149,13 +149,76 @@ const countdownTimers = new Map<string, NodeJS.Timeout>();
 
 // ─── Redis helpers ─────────────────────────────────────────────────────────────
 
+function gameStateKey(gameId: string) {
+  return `game:${gameId}`;
+}
+
+function serializeGameStateFields(
+  state: GameState,
+  fields = Object.keys(state) as (keyof GameState)[],
+) {
+  const serialized: Record<string, string> = {};
+  for (const field of fields) {
+    serialized[field] = JSON.stringify(state[field]);
+  }
+  return serialized;
+}
+
+function parseGameStateHash(hash: Record<string, string>): GameState {
+  const parsed: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(hash)) {
+    parsed[field] = JSON.parse(value);
+  }
+  return parsed as unknown as GameState;
+}
+
 async function getGameState(gameId: string): Promise<GameState | null> {
-  const raw = await redis.get(`game:${gameId}`);
-  return raw ? (JSON.parse(raw) as GameState) : null;
+  const key = gameStateKey(gameId);
+  const type = await redis.type(key);
+  if (type === 'none') return null;
+  if (type === 'string') {
+    const raw = await redis.get(key);
+    return raw ? (JSON.parse(raw) as GameState) : null;
+  }
+  if (type !== 'hash') return null;
+
+  const hash = await redis.hgetall(key);
+  if (Object.keys(hash).length === 0) return null;
+  return parseGameStateHash(hash);
 }
 
 async function saveGameState(state: GameState, ttlSeconds = 1200): Promise<void> {
-  await redis.set(`game:${state.gameId}`, JSON.stringify(state), 'EX', ttlSeconds);
+  const key = gameStateKey(state.gameId);
+  if (await redis.type(key) === 'string') {
+    await redis.del(key);
+  }
+
+  await redis
+    .multi()
+    .hset(key, serializeGameStateFields(state))
+    .expire(key, ttlSeconds)
+    .exec();
+}
+
+async function saveGameStateFields(
+  state: GameState,
+  fields: (keyof GameState)[],
+  ttlSeconds = 1200,
+): Promise<void> {
+  if (fields.length === 0) return;
+
+  const key = gameStateKey(state.gameId);
+  const type = await redis.type(key);
+  if (type === 'string' || type === 'none') {
+    await saveGameState(state, ttlSeconds);
+    return;
+  }
+
+  await redis
+    .multi()
+    .hset(key, serializeGameStateFields(state, fields))
+    .expire(key, ttlSeconds)
+    .exec();
 }
 
 function socketKey(userId: string) {
@@ -544,11 +607,14 @@ async function handleAnswer(
   // Persist state and fetch next question in parallel
   const newProgress = state[progressKey];
   socket.to(gameId).emit('opponent:progress', buildOpponentProgress(newProgress, state.questionIds.length));
+  const changedFields: (keyof GameState)[] = [answerKey, progressKey];
+  if (isCorrect) changedFields.push(scoreKey);
+
   const [nextQuestion] = await Promise.all([
     newProgress < state.questionIds.length
       ? getQuestionForClient(state.questionIds[newProgress])
       : Promise.resolve(null),
-    saveGameState(state),
+    saveGameStateFields(state, changedFields),
   ]);
 
   if (nextQuestion) {
