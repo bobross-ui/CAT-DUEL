@@ -14,6 +14,9 @@ import { z } from 'zod';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { queryClient } from '../queries/client';
+import { queryKeys } from '../queries/keys';
+import api from '../services/api';
 import Text from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
@@ -57,6 +60,8 @@ export default function LoginScreenDesktop() {
         const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
         const nextDisplayName = parsedDisplayName?.success ? parsedDisplayName.data : '';
         await updateProfile(newUser, { displayName: nextDisplayName });
+        const res = await api.patch('/users/me', { displayName: nextDisplayName });
+        queryClient.setQueryData(queryKeys.me(), res.data.data);
       } else {
         await signInWithEmail(email, password);
       }

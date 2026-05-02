@@ -11,6 +11,9 @@ import { z } from 'zod';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeProvider';
+import { queryClient } from '../queries/client';
+import { queryKeys } from '../queries/keys';
+import api from '../services/api';
 import Button from '../components/Button';
 import AppText from '../components/Text';
 
@@ -42,6 +45,8 @@ export default function LoginScreen() {
       if (isRegistering) {
         const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(newUser, { displayName: parsedDisplayName!.data });
+        const res = await api.patch('/users/me', { displayName: parsedDisplayName!.data });
+        queryClient.setQueryData(queryKeys.me(), res.data.data);
       } else {
         await signInWithEmail(email, password);
       }
