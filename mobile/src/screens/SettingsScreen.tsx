@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -30,11 +30,6 @@ import { useDeleteMe, useUpdateMe } from '../queries/users';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
-interface SettingsProfile {
-  email?: string;
-  displayName: string | null;
-}
-
 const displayNameSchema = z.string().trim().min(2, 'Name must be at least 2 characters.').max(30, 'Name must be 30 characters or less.');
 const appVersion = process.env.EXPO_PUBLIC_APP_VERSION ?? '1.0.0';
 const buildNumber = process.env.EXPO_PUBLIC_BUILD_NUMBER ?? 'dev';
@@ -51,7 +46,6 @@ export default function SettingsScreen({ navigation }: Props) {
   const { user: currentProfile, loading } = useCurrentProfile();
   const updateMe = useUpdateMe();
   const deleteMe = useDeleteMe();
-  const [profile, setProfile] = useState<SettingsProfile | null>(currentProfile);
   const [editVisible, setEditVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editError, setEditError] = useState('');
@@ -66,12 +60,8 @@ export default function SettingsScreen({ navigation }: Props) {
     [user],
   );
 
-  useEffect(() => {
-    setProfile(currentProfile);
-  }, [currentProfile]);
-
   function openEditName() {
-    setEditName(profile?.displayName ?? '');
+    setEditName(currentProfile?.displayName ?? '');
     setEditError('');
     setEditVisible(true);
   }
@@ -97,7 +87,7 @@ export default function SettingsScreen({ navigation }: Props) {
   }
 
   function requestPasswordReset() {
-    const email = profile?.email ?? user?.email;
+    const email = currentProfile?.email ?? user?.email;
     if (!email) return;
 
     Alert.alert(
@@ -183,10 +173,10 @@ export default function SettingsScreen({ navigation }: Props) {
           </View>
 
           <Section title="Account">
-            <SettingsRow label="Email" value={loading ? 'loading…' : profile?.email ?? user?.email ?? '—'} />
+            <SettingsRow label="Email" value={loading ? 'loading…' : currentProfile?.email ?? user?.email ?? '—'} />
             <SettingsRow
               label="Display name"
-              value={profile?.displayName ?? 'Anonymous'}
+              value={currentProfile?.displayName ?? 'Anonymous'}
               onPress={openEditName}
             />
             {isEmailAuth ? (

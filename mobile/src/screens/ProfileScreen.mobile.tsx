@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View, TouchableOpacity, StyleSheet,
   ScrollView, RefreshControl, Modal, TextInput,
@@ -26,15 +26,6 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useGamesStats } from '../queries/games';
 import { useUpdateMe } from '../queries/users';
 
-interface UserProfile {
-  id: string;
-  email?: string;
-  displayName: string | null;
-  eloRating: number;
-  gamesPlayed: number;
-  rankTier: string;
-}
-
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Me'>,
   NativeStackScreenProps<RootStackParamList>
@@ -49,7 +40,6 @@ export default function ProfileScreen({ navigation }: Props) {
   const { user: currentProfile, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
   const statsQuery = useGamesStats();
   const updateMe = useUpdateMe();
-  const [profile, setProfile] = useState<UserProfile | null>(currentProfile);
   const [refreshing, setRefreshing] = useState(false);
   const [debugTaps, setDebugTaps] = useState(0);
 
@@ -58,10 +48,6 @@ export default function ProfileScreen({ navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [shareVisible, setShareVisible] = useState(false);
-
-  useEffect(() => {
-    setProfile(currentProfile);
-  }, [currentProfile]);
 
   const onRefresh = useCallback(async () => {
     void playHaptic('pull_refresh');
@@ -142,6 +128,7 @@ export default function ProfileScreen({ navigation }: Props) {
     );
   }
 
+  const profile = currentProfile;
   const tier = profile ? getTier(profile.eloRating) : null;
   const isDiamond = tier?.max === Infinity;
   const progress = tier && !isDiamond

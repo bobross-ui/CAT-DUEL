@@ -1,7 +1,16 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CurrentProfile } from '../hooks/useCurrentProfile';
 import api from '../services/api';
 import { queryKeys } from './keys';
+
+export interface PublicUserProfile {
+  id: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  eloRating: number;
+  gamesPlayed: number;
+  createdAt: string;
+}
 
 interface UpdateMeInput {
   displayName?: string;
@@ -24,6 +33,19 @@ async function completeOnboarding(input: CompleteOnboardingInput) {
 
 async function deleteMe() {
   await api.delete('/users/me');
+}
+
+async function getUserProfile(userId: string) {
+  const res = await api.get(`/users/${userId}`);
+  return res.data.data as PublicUserProfile;
+}
+
+export function useUserProfile(userId: string) {
+  return useQuery({
+    queryKey: queryKeys.user(userId),
+    queryFn: () => getUserProfile(userId),
+    enabled: Boolean(userId),
+  });
 }
 
 export function useUpdateMe() {

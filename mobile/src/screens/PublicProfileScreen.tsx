@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
-import api from '../services/api';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -11,40 +9,17 @@ import TierBadge from '../components/TierBadge';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useTheme } from '../theme/ThemeProvider';
 import { getTier, getTierToNext } from '../constants';
+import { useUserProfile } from '../queries/users';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PublicProfile'>;
-
-interface PublicUserProfile {
-  id: string;
-  displayName: string | null;
-  avatarUrl: string | null;
-  eloRating: number;
-  gamesPlayed: number;
-  createdAt: string;
-}
 
 export default function PublicProfileScreen({ route, navigation }: Props) {
   const { userId } = route.params;
   const { theme } = useTheme();
-  const [profile, setProfile] = useState<PublicUserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const profileQuery = useUserProfile(userId);
+  const profile = profileQuery.data ?? null;
 
-  function loadProfile() {
-    setLoading(true);
-    setError('');
-    api
-      .get(`/users/${userId}`)
-      .then((res) => setProfile(res.data.data))
-      .catch(() => setError('Failed to load profile.'))
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    loadProfile();
-  }, [userId]);
-
-  if (loading) {
+  if (profileQuery.isLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
         <ActivityIndicator color={theme.ink3} />
@@ -52,7 +27,7 @@ export default function PublicProfileScreen({ route, navigation }: Props) {
     );
   }
 
-  if (error || !profile) {
+  if (profileQuery.isError || !profile) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
         <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.errorHeading}>
@@ -61,7 +36,7 @@ export default function PublicProfileScreen({ route, navigation }: Props) {
         <AppText.Sans preset="body" color={theme.ink3} style={styles.errorBody}>
           Check the link and try again.
         </AppText.Sans>
-        <Button label="Retry" onPress={loadProfile} style={styles.retryBtn} />
+        <Button label="Retry" onPress={() => { void profileQuery.refetch(); }} style={styles.retryBtn} />
       </View>
     );
   }
