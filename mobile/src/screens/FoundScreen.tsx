@@ -3,7 +3,6 @@ import { View, StyleSheet, Animated, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, InitialGameState } from '../navigation';
-import api from '../services/api';
 import { disconnectGameSocket, getGameSocket, releaseGameSocket } from '../services/socket';
 import AppText from '../components/Text';
 import Avatar from '../components/Avatar';
@@ -15,6 +14,7 @@ import { radii } from '../theme/tokens';
 import { getTier } from '../constants';
 import { track } from '../services/analytics';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useGamesStats } from '../queries/games';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Found'>;
 type PreStartStatus = 'waiting_for_opponent' | 'countdown';
@@ -132,7 +132,7 @@ export default function FoundScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
 
   const { user: profile } = useCurrentProfile();
-  const [winRate, setWinRate] = useState<number | null>(null);
+  const { data: stats } = useGamesStats();
   const [preStartStatus, setPreStartStatus] = useState<PreStartStatus>('waiting_for_opponent');
   const [countdown, setCountdown] = useState<number | null>(null);
   const [initialState, setInitialState] = useState<InitialGameState | null>(null);
@@ -245,13 +245,6 @@ export default function FoundScreen({ navigation, route }: Props) {
     };
   }, [gameId, navigation]);
 
-  // Fetch win rate
-  useEffect(() => {
-    api.get('/games/stats').catch(() => null).then((statsRes) => {
-      if (statsRes)   setWinRate(statsRes.data.data?.winRate ?? null);
-    });
-  }, []);
-
   // Tick down once countdown has started
   useEffect(() => {
     if (countdown === null) return;
@@ -314,7 +307,7 @@ export default function FoundScreen({ navigation, route }: Props) {
             name={profile?.displayName ?? null}
             elo={profile?.eloRating ?? 0}
             tierName={myTierName}
-            winRate={winRate}
+            winRate={stats?.winRate ?? null}
           />
           <AppText.Serif preset="italic" color={theme.ink3} style={styles.vsLabel}>
             vs

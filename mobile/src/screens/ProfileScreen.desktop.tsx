@@ -1,4 +1,4 @@
-import { createElement, useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { createElement, useCallback, useMemo, useState, type ComponentProps } from 'react';
 import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,6 +15,7 @@ import TierBadge from '../components/TierBadge';
 import api from '../services/api';
 import { track } from '../services/analytics';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { type MatchStats, useGamesHistory, useGamesStats } from '../queries/games';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getTier, getTierToNext } from '../constants';
 import { profileUrl } from '../navigation/linking';
@@ -22,31 +23,6 @@ import { useTheme } from '../theme/ThemeProvider';
 import MobileProfileScreen from './ProfileScreen.mobile';
 
 type Props = ComponentProps<typeof MobileProfileScreen>;
-
-interface MatchStats {
-  currentElo: number;
-  gamesPlayed: number;
-  wins: number;
-  losses: number;
-  draws: number;
-  winRate: number;
-  peakElo: number;
-  eloHistory: { finishedAt: string; elo: number }[];
-}
-
-interface MatchHistoryEntry {
-  matchId: string;
-  outcome: 'WIN' | 'LOSS' | 'DRAW';
-  yourScore: number;
-  opponentScore: number;
-  yourEloChange: number;
-  finishedAt: string;
-  opponent: {
-    displayName: string | null;
-    avatarUrl: string | null;
-    rankTier?: string;
-  };
-}
 
 const displayNameSchema = z.string().trim().min(2, 'Name must be at least 2 characters.').max(30, 'Name must be 30 characters or less.');
 const CHART_WIDTH = 640;
@@ -156,10 +132,8 @@ function RatingChart({ history }: { history: MatchStats['eloHistory'] }) {
 export default function ProfileScreenDesktop({ navigation }: Props) {
   const { theme, mode } = useTheme();
   const { user, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
-  const [stats, setStats] = useState<MatchStats | null>(null);
-  const [matches, setMatches] = useState<MatchHistoryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const statsQuery = useGamesStats();
+  const historyQuery = useGamesHistory(1, 3);
   const [editVisible, setEditVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editError, setEditError] = useState('');
@@ -168,29 +142,9 @@ export default function ProfileScreenDesktop({ navigation }: Props) {
 
   useDocumentTitle(user?.displayName ? `${user.displayName} · CAT Duel` : 'Your profile · CAT Duel');
 
-  const fetchProfileData = useCallback(async () => {
-    try {
-      const [statsRes, historyRes] = await Promise.all([
-        api.get('/games/stats').catch(() => null),
-        api.get('/games/history?page=1&limit=3').catch(() => null),
-      ]);
-      setStats(statsRes?.data.data ?? null);
-      setMatches(historyRes?.data.data.entries ?? []);
-      setError('');
-    } catch {
-      setError('Failed to load profile.');
-    }
-  }, []);
-
-  useEffect(() => {
-    void Promise.all([refresh(), fetchProfileData()]).finally(() => setLoading(false));
-  }, [fetchProfileData, refresh]);
-
   const retry = useCallback(() => {
-    setLoading(true);
-    setError('');
-    void Promise.all([refresh(), fetchProfileData()]).finally(() => setLoading(false));
-  }, [fetchProfileData, refresh]);
+    void Promise.all([refresh(), statsQuery.refetch(), historyQuery.refetch()]);
+  }, [historyQuery, refresh, statsQuery]);
 
   function openEdit() {
     setEditName(user?.displayName ?? '');
@@ -224,6 +178,8 @@ export default function ProfileScreenDesktop({ navigation }: Props) {
     setShareVisible(true);
   }
 
+  const stats = statsQuery.data ?? null;
+  const matches = historyQuery.data?.entries ?? [];
   const rating = stats?.currentElo ?? user?.eloRating ?? 0;
   const tier = getTier(rating);
   const progress = tier.max === Infinity ? 1 : (rating - tier.min) / (tier.max - tier.min + 1);
@@ -236,7 +192,7 @@ export default function ProfileScreenDesktop({ navigation }: Props) {
   const coverMuted = mode === 'dark' ? 'rgba(0,0,0,0.56)' : 'rgba(255,255,255,0.58)';
   const coverMark = mode === 'dark' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
 
-  if (loading || profileLoading) {
+  if (statsQuery.isLoading || historyQuery.isLoading || profileLoading) {
     return (
       <DesktopFrame activeRoute="Me">
         <View style={styles.cover} />
@@ -262,7 +218,7 @@ export default function ProfileScreenDesktop({ navigation }: Props) {
     );
   }
 
-  if (error || profileError || !user) {
+  if (statsQuery.isError || historyQuery.isError || profileError || !user) {
     return (
       <DesktopFrame activeRoute="Me">
         <View style={styles.errorPage}>

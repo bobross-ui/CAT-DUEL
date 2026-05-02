@@ -24,6 +24,7 @@ import { getTier, getTierToNext } from '../constants';
 import { profileUrl } from '../navigation/linking';
 import { track } from '../services/analytics';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useGamesStats } from '../queries/games';
 
 interface UserProfile {
   id: string;
@@ -32,12 +33,6 @@ interface UserProfile {
   eloRating: number;
   gamesPlayed: number;
   rankTier: string;
-}
-
-interface MatchStats {
-  totalGames: number;
-  winRate: number;   // 0–1 fraction
-  peakElo: number;
 }
 
 type Props = CompositeScreenProps<
@@ -52,11 +47,9 @@ export default function ProfileScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const { playHaptic } = useAppPreferences();
   const { user: currentProfile, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
+  const statsQuery = useGamesStats();
   const [profile, setProfile] = useState<UserProfile | null>(currentProfile);
-  const [stats, setStats] = useState<MatchStats | null>(null);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
   const [debugTaps, setDebugTaps] = useState(0);
 
   const [editVisible, setEditVisible] = useState(false);
@@ -65,30 +58,16 @@ export default function ProfileScreen({ navigation }: Props) {
   const [editError, setEditError] = useState('');
   const [shareVisible, setShareVisible] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    try {
-      const statsRes = await api.get('/games/stats').catch(() => null);
-      setError('');
-      if (statsRes) setStats(statsRes.data.data);
-    } catch {
-      setError('Failed to load profile.');
-    }
-  }, []);
-
   useEffect(() => {
     setProfile(currentProfile);
   }, [currentProfile]);
 
-  useEffect(() => {
-    fetchData().finally(() => setLoading(false));
-  }, [fetchData]);
-
   const onRefresh = useCallback(async () => {
     void playHaptic('pull_refresh');
     setRefreshing(true);
-    await Promise.all([refresh(), fetchData()]);
+    await Promise.all([refresh(), statsQuery.refetch()]);
     setRefreshing(false);
-  }, [fetchData, playHaptic, refresh]);
+  }, [playHaptic, refresh, statsQuery]);
 
   function openEdit() {
     setEditName(profile?.displayName ?? '');
@@ -122,7 +101,7 @@ export default function ProfileScreen({ navigation }: Props) {
     setShareVisible(true);
   }
 
-  if (loading || profileLoading) {
+  if (statsQuery.isLoading || profileLoading) {
     return (
       <ScreenTransitionView style={{ flex: 1, backgroundColor: theme.bg }}>
         <View style={styles.container}>
@@ -147,7 +126,7 @@ export default function ProfileScreen({ navigation }: Props) {
     );
   }
 
-  if (error || profileError) {
+  if (statsQuery.isError || profileError) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
         <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.errorHeading}>Couldn't load.</AppText.Serif>
@@ -155,9 +134,7 @@ export default function ProfileScreen({ navigation }: Props) {
         <Button
           label="Retry"
           onPress={() => {
-            setError('');
-            setLoading(true);
-            Promise.all([refresh(), fetchData()]).finally(() => setLoading(false));
+            void Promise.all([refresh(), statsQuery.refetch()]);
           }}
           style={styles.retryBtn}
         />
@@ -170,6 +147,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const progress = tier && !isDiamond
     ? (profile!.eloRating - tier.min) / (tier.max - tier.min + 1)
     : 1;
+  const stats = statsQuery.data ?? null;
   const winRatePct = stats ? Math.round(stats.winRate * 100) : null;
 
   return (
@@ -219,7 +197,7 @@ export default function ProfileScreen({ navigation }: Props) {
         <Card style={styles.statsCard}>
           <View style={styles.statBlock}>
             <AppText.Serif preset="statVal" color={theme.ink}>
-              {stats?.totalGames ?? profile?.gamesPlayed ?? '—'}
+              {stats?.gamesPlayed ?? profile?.gamesPlayed ?? '—'}
             </AppText.Serif>
             <AppText.Mono preset="eyebrow" color={theme.ink3}>matches</AppText.Mono>
           </View>

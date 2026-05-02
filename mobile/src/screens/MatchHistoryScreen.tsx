@@ -1,12 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   View, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
 import { RootStackParamList } from '../navigation';
-import api from '../services/api';
 import TierBadge from '../components/TierBadge';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
@@ -15,26 +14,10 @@ import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
+import { fetchGamesHistory, type MatchHistoryEntry, useGamesHistory } from '../queries/games';
+import { queryKeys } from '../queries/keys';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MatchHistory'>;
-
-interface MatchEntry {
-  matchId: string;
-  outcome: 'WIN' | 'LOSS' | 'DRAW';
-  yourScore: number;
-  opponentScore: number;
-  yourEloChange: number;
-  opponent: {
-    id: string;
-    displayName: string | null;
-    avatarUrl: string | null;
-    eloRating: number;
-    rankTier: string;
-  };
-  status: string;
-  durationSeconds: number;
-  finishedAt: string;
-}
 
 function formatMatchTime(iso: string): string {
   const date = new Date(iso);
@@ -51,53 +34,48 @@ function formatMatchTime(iso: string): string {
 export default function MatchHistoryScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const { playHaptic } = useAppPreferences();
-  const [entries, setEntries] = useState<MatchEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [entries, setEntries] = useState<MatchHistoryEntry[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState('');
+  const historyQuery = useGamesHistory(page, 20);
 
-  const fetchPage = useCallback(async (p: number, replace: boolean) => {
-    try {
-      const res = await api.get(`/games/history?page=${p}&limit=20`);
-      const { entries: newEntries, pagination } = res.data.data;
-      setEntries(prev => replace ? newEntries : [...prev, ...newEntries]);
-      setTotalPages(pagination.totalPages);
-      setPage(p);
-      setError('');
-    } catch {
-      setError('Failed to load history.');
-    }
-  }, []);
+  useEffect(() => {
+    if (!historyQuery.data || historyQuery.data.pagination.page !== page) return;
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      fetchPage(1, true).finally(() => setLoading(false));
-    }, [fetchPage]),
-  );
+    setTotalPages(historyQuery.data.pagination.totalPages);
+    setEntries((prev) => (
+      page === 1 ? historyQuery.data.entries : [...prev, ...historyQuery.data.entries]
+    ));
+  }, [historyQuery.data, page]);
 
   const onRefresh = useCallback(async () => {
     void playHaptic('pull_refresh');
     setRefreshing(true);
-    await fetchPage(1, true);
-    setRefreshing(false);
-  }, [fetchPage, playHaptic]);
+    try {
+      const data = await queryClient.fetchQuery({
+        queryKey: queryKeys.games.history(1, 20),
+        queryFn: () => fetchGamesHistory(1, 20),
+        staleTime: 0,
+      });
+      setPage(1);
+      setTotalPages(data.pagination.totalPages);
+      setEntries(data.entries);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [playHaptic, queryClient]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || page >= totalPages) return;
-    setLoadingMore(true);
-    await fetchPage(page + 1, false);
-    setLoadingMore(false);
-  }, [fetchPage, loadingMore, page, totalPages]);
+    if (historyQuery.isFetching || page >= totalPages) return;
+    setPage((current) => current + 1);
+  }, [historyQuery.isFetching, page, totalPages]);
 
   const retry = useCallback(() => {
-    setError('');
-    setLoading(true);
-    fetchPage(1, true).finally(() => setLoading(false));
-  }, [fetchPage]);
+    setPage(1);
+    void historyQuery.refetch();
+  }, [historyQuery]);
 
   const stripeColor = (outcome: 'WIN' | 'LOSS' | 'DRAW') =>
     outcome === 'WIN' ? theme.accent : outcome === 'LOSS' ? theme.coral : theme.ink3;
@@ -119,7 +97,7 @@ export default function MatchHistoryScreen({ navigation }: Props) {
         <AppText.Serif preset="heroSerif" color={theme.ink}>Match History</AppText.Serif>
       </View>
 
-      {loading ? (
+      {historyQuery.isLoading && entries.length === 0 ? (
         <View style={styles.list}>
           {[0, 1, 2, 3, 4].map((i) => (
             <SkeletonCard key={i} style={styles.loadingCard}>
@@ -132,7 +110,7 @@ export default function MatchHistoryScreen({ navigation }: Props) {
             </SkeletonCard>
           ))}
         </View>
-      ) : error ? (
+      ) : historyQuery.isError ? (
         <View style={styles.errorState}>
           <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.errorHeading}>Couldn't load.</AppText.Serif>
           <AppText.Sans preset="body" color={theme.ink3} style={styles.errorBody}>Check your connection and try again.</AppText.Sans>
@@ -195,7 +173,7 @@ export default function MatchHistoryScreen({ navigation }: Props) {
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          ListFooterComponent={loadingMore
+          ListFooterComponent={historyQuery.isFetching && page > 1
             ? <ActivityIndicator style={styles.footerLoader} color={theme.ink3} />
             : null}
           ListEmptyComponent={

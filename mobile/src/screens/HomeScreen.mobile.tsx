@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View, StyleSheet, ScrollView, RefreshControl,
   TouchableOpacity, Pressable,
@@ -7,7 +7,6 @@ import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainTabParamList, RootStackParamList } from '../navigation';
-import api from '../services/api';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -18,6 +17,7 @@ import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { getTier, getTierToNext } from '../constants';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useGamesHistory } from '../queries/games';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Home'>,
@@ -42,41 +42,17 @@ export default function HomeScreen({ navigation }: Props) {
   const { theme, mode } = useTheme();
   const { playHaptic } = useAppPreferences();
   const { user: profile, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
-  const [winRate, setWinRate] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const historyQuery = useGamesHistory(1, 20);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-
-  const fetchData = useCallback(async () => {
-    try {
-      const historyRes = await api.get('/games/history?page=1&limit=20').catch(() => null);
-      setError('');
-      setWinRate(null);
-      if (historyRes) {
-        const entries: { outcome: 'WIN' | 'LOSS' | 'DRAW' }[] =
-          historyRes.data.data.entries ?? [];
-        if (entries.length > 0) {
-          const wins = entries.filter(e => e.outcome === 'WIN').length;
-          setWinRate(Math.round((wins / entries.length) * 100));
-        }
-      }
-    } catch {
-      setError('Failed to load home.');
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData().finally(() => setLoading(false));
-  }, [fetchData]);
 
   const onRefresh = useCallback(async () => {
     void playHaptic('pull_refresh');
     setRefreshing(true);
-    await Promise.all([refresh(), fetchData()]);
+    await Promise.all([refresh(), historyQuery.refetch()]);
     setRefreshing(false);
-  }, [fetchData, playHaptic, refresh]);
+  }, [historyQuery, playHaptic, refresh]);
 
-  if (loading || profileLoading) {
+  if (historyQuery.isLoading || profileLoading) {
     return (
       <ScreenTransitionView style={{ flex: 1, backgroundColor: theme.bg }}>
         <View style={styles.container}>
@@ -106,7 +82,7 @@ export default function HomeScreen({ navigation }: Props) {
     );
   }
 
-  if (error || profileError) {
+  if (historyQuery.isError || profileError) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
         <AppText.Serif preset="heroSerif" color={theme.ink} style={styles.errorHeading}>Couldn't load.</AppText.Serif>
@@ -114,9 +90,7 @@ export default function HomeScreen({ navigation }: Props) {
         <Button
           label="Retry"
           onPress={() => {
-            setError('');
-            setLoading(true);
-            Promise.all([refresh(), fetchData()]).finally(() => setLoading(false));
+            void Promise.all([refresh(), historyQuery.refetch()]);
           }}
           style={styles.retryBtn}
         />
@@ -135,6 +109,9 @@ export default function HomeScreen({ navigation }: Props) {
       ? theme.coral
       : theme.ink3;
   const tier = profile ? getTier(profile.eloRating) : null;
+  const entries = historyQuery.data?.entries ?? [];
+  const wins = entries.filter((entry) => entry.outcome === 'WIN').length;
+  const winRate = entries.length > 0 ? Math.round((wins / entries.length) * 100) : null;
 
   // Play card inverts: dark bg + white text in light mode, light bg + dark text in dark mode
   const playCardBg      = mode === 'dark' ? theme.ink : '#1C1B1A';

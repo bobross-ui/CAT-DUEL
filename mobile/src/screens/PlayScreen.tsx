@@ -7,7 +7,7 @@ import Button from '../components/Button';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
-import api from '../services/api';
+import { useGamesActive } from '../queries/games';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Play'>,
@@ -16,10 +16,10 @@ type Props = CompositeScreenProps<
 
 export default function PlayScreen({ navigation }: Props) {
   const { theme } = useTheme();
+  const activeGameQuery = useGamesActive({ enabled: false });
 
   const handleFindDuel = async () => {
-    const activeRes = await api.get('/games/active').catch(() => null);
-    const activeGame = activeRes?.data?.data;
+    const activeGame = await activeGameQuery.refetch().then((result) => result.data).catch(() => null);
     if (activeGame?.gameId && activeGame.opponent && activeGame.initialState) {
       navigation.navigate('Duel', activeGame);
       return;

@@ -1,71 +1,25 @@
-import { useEffect, useState } from 'react';
 import {
   View, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
-import api from '../services/api';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useGamesDetail } from '../queries/games';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MatchDetail'>;
-
-interface AnswerDetail {
-  id: string;
-  userId: string;
-  questionId: string;
-  selectedAnswer: number;
-  isCorrect: boolean;
-  timeTakenMs: number;
-  question: {
-    id: string;
-    category: string;
-    text: string;
-    options: string[];
-    correctAnswer: number;
-    explanation: string;
-  };
-}
-
-interface MatchData {
-  id: string;
-  player1Id: string;
-  player2Id: string;
-  winnerId: string | null;
-  isDraw: boolean;
-  status: string;
-  player1Score: number;
-  player2Score: number;
-  player1EloChange: number;
-  player2EloChange: number;
-  durationSeconds: number;
-  finishedAt: string;
-  player1: { id: string; displayName: string | null };
-  player2: { id: string; displayName: string | null };
-  answers: AnswerDetail[];
-}
 
 export default function MatchDetailScreen({ route, navigation }: Props) {
   const { matchId, opponentName } = route.params;
   const { theme } = useTheme();
-  const [match, setMatch] = useState<MatchData | null>(null);
   const { user: profile, loading: profileLoading } = useCurrentProfile();
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.get(`/games/${matchId}`)
-      .then((matchRes) => {
-        setMatch(matchRes.data.data);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [matchId]);
+  const { data: match, isLoading: matchLoading } = useGamesDetail(matchId);
 
   const myId = profile?.id ?? null;
 
-  if (loading || profileLoading) {
+  if (matchLoading || profileLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.bg }]}>
         <ActivityIndicator size="large" color={theme.ink} />

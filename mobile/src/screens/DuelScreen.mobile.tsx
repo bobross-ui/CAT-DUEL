@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useQueryClient } from '@tanstack/react-query';
 import { Socket } from 'socket.io-client';
 import { RootStackParamList, GameFinishedPayload, ClientQuestion as NavClientQuestion } from '../navigation';
 import { getGameSocket, releaseGameSocket } from '../services/socket';
@@ -17,6 +18,7 @@ import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import { radii } from '../theme/tokens';
 import { track } from '../services/analytics';
+import { queryKeys } from '../queries/keys';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Duel'>;
 type ClientQuestion = NavClientQuestion;
@@ -89,6 +91,7 @@ export default function DuelScreen({ route, navigation }: Props) {
   const { gameId, opponent, initialState } = route.params;
   const { user } = useAuth();
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
   const { playHaptic, reduceMotionEnabled } = useAppPreferences();
   const insets = useSafeAreaInsets();
 
@@ -255,6 +258,9 @@ export default function DuelScreen({ route, navigation }: Props) {
           const didWin = results.winnerId === results.currentUserId;
           void playHaptic(didWin ? 'game_won' : 'game_lost');
         }
+        void queryClient.invalidateQueries({ queryKey: queryKeys.me() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.games.all() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.leaderboard.all() });
         socket.disconnect();
         navigation.replace('DuelResults', { results, userId: results.currentUserId, opponent });
       });
@@ -273,7 +279,7 @@ export default function DuelScreen({ route, navigation }: Props) {
       socketRef.current = null;
       releaseGameSocket();
     };
-  }, [gameId, navigation, opponent, playHaptic, questionOpacity, reduceMotionEnabled]);
+  }, [gameId, navigation, opponent, playHaptic, queryClient, questionOpacity, reduceMotionEnabled]);
 
   useEffect(() => {
     if (ds.timeRemaining > 60 || timerWarningSentRef.current) return;

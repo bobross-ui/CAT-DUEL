@@ -11,6 +11,7 @@ import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import Text from '../components/Text';
 import api from '../services/api';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { type MatchHistoryEntry, useGamesHistory, useGamesStats } from '../queries/games';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useTheme } from '../theme/ThemeProvider';
@@ -20,24 +21,6 @@ import MobileHomeScreen from './HomeScreen.mobile';
 
 type Props = ComponentProps<typeof MobileHomeScreen>;
 const INITIAL_MATCHMAKING_RANGE = 150;
-
-interface MatchHistoryEntry {
-  matchId: string;
-  outcome: 'WIN' | 'LOSS' | 'DRAW';
-  yourScore: number;
-  opponentScore: number;
-  yourEloChange: number;
-  finishedAt: string;
-  opponent: {
-    displayName: string | null;
-    avatarUrl: string | null;
-  };
-}
-
-interface GameStats {
-  gamesPlayed: number;
-  winRate: number;
-}
 
 interface LeaderboardEntry {
   rank: number;
@@ -90,10 +73,10 @@ function isToday(value: string) {
 export default function HomeScreenDesktop({ navigation }: Props) {
   const { theme, mode } = useTheme();
   const { user, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
-  const [stats, setStats] = useState<GameStats | null>(null);
-  const [recentMatches, setRecentMatches] = useState<MatchHistoryEntry[]>([]);
+  const statsQuery = useGamesStats();
+  const historyQuery = useGamesHistory(1, 5);
   const [leaders, setLeaders] = useState<LeaderboardEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
   const [error, setError] = useState('');
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -119,16 +102,9 @@ export default function HomeScreenDesktop({ navigation }: Props) {
   }], [navigateToMatchmaking, runPlayPulse]);
   useKeyboardShortcuts(shortcuts);
 
-  const fetchHomeData = useCallback(async () => {
+  const fetchLeaderboard = useCallback(async () => {
     try {
-      const [statsRes, historyRes, leaderboardRes] = await Promise.all([
-        api.get('/games/stats').catch(() => null),
-        api.get('/games/history?page=1&limit=5').catch(() => null),
-        api.get('/leaderboard/global').catch(() => null),
-      ]);
-
-      setStats(statsRes?.data.data ?? null);
-      setRecentMatches(historyRes?.data.data.entries ?? []);
+      const leaderboardRes = await api.get('/leaderboard/global').catch(() => null);
       setLeaders((leaderboardRes?.data.data.entries ?? []).slice(0, 5));
       setError('');
     } catch {
@@ -137,14 +113,19 @@ export default function HomeScreenDesktop({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
-    void Promise.all([refresh(), fetchHomeData()]).finally(() => setLoading(false));
-  }, [fetchHomeData, refresh]);
+    void fetchLeaderboard().finally(() => setLeaderboardLoading(false));
+  }, [fetchLeaderboard]);
 
   const retry = useCallback(() => {
-    setLoading(true);
+    setLeaderboardLoading(true);
     setError('');
-    void Promise.all([refresh(), fetchHomeData()]).finally(() => setLoading(false));
-  }, [fetchHomeData, refresh]);
+    void Promise.all([
+      refresh(),
+      statsQuery.refetch(),
+      historyQuery.refetch(),
+      fetchLeaderboard(),
+    ]).finally(() => setLeaderboardLoading(false));
+  }, [fetchLeaderboard, historyQuery, refresh, statsQuery]);
 
   const displayName = user?.displayName ?? 'there';
   const tier = user ? getTier(user.eloRating) : null;
@@ -154,6 +135,8 @@ export default function HomeScreenDesktop({ navigation }: Props) {
     : ratingDelta && ratingDelta < 0
       ? theme.coral
       : theme.ink3;
+  const stats = statsQuery.data ?? null;
+  const recentMatches = historyQuery.data?.entries ?? [];
   const winRate = stats ? Math.round(stats.winRate * 100) : null;
   const todaysMatches = recentMatches.filter((match) => isToday(match.finishedAt)).length;
   const heroIsLight = mode === 'dark';
@@ -226,7 +209,7 @@ export default function HomeScreenDesktop({ navigation }: Props) {
     </View>
   );
 
-  if (loading || profileLoading) {
+  if (leaderboardLoading || statsQuery.isLoading || historyQuery.isLoading || profileLoading) {
     return (
       <DesktopFrame activeRoute="Home" rightRail={rightRail}>
         <PageContainer style={styles.page}>
@@ -250,7 +233,7 @@ export default function HomeScreenDesktop({ navigation }: Props) {
     );
   }
 
-  if (error || profileError) {
+  if (error || statsQuery.isError || historyQuery.isError || profileError) {
     return (
       <DesktopFrame activeRoute="Home" rightRail={rightRail}>
         <PageContainer maxWidth={760} style={styles.errorPage}>

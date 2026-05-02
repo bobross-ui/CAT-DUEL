@@ -8,6 +8,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { Socket } from 'socket.io-client';
 import { Feather } from '@expo/vector-icons';
 import DesktopFrame from '../components/web/DesktopFrame';
@@ -26,6 +27,7 @@ import type { ClientQuestion, GameFinishedPayload } from '../navigation';
 import { getTier } from '../constants';
 import { getGameSocket, releaseGameSocket } from '../services/socket';
 import { track } from '../services/analytics';
+import { queryKeys } from '../queries/keys';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
 import MobileDuelScreen from './DuelScreen.mobile';
@@ -100,6 +102,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   const { user: authUser } = useAuth();
   const { user: profile } = useCurrentProfile();
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
   const { playHaptic, reduceMotionEnabled } = useAppPreferences();
 
   const [ds, setDs] = useState<DuelState>({
@@ -327,6 +330,9 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
           const didWin = results.winnerId === results.currentUserId;
           void playHaptic(didWin ? 'game_won' : 'game_lost');
         }
+        void queryClient.invalidateQueries({ queryKey: queryKeys.me() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.games.all() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.leaderboard.all() });
         socket.disconnect();
         navigation.replace('DuelResults', { results, userId: results.currentUserId, opponent });
       });
@@ -352,6 +358,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
     opponent,
     playHaptic,
     pulseScore,
+    queryClient,
     questionOpacity,
     reduceMotionEnabled,
     opponentScoreScale,
