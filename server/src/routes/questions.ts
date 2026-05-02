@@ -7,6 +7,7 @@ import { bufferQuestionServes } from '../services/questionServeBuffer';
 
 const router = Router();
 const SECTION_ORDER = ['QUANT', 'DILR', 'VARC'];
+const MAX_RANDOM_SKIP = 50;
 
 router.use(authMiddleware);
 
@@ -73,10 +74,8 @@ async function findNextPracticeQuestion(
     const where: Record<string, unknown> = { isVerified: true, category };
     if (difficulty) where.difficulty = difficulty;
 
-    const questionCount = await prisma.question.count({ where });
-    if (questionCount === 0) continue;
-
-    return prisma.question.findFirst({
+    const randomSkip = Math.floor(Math.random() * MAX_RANDOM_SKIP);
+    const question = await prisma.question.findFirst({
       where,
       select: {
         id: true,
@@ -88,8 +87,26 @@ async function findNextPracticeQuestion(
         // correctAnswer and explanation are intentionally excluded
       },
       orderBy: { createdAt: 'asc' },
-      skip: Math.floor(Math.random() * questionCount),
+      skip: randomSkip,
     });
+    if (question) return question;
+
+    if (randomSkip === 0) continue;
+
+    const fallbackQuestion = await prisma.question.findFirst({
+      where,
+      select: {
+        id: true,
+        category: true,
+        subTopic: true,
+        difficulty: true,
+        text: true,
+        options: true,
+        // correctAnswer and explanation are intentionally excluded
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (fallbackQuestion) return fallbackQuestion;
   }
 
   return null;
