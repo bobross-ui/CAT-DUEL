@@ -203,6 +203,7 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
       return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Not your match' } });
     }
 
+    res.set('Cache-Control', 'private, immutable, max-age=86400');
     res.json({ success: true, data: match });
   } catch (err) {
     next(err);

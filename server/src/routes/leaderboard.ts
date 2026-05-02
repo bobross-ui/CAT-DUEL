@@ -9,6 +9,7 @@ const VALID_TIERS = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
 router.get('/global', authMiddleware, async (req, res, next) => {
   try {
     const data = await getGlobalLeaderboard(req.user.id);
+    res.set('Cache-Control', 'private, max-age=30');
     res.json({ success: true, data });
   } catch (e) { next(e); }
 });
@@ -16,6 +17,7 @@ router.get('/global', authMiddleware, async (req, res, next) => {
 router.get('/around-me', authMiddleware, async (req, res, next) => {
   try {
     const data = await getAroundMeLeaderboard(req.user.id);
+    res.set('Cache-Control', 'private, max-age=30');
     res.json({ success: true, data });
   } catch (e) { next(e); }
 });
@@ -30,6 +32,7 @@ router.get('/tier/:tier', authMiddleware, async (req, res, next) => {
       });
     }
     const data = await getTierLeaderboard(tier as RankTier, req.user);
+    res.set('Cache-Control', 'private, max-age=30');
     res.json({ success: true, data });
   } catch (e) { next(e); }
 });

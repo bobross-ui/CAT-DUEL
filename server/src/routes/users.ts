@@ -33,6 +33,7 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
       createdAt: user.createdAt,
       ...(isOwnProfile && { email: user.email }),
     };
+    res.set('Cache-Control', 'private, max-age=60');
     res.json({ success: true, data: publicData });
   } catch (err) {
     next(err);
