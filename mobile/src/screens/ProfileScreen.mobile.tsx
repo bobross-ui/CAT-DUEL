@@ -8,7 +8,6 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { z } from 'zod';
 import { useAuth } from '../context/AuthContext';
-import api from '../services/api';
 import { MainTabParamList, RootStackParamList } from '../navigation';
 import TierBadge from '../components/TierBadge';
 import Avatar from '../components/Avatar';
@@ -25,6 +24,7 @@ import { profileUrl } from '../navigation/linking';
 import { track } from '../services/analytics';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useGamesStats } from '../queries/games';
+import { useUpdateMe } from '../queries/users';
 
 interface UserProfile {
   id: string;
@@ -48,6 +48,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const { playHaptic } = useAppPreferences();
   const { user: currentProfile, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
   const statsQuery = useGamesStats();
+  const updateMe = useUpdateMe();
   const [profile, setProfile] = useState<UserProfile | null>(currentProfile);
   const [refreshing, setRefreshing] = useState(false);
   const [debugTaps, setDebugTaps] = useState(0);
@@ -84,8 +85,7 @@ export default function ProfileScreen({ navigation }: Props) {
     setSaving(true);
     setEditError('');
     try {
-      await api.patch('/users/me', { displayName: parsed.data });
-      setProfile((prev) => prev ? { ...prev, displayName: parsed.data } : prev);
+      await updateMe.mutateAsync({ displayName: parsed.data });
       setEditVisible(false);
     } catch (err: unknown) {
       const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;

@@ -11,9 +11,7 @@ import { z } from 'zod';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeProvider';
-import { queryClient } from '../queries/client';
-import { queryKeys } from '../queries/keys';
-import api from '../services/api';
+import { useUpdateMe } from '../queries/users';
 import Button from '../components/Button';
 import AppText from '../components/Text';
 
@@ -22,6 +20,7 @@ const displayNameSchema = z.string().trim().min(2, 'Display name must be at leas
 export default function LoginScreen() {
   const { signInWithEmail, signInWithGoogle } = useAuth();
   const { theme } = useTheme();
+  const updateMe = useUpdateMe();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -45,8 +44,7 @@ export default function LoginScreen() {
       if (isRegistering) {
         const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(newUser, { displayName: parsedDisplayName!.data });
-        const res = await api.patch('/users/me', { displayName: parsedDisplayName!.data });
-        queryClient.setQueryData(queryKeys.me(), res.data.data);
+        await updateMe.mutateAsync({ displayName: parsedDisplayName!.data });
       } else {
         await signInWithEmail(email, password);
       }

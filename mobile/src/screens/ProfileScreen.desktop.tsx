@@ -12,10 +12,10 @@ import ShareLinkModal from '../components/ShareLinkModal';
 import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import Text from '../components/Text';
 import TierBadge from '../components/TierBadge';
-import api from '../services/api';
 import { track } from '../services/analytics';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { type MatchStats, useGamesHistory, useGamesStats } from '../queries/games';
+import { useUpdateMe } from '../queries/users';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getTier, getTierToNext } from '../constants';
 import { profileUrl } from '../navigation/linking';
@@ -134,6 +134,7 @@ export default function ProfileScreenDesktop({ navigation }: Props) {
   const { user, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
   const statsQuery = useGamesStats();
   const historyQuery = useGamesHistory(1, 3);
+  const updateMe = useUpdateMe();
   const [editVisible, setEditVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editError, setEditError] = useState('');
@@ -161,8 +162,7 @@ export default function ProfileScreenDesktop({ navigation }: Props) {
     setSaving(true);
     setEditError('');
     try {
-      await api.patch('/users/me', { displayName: parsed.data });
-      await refresh();
+      await updateMe.mutateAsync({ displayName: parsed.data });
       setEditVisible(false);
     } catch (err: unknown) {
       const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;

@@ -19,7 +19,6 @@ import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { RootStackParamList } from '../navigation';
-import api from '../services/api';
 import AppText from '../components/Text';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -27,6 +26,7 @@ import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useDeleteMe, useUpdateMe } from '../queries/users';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -49,6 +49,8 @@ export default function SettingsScreen({ navigation }: Props) {
     setAnalyticsEnabled,
   } = useAppPreferences();
   const { user: currentProfile, loading } = useCurrentProfile();
+  const updateMe = useUpdateMe();
+  const deleteMe = useDeleteMe();
   const [profile, setProfile] = useState<SettingsProfile | null>(currentProfile);
   const [editVisible, setEditVisible] = useState(false);
   const [editName, setEditName] = useState('');
@@ -84,8 +86,7 @@ export default function SettingsScreen({ navigation }: Props) {
     setSavingName(true);
     setEditError('');
     try {
-      await api.patch('/users/me', { displayName: parsed.data });
-      setProfile((current) => current ? { ...current, displayName: parsed.data } : current);
+      await updateMe.mutateAsync({ displayName: parsed.data });
       setEditVisible(false);
     } catch (err: unknown) {
       const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;
@@ -142,7 +143,7 @@ export default function SettingsScreen({ navigation }: Props) {
     setDeleting(true);
     setDeleteError('');
     try {
-      await api.delete('/users/me');
+      await deleteMe.mutateAsync();
       if (auth.currentUser) {
         await deleteUser(auth.currentUser).catch(() => {});
       }

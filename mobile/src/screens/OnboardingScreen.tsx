@@ -9,7 +9,6 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import api from '../services/api';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -17,6 +16,7 @@ import AppText from '../components/Text';
 import TierBadge from '../components/TierBadge';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii, spacing } from '../theme/tokens';
+import { useCompleteOnboarding } from '../queries/users';
 
 type CompletionTarget = 'home' | 'practice' | 'match';
 
@@ -54,6 +54,7 @@ const SLIDES = [
 export default function OnboardingScreen({ onCompleted }: Props) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const completeOnboarding = useCompleteOnboarding();
   const scrollRef = useRef<ScrollView>(null);
   const [slideWidth, setSlideWidth] = useState(0);
   const [index, setIndex] = useState(0);
@@ -75,7 +76,7 @@ export default function OnboardingScreen({ onCompleted }: Props) {
     setLoadingTarget(target);
     const completedAt = new Date().toISOString();
     try {
-      await api.patch('/users/me', { onboardingCompletedAt: completedAt });
+      await completeOnboarding.mutateAsync({ onboardingCompletedAt: completedAt });
       onCompleted(target, completedAt);
     } catch {
       setError("Couldn't save onboarding. Check your connection and try again.");

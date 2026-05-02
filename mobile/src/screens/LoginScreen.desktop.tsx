@@ -14,9 +14,7 @@ import { z } from 'zod';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { queryClient } from '../queries/client';
-import { queryKeys } from '../queries/keys';
-import api from '../services/api';
+import { useUpdateMe } from '../queries/users';
 import Text from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
@@ -29,6 +27,7 @@ type ButtonName = 'submit' | 'google' | 'toggle';
 export default function LoginScreenDesktop() {
   const { signInWithEmail, signInWithGoogle } = useAuth();
   const { theme } = useTheme();
+  const updateMe = useUpdateMe();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -60,8 +59,7 @@ export default function LoginScreenDesktop() {
         const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
         const nextDisplayName = parsedDisplayName?.success ? parsedDisplayName.data : '';
         await updateProfile(newUser, { displayName: nextDisplayName });
-        const res = await api.patch('/users/me', { displayName: nextDisplayName });
-        queryClient.setQueryData(queryKeys.me(), res.data.data);
+        await updateMe.mutateAsync({ displayName: nextDisplayName });
       } else {
         await signInWithEmail(email, password);
       }

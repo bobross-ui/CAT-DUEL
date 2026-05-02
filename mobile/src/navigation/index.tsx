@@ -35,7 +35,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import PublicProfileScreen from '../screens/PublicProfileScreen';
 import TabBar from '../components/TabBar';
 import { identify, reset as resetAnalytics, track } from '../services/analytics';
-import { CurrentProfile, useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { queryKeys } from '../queries/keys';
 import { parseAppLink } from './linking';
 
@@ -289,14 +289,10 @@ export default function RootNavigator({
     };
   }, []);
 
-  const handleOnboardingCompleted = useCallback((target: CompletionTarget, completedAt: string) => {
+  const handleOnboardingCompleted = useCallback((target: CompletionTarget) => {
     track('onboarding_completed', { destination: target });
     setPostOnboardingTarget((current) => current ?? target);
-    queryClient.setQueryData<CurrentProfile | undefined>(queryKeys.me(), (current) => (
-      current ? { ...current, onboardingCompletedAt: completedAt } : current
-    ));
-    void refresh();
-  }, [queryClient, refresh]);
+  }, []);
 
   const hasCompletedOnboarding = Boolean(profile?.onboardingCompletedAt);
 
