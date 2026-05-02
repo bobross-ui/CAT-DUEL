@@ -3,6 +3,7 @@ import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
 import { calculateMatchElo, getRankTier, MatchEloResult } from './elo';
 import { invalidateUserGlobalRank } from './leaderboard';
+import { bufferQuestionServes } from './questionServeBuffer';
 import { invalidateUserById } from './userCache';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -396,12 +397,7 @@ async function getQuestionForClient(questionId: string) {
 }
 
 async function incrementQuestionServeCounts(questionIds: string[]): Promise<void> {
-  if (questionIds.length === 0) return;
-
-  await prisma.question.updateMany({
-    where: { id: { in: questionIds } },
-    data: { timesServed: { increment: 1 } },
-  });
+  await bufferQuestionServes(questionIds);
 }
 
 // ─── Game lifecycle ────────────────────────────────────────────────────────────

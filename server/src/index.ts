@@ -8,6 +8,7 @@ import { socketAuthMiddleware } from './middleware/socketAuth';
 import { registerMatchmakingHandlers } from './services/matchmaking';
 import { startMatchmakingLoop } from './services/matchmakingLoop';
 import { registerGameHandlers } from './services/gameSession';
+import { startQuestionServeCountFlush } from './services/questionServeBuffer';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
 import usersRouter from './routes/users';
@@ -56,6 +57,7 @@ gameNs.on('connection', async (socket) => {
 registerMatchmakingHandlers(matchmakingNs);
 registerGameHandlers(gameNs);
 startMatchmakingLoop(matchmakingNs, gameNs);
+startQuestionServeCountFlush();
 
 // --- Express middleware ---
 app.use(cors());

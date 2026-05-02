@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../models/prisma';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { bufferQuestionServes } from '../services/questionServeBuffer';
 
 const router = Router();
 const SECTION_ORDER = ['QUANT', 'DILR', 'VARC'];
@@ -27,10 +28,7 @@ router.get('/next', async (req: Request, res: Response) => {
     return;
   }
 
-  await prisma.question.update({
-    where: { id: question.id },
-    data: { timesServed: { increment: 1 } },
-  });
+  await bufferQuestionServes([question.id]);
 
   res.json({ success: true, data: question });
 });
