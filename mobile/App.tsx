@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import {
   SourceSerif4_500Medium,
   SourceSerif4_600SemiBold,
@@ -26,6 +29,7 @@ import { linking } from './src/navigation/linking';
 import AppErrorBoundary from './src/components/AppErrorBoundary';
 import ThemedToast from './src/components/ThemedToast';
 import { init as initAnalytics } from './src/services/analytics';
+import { queryClient } from './src/queries/client';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -54,24 +58,29 @@ export default function App() {
 
   if (!fontsLoaded) return null;
 
+  const showReactQueryDevtools = __DEV__ && Platform.OS === 'web';
+
   return (
     <AppErrorBoundary>
       <SafeAreaProvider>
-        <AuthProvider>
-          <AppPreferencesProvider>
-            <ThemeProvider>
-              <NavigationContainer
-                ref={navigationRef}
-                linking={linking}
-                documentTitle={{ enabled: false }}
-                onReady={() => setNavigationReady(true)}
-              >
-                <RootNavigator navigationRef={navigationRef} navigationReady={navigationReady} />
-              </NavigationContainer>
-              <ThemedToast />
-            </ThemeProvider>
-          </AppPreferencesProvider>
-        </AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <AppPreferencesProvider>
+              <ThemeProvider>
+                <NavigationContainer
+                  ref={navigationRef}
+                  linking={linking}
+                  documentTitle={{ enabled: false }}
+                  onReady={() => setNavigationReady(true)}
+                >
+                  <RootNavigator navigationRef={navigationRef} navigationReady={navigationReady} />
+                </NavigationContainer>
+                <ThemedToast />
+              </ThemeProvider>
+            </AppPreferencesProvider>
+          </AuthProvider>
+          {showReactQueryDevtools ? <ReactQueryDevtools /> : null}
+        </QueryClientProvider>
       </SafeAreaProvider>
     </AppErrorBoundary>
   );
