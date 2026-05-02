@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../context/AuthContext';
+import { queryKeys } from '../queries/keys';
 import api from '../services/api';
 
 export interface CurrentProfile {
@@ -18,53 +21,28 @@ export interface CurrentProfile {
   onboardingCompletedAt?: string | null;
 }
 
-let cachedProfile: CurrentProfile | null = null;
-let inflight: Promise<CurrentProfile> | null = null;
-
-export async function fetchCurrentProfile() {
-  if (!inflight) {
-    inflight = api.get('/auth/me')
-      .then((res) => {
-        cachedProfile = res.data.data as CurrentProfile;
-        return cachedProfile;
-      })
-      .finally(() => {
-        inflight = null;
-      });
-  }
-
-  return inflight;
-}
-
-export function clearCurrentProfileCache() {
-  cachedProfile = null;
-  inflight = null;
+async function fetchCurrentProfile() {
+  const res = await api.get('/auth/me');
+  return res.data.data as CurrentProfile;
 }
 
 export function useCurrentProfile() {
-  const [user, setUser] = useState<CurrentProfile | null>(cachedProfile);
-  const [loading, setLoading] = useState(!cachedProfile);
-  const [error, setError] = useState('');
+  const { user: authUser } = useAuth();
+  const query = useQuery({
+    queryKey: queryKeys.me(),
+    queryFn: fetchCurrentProfile,
+    enabled: Boolean(authUser),
+  });
 
   const refresh = useCallback(async () => {
-    setLoading(!cachedProfile);
-    setError('');
-    try {
-      const nextProfile = await fetchCurrentProfile();
-      setUser(nextProfile);
-      return nextProfile;
-    } catch {
-      setError('Failed to load profile.');
-      setUser(cachedProfile);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    const result = await query.refetch();
+    return result.data ?? null;
+  }, [query.refetch]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  return { user, loading, error, refresh };
+  return {
+    user: authUser ? query.data ?? null : null,
+    loading: authUser ? query.isLoading || (!query.data && query.isFetching) : false,
+    error: query.isError ? 'Failed to load profile.' : '',
+    refresh,
+  };
 }

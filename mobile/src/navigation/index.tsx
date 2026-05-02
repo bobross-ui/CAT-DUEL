@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import * as Linking from 'expo-linking';
+import { useQueryClient } from '@tanstack/react-query';
 import type {
   NavigationContainerRefWithCurrent,
   NavigatorScreenParams,
@@ -34,7 +35,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 import PublicProfileScreen from '../screens/PublicProfileScreen';
 import TabBar from '../components/TabBar';
 import { identify, reset as resetAnalytics, track } from '../services/analytics';
-import { clearCurrentProfileCache, fetchCurrentProfile } from '../hooks/useCurrentProfile';
+import { CurrentProfile, useCurrentProfile } from '../hooks/useCurrentProfile';
+import { queryKeys } from '../queries/keys';
 import { parseAppLink } from './linking';
 
 export interface ClientQuestion {
@@ -153,15 +155,6 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-interface AuthProfile {
-  id?: string;
-  rankTier?: string;
-  gamesPlayed?: number;
-  currentStreak?: number;
-  longestStreak?: number;
-  onboardingCompletedAt: string | null;
-}
-
 function analyticsRouteForTarget(target: DeepLinkTarget) {
   if (target.kind === 'leaderboard') return target.tier ? 'leaderboard_tier' : 'leaderboard';
   return target.kind;
@@ -234,64 +227,42 @@ export default function RootNavigator({
   navigationRef: NavigationContainerRefWithCurrent<RootStackParamList>;
   navigationReady: boolean;
 }) {
-  const { user, loading } = useAuth();
+  const { user: firebaseUser, loading } = useAuth();
   const { theme } = useTheme();
-  const [profile, setProfile] = useState<AuthProfile | null>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [profileError, setProfileError] = useState(false);
+  const queryClient = useQueryClient();
+  const { user: profile, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
   const [postOnboardingTarget, setPostOnboardingTarget] = useState<RedirectTarget | null>(null);
   const previousStreakRef = useRef<number | null>(null);
 
-  const fetchProfile = useCallback(async () => {
-    if (!user) {
-      setProfile(null);
-      setProfileError(false);
+  useEffect(() => {
+    if (!firebaseUser) {
       previousStreakRef.current = null;
-      return;
-    }
-
-    setProfileLoading(true);
-    setProfileError(false);
-    try {
-      const nextProfile = await fetchCurrentProfile() as AuthProfile;
-      setProfile(nextProfile);
-      if (nextProfile.id) {
-        identify(nextProfile.id, {
-          tier: nextProfile.rankTier,
-          gamesPlayed: nextProfile.gamesPlayed,
-          currentStreak: nextProfile.currentStreak,
-        });
-      }
-
-      if (typeof nextProfile.currentStreak === 'number') {
-        const previousStreak = previousStreakRef.current;
-        if (previousStreak !== null && previousStreak !== nextProfile.currentStreak) {
-          track('streak_changed', {
-            currentStreak: nextProfile.currentStreak,
-            longestStreak: nextProfile.longestStreak,
-            broken: nextProfile.currentStreak < previousStreak,
-          });
-        }
-        previousStreakRef.current = nextProfile.currentStreak;
-      }
-    } catch {
-      setProfile(null);
-      setProfileError(true);
-    } finally {
-      setProfileLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    void fetchProfile();
-  }, [fetchProfile]);
-
-  useEffect(() => {
-    if (!user) {
-      clearCurrentProfileCache();
+      queryClient.removeQueries({ queryKey: queryKeys.me() });
       resetAnalytics();
     }
-  }, [user]);
+  }, [firebaseUser, queryClient]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    identify(profile.id, {
+      tier: profile.rankTier,
+      gamesPlayed: profile.gamesPlayed,
+      currentStreak: profile.currentStreak,
+    });
+
+    if (typeof profile.currentStreak === 'number') {
+      const previousStreak = previousStreakRef.current;
+      if (previousStreak !== null && previousStreak !== profile.currentStreak) {
+        track('streak_changed', {
+          currentStreak: profile.currentStreak,
+          longestStreak: profile.longestStreak,
+          broken: profile.currentStreak < previousStreak,
+        });
+      }
+      previousStreakRef.current = profile.currentStreak;
+    }
+  }, [profile]);
 
   useEffect(() => {
     let mounted = true;
@@ -321,11 +292,11 @@ export default function RootNavigator({
   const handleOnboardingCompleted = useCallback((target: CompletionTarget, completedAt: string) => {
     track('onboarding_completed', { destination: target });
     setPostOnboardingTarget((current) => current ?? target);
-    setProfile((current) => ({
-      ...(current ?? {}),
-      onboardingCompletedAt: completedAt,
-    }));
-  }, []);
+    queryClient.setQueryData<CurrentProfile | undefined>(queryKeys.me(), (current) => (
+      current ? { ...current, onboardingCompletedAt: completedAt } : current
+    ));
+    void refresh();
+  }, [queryClient, refresh]);
 
   const hasCompletedOnboarding = Boolean(profile?.onboardingCompletedAt);
 
@@ -335,23 +306,23 @@ export default function RootNavigator({
     track('deeplink_opened', { route: analyticsRouteForTarget(target) });
     setPostOnboardingTarget(target);
 
-    if (!user || !hasCompletedOnboarding) {
-      navigationRef.resetRoot({ index: 0, routes: [{ name: user ? 'Onboarding' : 'Login' }] });
+    if (!firebaseUser || !hasCompletedOnboarding) {
+      navigationRef.resetRoot({ index: 0, routes: [{ name: firebaseUser ? 'Onboarding' : 'Login' }] });
     }
-  }, [hasCompletedOnboarding, navigationRef, user]);
+  }, [firebaseUser, hasCompletedOnboarding, navigationRef]);
 
   useEffect(() => {
-    if (!navigationReady || !user || !hasCompletedOnboarding || !postOnboardingTarget) return;
+    if (!navigationReady || !firebaseUser || !hasCompletedOnboarding || !postOnboardingTarget) return;
 
     const target = postOnboardingTarget;
     setPostOnboardingTarget(null);
     resetToTarget(navigationRef, target);
   }, [
     hasCompletedOnboarding,
+    firebaseUser,
     navigationReady,
     navigationRef,
     postOnboardingTarget,
-    user,
   ]);
 
   function DeepLinkedProfileRedirect({
@@ -398,7 +369,7 @@ export default function RootNavigator({
     return null;
   }
 
-  if (loading || (user && profileLoading)) {
+  if (loading || (firebaseUser && profileLoading)) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg }}>
         <ActivityIndicator color={theme.ink3} />
@@ -406,7 +377,7 @@ export default function RootNavigator({
     );
   }
 
-  if (user && profileError) {
+  if (firebaseUser && profileError) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: theme.bg }}>
         <AppText.Serif preset="h1Serif" color={theme.ink} style={{ marginBottom: 8, textAlign: 'center' }}>
@@ -415,12 +386,12 @@ export default function RootNavigator({
         <AppText.Sans preset="body" color={theme.ink2} style={{ marginBottom: 20, textAlign: 'center' }}>
           Check your connection and try again.
         </AppText.Sans>
-        <Button label="Retry" onPress={fetchProfile} />
+        <Button label="Retry" onPress={() => { void refresh(); }} />
       </View>
     );
   }
 
-  const initialRouteName = !user
+  const initialRouteName = !firebaseUser
     ? 'Login'
     : hasCompletedOnboarding
       ? 'MainTabs'
@@ -428,14 +399,14 @@ export default function RootNavigator({
 
   return (
     <Stack.Navigator
-      key={`${user ? 'user' : 'guest'}-${hasCompletedOnboarding ? 'ready' : 'onboarding'}`}
+      key={`${firebaseUser ? 'user' : 'guest'}-${hasCompletedOnboarding ? 'ready' : 'onboarding'}`}
       screenOptions={{ headerShown: false }}
       initialRouteName={initialRouteName}
     >
       <Stack.Screen name="DeepLinkedProfile" component={DeepLinkedProfileRedirect} />
       <Stack.Screen name="DeepLinkedMatch" component={DeepLinkedMatchRedirect} />
       <Stack.Screen name="DeepLinkedLeaderboard" component={DeepLinkedLeaderboardRedirect} />
-      {user && hasCompletedOnboarding ? (
+      {firebaseUser && hasCompletedOnboarding ? (
         <>
           <Stack.Screen name="MainTabs" component={MainTabNavigator} />
           <Stack.Screen name="Matchmaking" component={MatchmakingScreen} />
@@ -455,7 +426,7 @@ export default function RootNavigator({
           <Stack.Screen name="Debug" component={DebugScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </>
-      ) : user ? (
+      ) : firebaseUser ? (
         <Stack.Screen name="Onboarding">
           {(props) => (
             <OnboardingScreen
