@@ -4,6 +4,7 @@ import { prisma } from '../models/prisma';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { bufferQuestionServes } from '../services/questionServeBuffer';
+import { gradeAnswer } from '../services/answerGrading';
 
 const router = Router();
 const SECTION_ORDER = ['QUANT', 'DILR', 'VARC'];
@@ -80,7 +81,9 @@ async function findNextPracticeQuestion(
       select: {
         id: true,
         category: true,
+        questionType: true,
         subTopic: true,
+        subType: true,
         difficulty: true,
         text: true,
         options: true,
@@ -98,7 +101,9 @@ async function findNextPracticeQuestion(
       select: {
         id: true,
         category: true,
+        questionType: true,
         subTopic: true,
+        subType: true,
         difficulty: true,
         text: true,
         options: true,
@@ -115,8 +120,11 @@ async function findNextPracticeQuestion(
 // ── POST /api/questions/:id/answer ─────────────────────────────────────────
 
 const answerSchema = z.object({
-  selectedAnswer: z.number().int().min(0).max(3),
+  selectedAnswer: z.number().int().min(0).max(3).optional(),
+  typedAnswer: z.string().min(1).optional(),
   timeTakenMs: z.number().int().min(0),
+}).refine((answer) => answer.selectedAnswer !== undefined || answer.typedAnswer !== undefined, {
+  message: 'selectedAnswer or typedAnswer is required',
 });
 
 router.post('/:id/answer', validate(answerSchema), async (req: Request, res: Response) => {
@@ -126,14 +134,15 @@ router.post('/:id/answer', validate(answerSchema), async (req: Request, res: Res
     return;
   }
 
-  const { selectedAnswer, timeTakenMs } = req.body;
-  const isCorrect = question.correctAnswer === selectedAnswer;
+  const { selectedAnswer, typedAnswer, timeTakenMs } = req.body;
+  const isCorrect = gradeAnswer(question, { selectedAnswer, typedAnswer });
 
   await prisma.practiceAnswer.create({
     data: {
       userId: req.user.id,
       questionId: question.id,
-      selectedAnswer,
+      selectedAnswer: selectedAnswer ?? null,
+      typedAnswer: typedAnswer ?? null,
       isCorrect,
       timeTakenMs,
     },
@@ -148,12 +157,13 @@ router.post('/:id/answer', validate(answerSchema), async (req: Request, res: Res
 
   res.json({
     success: true,
-    data: {
-      isCorrect,
-      correctAnswer: question.correctAnswer,
-      explanation: question.explanation,
-      timeTakenMs,
-    },
+      data: {
+        isCorrect,
+        correctAnswer: question.correctAnswer,
+        correctAnswerText: question.correctAnswerText,
+        explanation: question.explanation,
+        timeTakenMs,
+      },
   });
 });
 

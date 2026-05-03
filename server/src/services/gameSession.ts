@@ -5,29 +5,41 @@ import { calculateMatchElo, getRankTier, MatchEloResult } from './elo';
 import { invalidateUserGlobalRank } from './leaderboard';
 import { bufferQuestionServes } from './questionServeBuffer';
 import { invalidateUserById } from './userCache';
+import { gradeAnswer } from './answerGrading';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface PlayerAnswerRecord {
-  selected: number;
+  selected: number | null;
+  typed: string | null;
   correct: boolean;
   timeMs: number;
+}
+
+interface AnswerKey {
+  questionType: 'MCQ' | 'TITA';
+  correctAnswer: number | null;
+  correctAnswerText: string | null;
 }
 
 interface ResultsAnswerDetail {
   id: string;
   userId: string;
   questionId: string;
-  selectedAnswer: number;
+  selectedAnswer: number | null;
+  typedAnswer: string | null;
   isCorrect: boolean;
   timeTakenMs: number;
   question: {
     id: string;
     category: string;
+    questionType: string;
     subTopic: string | null;
+    subType: string | null;
     text: string;
     options: unknown;
-    correctAnswer: number;
+    correctAnswer: number | null;
+    correctAnswerText: string | null;
     explanation: string;
   };
 }
@@ -54,7 +66,7 @@ interface GameState {
   player1RatingImpact: RatingImpact;
   player2RatingImpact: RatingImpact;
   questionIds: string[];
-  correctAnswers: Record<string, number>; // server-only, never sent to clients
+  answerKeys: Record<string, AnswerKey>; // server-only, never sent to clients
   player1Progress: number;
   player2Progress: number;
   player1Score: number;
@@ -94,10 +106,13 @@ async function buildResultsAnswers(state: GameState): Promise<ResultsAnswerDetai
     select: {
       id: true,
       category: true,
+      questionType: true,
       subTopic: true,
+      subType: true,
       text: true,
       options: true,
       correctAnswer: true,
+      correctAnswerText: true,
       explanation: true,
     },
   });
@@ -113,6 +128,7 @@ async function buildResultsAnswers(state: GameState): Promise<ResultsAnswerDetai
       userId,
       questionId,
       selectedAnswer: record.selected,
+      typedAnswer: record.typed,
       isCorrect: record.correct,
       timeTakenMs: record.timeMs,
       question,
@@ -415,7 +431,7 @@ function balanceByCategory<T extends { category: string }>(
 async function selectQuestionsForMatch(
   p1Elo: number,
   p2Elo: number,
-): Promise<{ questionIds: string[]; correctAnswers: Record<string, number> }> {
+): Promise<{ questionIds: string[]; answerKeys: Record<string, AnswerKey> }> {
   const avgElo = (p1Elo + p2Elo) / 2;
 
   let minDiff: number, maxDiff: number;
@@ -429,16 +445,22 @@ async function selectQuestionsForMatch(
       isVerified: true,
       difficulty: { gte: minDiff, lte: maxDiff },
     },
-    select: { id: true, category: true, correctAnswer: true },
+    select: { id: true, category: true, questionType: true, correctAnswer: true, correctAnswerText: true },
   });
 
   const balanced = balanceByCategory(questions, QUESTION_COUNT);
 
   const questionIds = balanced.map((q) => q.id);
-  const correctAnswers: Record<string, number> = {};
-  for (const q of balanced) correctAnswers[q.id] = q.correctAnswer;
+  const answerKeys: Record<string, AnswerKey> = {};
+  for (const q of balanced) {
+    answerKeys[q.id] = {
+      questionType: q.questionType,
+      correctAnswer: q.correctAnswer,
+      correctAnswerText: q.correctAnswerText,
+    };
+  }
 
-  return { questionIds, correctAnswers };
+  return { questionIds, answerKeys };
 }
 
 // ─── Client-safe question (no correctAnswer or explanation) ───────────────────
@@ -449,7 +471,9 @@ async function getQuestionForClient(questionId: string) {
     select: {
       id: true,
       category: true,
+      questionType: true,
       subTopic: true,
+      subType: true,
       difficulty: true,
       text: true,
       options: true,
@@ -555,7 +579,8 @@ async function handleAnswer(
   userId: string,
   gameId: string,
   questionId: string,
-  selectedAnswer: number,
+  selectedAnswer: number | null,
+  typedAnswer: string | null,
   timeTakenMs: number,
   gameNs: Namespace,
 ): Promise<void> {
@@ -578,13 +603,14 @@ async function handleAnswer(
   // Reject if this question was already answered (double-submission guard)
   if (state[answerKey][questionId]) return;
 
-  const correctAnswer = state.correctAnswers[questionId];
-  if (correctAnswer === undefined) return;
+  const expectedAnswer = state.answerKeys[questionId];
+  if (!expectedAnswer) return;
 
-  const isCorrect = correctAnswer === selectedAnswer;
+  const isCorrect = gradeAnswer(expectedAnswer, { selectedAnswer, typedAnswer });
 
   state[answerKey][questionId] = {
     selected: selectedAnswer,
+    typed: typedAnswer,
     correct: isCorrect,
     timeMs: timeTakenMs,
   };
@@ -596,7 +622,8 @@ async function handleAnswer(
   socket.emit('answer:result', {
     questionId,
     isCorrect,
-    correctAnswer,
+    correctAnswer: expectedAnswer.correctAnswer,
+    correctAnswerText: expectedAnswer.correctAnswerText,
     yourScore: state[scoreKey],
   });
 
@@ -770,7 +797,8 @@ async function persistMatch(
     matchId: string;
     userId: string;
     questionId: string;
-    selectedAnswer: number;
+    selectedAnswer: number | null;
+    typedAnswer: string | null;
     isCorrect: boolean;
     timeTakenMs: number;
   }[] = [];
@@ -781,6 +809,7 @@ async function persistMatch(
       userId: state.player1Id,
       questionId,
       selectedAnswer: record.selected,
+      typedAnswer: record.typed,
       isCorrect: record.correct,
       timeTakenMs: record.timeMs,
     });
@@ -791,6 +820,7 @@ async function persistMatch(
       userId: state.player2Id,
       questionId,
       selectedAnswer: record.selected,
+      typedAnswer: record.typed,
       isCorrect: record.correct,
       timeTakenMs: record.timeMs,
     });
@@ -889,7 +919,7 @@ export async function initializeGame(
     gameNs: Namespace;
   },
 ): Promise<void> {
-  const { questionIds, correctAnswers } = await selectQuestionsForMatch(player1.elo, player2.elo);
+  const { questionIds, answerKeys } = await selectQuestionsForMatch(player1.elo, player2.elo);
   const joinDeadlineAt = Date.now() + PRESTART_TIMEOUT_MS;
 
   const state: GameState = {
@@ -902,7 +932,7 @@ export async function initializeGame(
     player1RatingImpact: options.player1RatingImpact,
     player2RatingImpact: options.player2RatingImpact,
     questionIds,
-    correctAnswers,
+    answerKeys,
     player1Progress: 0,
     player2Progress: 0,
     player1Score: 0,
@@ -1034,11 +1064,13 @@ export function registerGameHandlers(gameNs: Namespace): void {
         gameId,
         questionId,
         selectedAnswer,
+        typedAnswer,
         timeTakenMs,
       }: {
         gameId: string;
         questionId: string;
-        selectedAnswer: number;
+        selectedAnswer?: number;
+        typedAnswer?: string;
         timeTakenMs: number;
       }) => {
         handleAnswer(
@@ -1046,7 +1078,8 @@ export function registerGameHandlers(gameNs: Namespace): void {
           user.id,
           gameId,
           questionId,
-          selectedAnswer,
+          selectedAnswer ?? null,
+          typedAnswer ?? null,
           timeTakenMs,
           gameNs,
         ).catch((err) =>

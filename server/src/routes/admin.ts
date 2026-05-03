@@ -3,10 +3,12 @@ import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
 import { prisma } from '../models/prisma';
+import { Prisma } from '../generated/prisma/client';
 import { authMiddleware } from '../middleware/auth';
 import { adminOnly } from '../middleware/admin';
 import { validate } from '../middleware/validate';
 import { generateQuestions } from '../services/questionGenerator';
+import { importQuestionsFromJsonl } from '../services/questionImport';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -16,23 +18,59 @@ router.use(authMiddleware, adminOnly);
 
 // ── Zod schemas ────────────────────────────────────────────────────────────
 
-const createQuestionSchema = z.object({
+const questionSchemaBase = z.object({
+  questionType: z.enum(['MCQ', 'TITA']),
   category: z.enum(['QUANT', 'DILR', 'VARC']),
-  subTopic: z.string().optional(),
+  subTopic: z.string().nullable().optional(),
+  subType: z.string().nullable().optional(),
   difficulty: z.number().int().min(1).max(5),
   text: z.string().min(10),
-  options: z.array(z.string().min(1)).length(4),
-  correctAnswer: z.number().int().min(0).max(3),
+  options: z.array(z.string().min(1)).length(4).nullable().optional(),
+  correctAnswer: z.number().int().min(0).max(3).nullable().optional(),
+  correctAnswerText: z.string().min(1).nullable().optional(),
   explanation: z.string().min(10),
 });
 
-const updateQuestionSchema = createQuestionSchema.partial();
+const createQuestionSchema = questionSchemaBase.extend({
+  questionType: z.enum(['MCQ', 'TITA']).default('MCQ'),
+}).superRefine((question, ctx) => {
+  if (question.questionType === 'MCQ') {
+    if (!question.options) {
+      ctx.addIssue({ code: 'custom', path: ['options'], message: 'MCQ options are required' });
+    }
+    if (question.correctAnswer === undefined || question.correctAnswer === null) {
+      ctx.addIssue({ code: 'custom', path: ['correctAnswer'], message: 'MCQ correctAnswer is required' });
+    }
+  }
+
+  if (question.questionType === 'TITA') {
+    if (question.options !== undefined && question.options !== null) {
+      ctx.addIssue({ code: 'custom', path: ['options'], message: 'TITA options must be null' });
+    }
+    if (!question.correctAnswerText) {
+      ctx.addIssue({ code: 'custom', path: ['correctAnswerText'], message: 'TITA correctAnswerText is required' });
+    }
+  }
+});
+
+const updateQuestionSchema = questionSchemaBase.partial();
+
+type QuestionInput = z.infer<typeof createQuestionSchema>;
+
+function normalizeQuestionData(question: QuestionInput) {
+  return {
+    ...question,
+    options: question.questionType === 'MCQ' ? (question.options ?? []) : Prisma.DbNull,
+    correctAnswer: question.questionType === 'MCQ' ? (question.correctAnswer ?? 0) : null,
+    correctAnswerText: question.questionType === 'TITA' ? (question.correctAnswerText ?? '') : null,
+  };
+}
 
 // ── POST /api/admin/questions ──────────────────────────────────────────────
 
 router.post('/questions', validate(createQuestionSchema), async (req: Request, res: Response) => {
   const question = await prisma.question.create({
-    data: { ...req.body, source: 'MANUAL' },
+    data: { ...normalizeQuestionData(req.body), source: 'MANUAL' },
   });
   res.status(201).json({ success: true, data: question });
 });
@@ -97,16 +135,28 @@ router.get('/questions/:id', async (req: Request, res: Response) => {
 
 // ── PATCH /api/admin/questions/:id ─────────────────────────────────────────
 
-router.patch('/questions/:id', validate(updateQuestionSchema), async (req: Request, res: Response) => {
+router.patch('/questions/:id', async (req: Request, res: Response) => {
   const question = await prisma.question.findUnique({ where: { id: req.params.id } });
   if (!question) {
     res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Question not found' } });
     return;
   }
 
+  const partial = updateQuestionSchema.safeParse(req.body);
+  if (!partial.success) {
+    res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: partial.error.issues[0].message } });
+    return;
+  }
+
+  const merged = createQuestionSchema.safeParse({ ...question, ...partial.data });
+  if (!merged.success) {
+    res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: merged.error.issues[0].message } });
+    return;
+  }
+
   const updated = await prisma.question.update({
     where: { id: req.params.id },
-    data: req.body,
+    data: normalizeQuestionData(merged.data),
   });
   res.json({ success: true, data: updated });
 });
@@ -157,6 +207,18 @@ router.post('/questions/generate', validate(generateSchema), async (req: Request
   res.status(201).json({ success: true, data: results });
 });
 
+// ── POST /api/admin/questions/import-jsonl ───────────────────────────────────
+
+router.post('/questions/import-jsonl', upload.single('file'), async (req: Request, res: Response) => {
+  if (!req.file) {
+    res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'JSONL file required (field name: file)' } });
+    return;
+  }
+
+  const result = await importQuestionsFromJsonl(req.file.buffer.toString('utf-8'));
+  res.status(result.inserted > 0 ? 201 : 200).json({ success: true, data: result });
+});
+
 // ── POST /api/admin/questions/bulk ─────────────────────────────────────────
 
 router.post('/questions/bulk', upload.single('file'), async (req: Request, res: Response) => {
@@ -186,6 +248,7 @@ router.post('/questions/bulk', upload.single('file'), async (req: Request, res: 
 
     // Parse options from individual columns
     const parsed = {
+      questionType: 'MCQ',
       category: row.category,
       subTopic: row.sub_topic || undefined,
       difficulty: parseInt(row.difficulty),
@@ -206,7 +269,7 @@ router.post('/questions/bulk', upload.single('file'), async (req: Request, res: 
   let inserted = 0;
   if (valid.length > 0) {
     const result = await prisma.question.createMany({
-      data: valid.map((q) => ({ ...q, source: 'MANUAL' as const })),
+      data: valid.map((q) => ({ ...normalizeQuestionData(q), source: 'MANUAL' as const })),
     });
     inserted = result.count;
   }

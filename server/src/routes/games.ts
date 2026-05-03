@@ -184,10 +184,13 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
               select: {
                 id: true,
                 category: true,
+                questionType: true,
                 subTopic: true,
+                subType: true,
                 text: true,
                 options: true,
                 correctAnswer: true,
+                correctAnswerText: true,
                 explanation: true,
               },
             },

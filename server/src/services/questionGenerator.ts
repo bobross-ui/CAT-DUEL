@@ -76,11 +76,13 @@ export async function generateQuestions(params: GenerateParams) {
       const question = await prisma.question.create({
         data: {
           category: params.category,
+          questionType: 'MCQ',
           difficulty: params.difficulty,
           subTopic: validated.data.subTopic ?? params.subTopic ?? null,
           text: validated.data.text,
           options: validated.data.options,
           correctAnswer: validated.data.correctAnswer,
+          correctAnswerText: null,
           explanation: validated.data.explanation,
           source: 'AI',
           isVerified: false,
