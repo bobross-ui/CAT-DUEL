@@ -77,4 +77,28 @@ describe('importQuestionsFromJsonl', () => {
     expect(result.failed).toBe(1);
     expect(result.errors[0]).toMatchObject({ row: 1, message: 'MCQ options must contain 4 choices' });
   });
+
+  it('normalizes extracted math text before storing questions', async () => {
+    const row = JSON.stringify({
+      question_number: 1,
+      category: 'QUANT',
+      type: 'MCQ',
+      sub_type: 'QUANT_STANDARD',
+      text: 'A chord subtends $60^\\circ$ and another subtends $120^\\circ$.',
+      options: ['$5\\sqrt{3}$', '$2\\pi$', '$8$', '$6\\sqrt{2}$'],
+      correct_answer: '0',
+      sub_topic: 'Geometry',
+      explanation: 'Use $2^{6x}$ and $\\frac{\\log_2 3}{3}$ as examples.',
+      source_pdf: 'sample.pdf',
+      answer_mismatch: false,
+    });
+
+    const result = await importQuestionsFromJsonl(row);
+
+    expect(result).toMatchObject({ inserted: 1, skipped: 0, failed: 0 });
+    const created = create.mock.calls[0][0].data;
+    expect(created.text).toBe('A chord subtends 60° and another subtends 120°.');
+    expect(created.options).toEqual(['5√3', '2π', '8', '6√2']);
+    expect(created.explanation).toBe('Use 2⁶ˣ and log₂ 3/3 as examples.');
+  });
 });

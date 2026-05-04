@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { prisma } from '../models/prisma';
 import { Prisma } from '../generated/prisma/client';
+import { normalizeExtractedMathText } from './mathTextNormalizer';
 
 const IMPORT_DIFFICULTY = 3;
 
@@ -90,11 +91,11 @@ export async function importQuestionsFromJsonl(content: string): Promise<JsonlIm
         subTopic: row.sub_topic ?? null,
         subType: row.sub_type,
         difficulty: IMPORT_DIFFICULTY,
-        text: row.text,
-        options: row.type === 'MCQ' ? (row.options ?? []) : Prisma.DbNull,
+        text: normalizeExtractedMathText(row.text),
+        options: row.type === 'MCQ' ? (row.options ?? []).map(normalizeExtractedMathText) : Prisma.DbNull,
         correctAnswer: row.type === 'MCQ' ? Number(row.correct_answer) : null,
         correctAnswerText: row.type === 'TITA' ? row.correct_answer : null,
-        explanation: row.explanation,
+        explanation: normalizeExtractedMathText(row.explanation),
         source: 'EXTRACTED',
         sourcePdf: row.source_pdf,
         externalQuestionNumber: row.question_number,
