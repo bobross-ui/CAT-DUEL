@@ -175,6 +175,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
 
   const submitAnswer = useCallback(() => {
     if (!ds.currentQuestion) return;
+    if (ds.showFeedback) return;
     if (ds.currentQuestion.questionType === 'TITA' && ds.typedAnswer.trim().length === 0) return;
     if (ds.currentQuestion.questionType === 'MCQ' && ds.selectedAnswer === null) return;
     void playHaptic('answer_submit');
@@ -186,17 +187,54 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
         : { selectedAnswer: ds.selectedAnswer }),
       timeTakenMs: Date.now() - questionStartTime.current,
     });
-  }, [ds.currentQuestion, ds.selectedAnswer, ds.typedAnswer, gameId, playHaptic]);
+  }, [ds.currentQuestion, ds.selectedAnswer, ds.showFeedback, ds.typedAnswer, gameId, playHaptic]);
 
-  const shortcuts = useMemo(() => [
-    { key: '1', handler: () => selectAnswer(0) },
-    { key: '2', handler: () => selectAnswer(1) },
-    { key: '3', handler: () => selectAnswer(2) },
-    { key: '4', handler: () => selectAnswer(3) },
-    { key: 'Enter', handler: submitAnswer },
-    { key: 'Escape', handler: handleQuit },
-  ], [handleQuit, selectAnswer, submitAnswer]);
-  useKeyboardShortcuts(shortcuts, duelActive && !isTita);
+  const shortcuts = useMemo(() => {
+    if (isTita) {
+      return [
+        ...['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((key) => ({
+          key,
+          handler: () => setDs(prev => {
+            if (prev.showFeedback) return prev;
+            return { ...prev, typedAnswer: `${prev.typedAnswer}${key}` };
+          }),
+        })),
+        {
+          key: '.',
+          handler: () => setDs(prev => {
+            if (prev.showFeedback || prev.typedAnswer.includes('.')) return prev;
+            return { ...prev, typedAnswer: `${prev.typedAnswer}.` };
+          }),
+        },
+        {
+          key: '-',
+          handler: () => setDs(prev => {
+            if (prev.showFeedback || prev.typedAnswer.length > 0) return prev;
+            return { ...prev, typedAnswer: '-' };
+          }),
+        },
+        {
+          key: 'Backspace',
+          handler: () => setDs(prev => {
+            if (prev.showFeedback) return prev;
+            return { ...prev, typedAnswer: prev.typedAnswer.slice(0, -1) };
+          }),
+        },
+        { key: 'Enter', handler: submitAnswer },
+        { key: 'Escape', handler: handleQuit },
+      ];
+    }
+
+    return [
+      { key: '1', handler: () => selectAnswer(0) },
+      { key: '2', handler: () => selectAnswer(1) },
+      { key: '3', handler: () => selectAnswer(2) },
+      { key: '4', handler: () => selectAnswer(3) },
+      { key: 'Enter', handler: submitAnswer },
+      { key: 'Escape', handler: handleQuit },
+    ];
+  }, [handleQuit, isTita, selectAnswer, submitAnswer]);
+  useKeyboardShortcuts(shortcuts, duelActive);
 
   useEffect(() => {
     if (matchStartedTrackedRef.current) return;
