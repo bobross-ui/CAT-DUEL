@@ -5,9 +5,10 @@ import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { bufferQuestionServes } from '../services/questionServeBuffer';
 import { gradeAnswer } from '../services/answerGrading';
+import type { Prisma, QuestionCategory } from '../generated/prisma/client';
 
 const router = Router();
-const SECTION_ORDER = ['QUANT', 'DILR', 'VARC'];
+const SECTION_ORDER: QuestionCategory[] = ['QUANT', 'DILR', 'VARC'];
 const MAX_RANDOM_SKIP = 50;
 
 router.use(authMiddleware);
@@ -20,6 +21,7 @@ router.get('/next', async (req: Request, res: Response) => {
   const requestedCategories = parseCategories(categories);
   const counts = parseCategoryCounts(categoryCounts);
   const question = await findNextPracticeQuestion(
+    req.user.id,
     requestedCategories.length > 0 ? requestedCategories : SECTION_ORDER,
     counts,
     difficulty ? parseInt(difficulty as string) : undefined,
@@ -35,30 +37,37 @@ router.get('/next', async (req: Request, res: Response) => {
   res.json({ success: true, data: question });
 });
 
-function parseCategories(value: unknown): string[] {
+function parseCategories(value: unknown): QuestionCategory[] {
   if (!value) return [];
   const values = Array.isArray(value) ? value : [value];
   return values
     .flatMap((item) => String(item).split(','))
     .map((item) => item.trim())
-    .filter((item) => SECTION_ORDER.includes(item));
+    .filter(isQuestionCategory);
 }
 
-function parseCategoryCounts(value: unknown): Record<string, number> {
-  const counts: Record<string, number> = {};
+function parseCategoryCounts(value: unknown): Partial<Record<QuestionCategory, number>> {
+  const counts: Partial<Record<QuestionCategory, number>> = {};
   if (!value) return counts;
 
   const values = Array.isArray(value) ? value : [value];
   for (const part of values.flatMap((item) => String(item).split(','))) {
     const [category, rawCount] = part.split(':');
-    if (!category || !SECTION_ORDER.includes(category)) continue;
+    if (!isQuestionCategory(category)) continue;
     counts[category] = Math.max(0, parseInt(rawCount, 10) || 0);
   }
 
   return counts;
 }
 
-function getRoundRobinCategories(categories: string[], counts: Record<string, number>): string[] {
+function isQuestionCategory(value: unknown): value is QuestionCategory {
+  return SECTION_ORDER.includes(value as QuestionCategory);
+}
+
+function getRoundRobinCategories(
+  categories: QuestionCategory[],
+  counts: Partial<Record<QuestionCategory, number>>,
+): QuestionCategory[] {
   return [...categories].sort((a, b) => {
     const countDiff = (counts[a] ?? 0) - (counts[b] ?? 0);
     if (countDiff !== 0) return countDiff;
@@ -66,13 +75,35 @@ function getRoundRobinCategories(categories: string[], counts: Record<string, nu
   });
 }
 
-async function findNextPracticeQuestion(
-  categories: string[],
-  counts: Record<string, number>,
+export async function findNextPracticeQuestion(
+  userId: string,
+  categories: QuestionCategory[],
+  counts: Partial<Record<QuestionCategory, number>>,
   difficulty?: number,
 ) {
-  for (const category of getRoundRobinCategories(categories, counts)) {
-    const where: Record<string, unknown> = { isVerified: true, category };
+  const orderedCategories = getRoundRobinCategories(categories, counts);
+  const unseenQuestion = await findPracticeQuestionInCategories(
+    orderedCategories,
+    userId,
+    difficulty,
+  );
+
+  if (unseenQuestion) return unseenQuestion;
+
+  return findPracticeQuestionInCategories(orderedCategories, undefined, difficulty);
+}
+
+async function findPracticeQuestionInCategories(
+  categories: QuestionCategory[],
+  userId?: string,
+  difficulty?: number,
+) {
+  for (const category of categories) {
+    const where: Prisma.QuestionWhereInput = {
+      isVerified: true,
+      category,
+    };
+    if (userId) where.practiceAnswers = { none: { userId } };
     if (difficulty) where.difficulty = difficulty;
 
     const randomSkip = Math.floor(Math.random() * MAX_RANDOM_SKIP);
