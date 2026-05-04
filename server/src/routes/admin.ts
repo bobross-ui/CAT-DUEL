@@ -8,10 +8,11 @@ import { authMiddleware } from '../middleware/auth';
 import { adminOnly } from '../middleware/admin';
 import { validate } from '../middleware/validate';
 import { generateQuestions } from '../services/questionGenerator';
-import { importQuestionsFromJsonl } from '../services/questionImport';
+import { importQuestionsFromJsonl, JsonlImportResult } from '../services/questionImport';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 20 } });
+const jsonlUploadFields = ['file', 'files', 'files[]'] as const;
 
 // All admin routes require auth + admin role
 router.use(authMiddleware, adminOnly);
@@ -56,6 +57,7 @@ const createQuestionSchema = questionSchemaBase.extend({
 const updateQuestionSchema = questionSchemaBase.partial();
 
 type QuestionInput = z.infer<typeof createQuestionSchema>;
+type JsonlImportFileError = JsonlImportResult['errors'][number] & { file: string };
 
 function normalizeQuestionData(question: QuestionInput) {
   return {
@@ -64,6 +66,14 @@ function normalizeQuestionData(question: QuestionInput) {
     correctAnswer: question.questionType === 'MCQ' ? (question.correctAnswer ?? 0) : null,
     correctAnswerText: question.questionType === 'TITA' ? (question.correctAnswerText ?? '') : null,
   };
+}
+
+function getUploadedFiles(req: Request) {
+  if (req.file) return [req.file];
+  if (Array.isArray(req.files)) return req.files;
+
+  const filesByField = req.files as Partial<Record<typeof jsonlUploadFields[number], Express.Multer.File[]>> | undefined;
+  return jsonlUploadFields.flatMap((field) => filesByField?.[field] ?? []);
 }
 
 // ── POST /api/admin/questions ──────────────────────────────────────────────
@@ -207,16 +217,33 @@ router.post('/questions/generate', validate(generateSchema), async (req: Request
   res.status(201).json({ success: true, data: results });
 });
 
-// ── POST /api/admin/questions/import-jsonl ───────────────────────────────────
+// ── POST /api/admin/questions/import-jsonl ─────────────────────────────────
 
-router.post('/questions/import-jsonl', upload.single('file'), async (req: Request, res: Response) => {
-  if (!req.file) {
-    res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'JSONL file required (field name: file)' } });
+router.post('/questions/import-jsonl', upload.fields(jsonlUploadFields.map((name) => ({ name, maxCount: 20 }))), async (req: Request, res: Response) => {
+  const files = getUploadedFiles(req);
+  if (files.length === 0) {
+    res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'JSONL file required (field name: file or files)' } });
     return;
   }
 
-  const result = await importQuestionsFromJsonl(req.file.buffer.toString('utf-8'));
-  res.status(result.inserted > 0 ? 201 : 200).json({ success: true, data: result });
+  const result: Omit<JsonlImportResult, 'errors'> & { errors: JsonlImportFileError[] } = {
+    inserted: 0,
+    skipped: 0,
+    failed: 0,
+    errors: [],
+  };
+  const fileResults: (JsonlImportResult & { file: string })[] = [];
+
+  for (const file of files) {
+    const fileResult = await importQuestionsFromJsonl(file.buffer.toString('utf-8'));
+    result.inserted += fileResult.inserted;
+    result.skipped += fileResult.skipped;
+    result.failed += fileResult.failed;
+    result.errors.push(...fileResult.errors.map((error) => ({ file: file.originalname, ...error })));
+    fileResults.push({ file: file.originalname, ...fileResult });
+  }
+
+  res.status(result.inserted > 0 ? 201 : 200).json({ success: true, data: { ...result, files: fileResults } });
 });
 
 // ── POST /api/admin/questions/bulk ─────────────────────────────────────────
