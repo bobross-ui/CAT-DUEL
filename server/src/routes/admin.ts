@@ -55,6 +55,9 @@ const createQuestionSchema = questionSchemaBase.extend({
 });
 
 const updateQuestionSchema = questionSchemaBase.partial();
+const verifyQuestionSchema = z.object({
+  isVerified: z.boolean().default(true),
+});
 
 type QuestionInput = z.infer<typeof createQuestionSchema>;
 type JsonlImportFileError = JsonlImportResult['errors'][number] & { file: string };
@@ -193,9 +196,15 @@ router.patch('/questions/:id/verify', async (req: Request, res: Response) => {
     return;
   }
 
+  const parsed = verifyQuestionSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0].message } });
+    return;
+  }
+
   const updated = await prisma.question.update({
     where: { id: req.params.id },
-    data: { isVerified: true },
+    data: { isVerified: parsed.data.isVerified },
   });
   res.json({ success: true, data: updated });
 });

@@ -11,6 +11,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import Button from '../components/Button';
 import MathText from '../components/MathText';
 import TitaAnswerPad from '../components/TitaAnswerPad';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Question'>;
 
@@ -37,6 +38,7 @@ function getCategoryCounts(questions: AnsweredQ[]): Record<string, number> {
 export default function QuestionScreen({ navigation, route }: Props) {
   const { categories, difficulty } = route.params;
   const { theme } = useTheme();
+  const { user: currentProfile } = useCurrentProfile();
 
   const [question, setQuestion] = useState<Question | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +48,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
   const [typedAnswer, setTypedAnswer] = useState('');
   const [result, setResult] = useState<AnswerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [flaggingIssue, setFlaggingIssue] = useState(false);
 
   const session = useRef<SessionStats>({
     questionsAnswered: 0,
@@ -65,6 +68,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
     setSelectedOption(null);
     setTypedAnswer('');
     setResult(null);
+    setFlaggingIssue(false);
     questionStartTime.current = Date.now();
 
     try {
@@ -120,6 +124,19 @@ export default function QuestionScreen({ navigation, route }: Props) {
     }
   }
 
+  async function handleFlagIssue() {
+    if (!question || flaggingIssue) return;
+    setFlaggingIssue(true);
+
+    try {
+      await questionService.setVerified(question.id, false);
+      await loadNextQuestion();
+    } catch {
+      setError('Failed to flag question.');
+      setFlaggingIssue(false);
+    }
+  }
+
   function handleEndSession() {
     navigation.replace('PracticeSummary', {
       total: session.current.questionsAnswered,
@@ -171,6 +188,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
 
   const qNumber = session.current.questionsAnswered + 1;
   const isTita = question?.questionType === 'TITA';
+  const isAdmin = currentProfile?.role === 'admin';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
@@ -272,6 +290,17 @@ export default function QuestionScreen({ navigation, route }: Props) {
 
       {/* ── Footer ── */}
       <View style={[styles.footer, { borderTopColor: theme.line }]}>
+        {isAdmin && question ? (
+          <Button
+            label="Flag issue"
+            variant="coral"
+            onPress={handleFlagIssue}
+            loading={flaggingIssue}
+            disabled={submitting}
+            accessibilityHint="Marks this question as unverified and removes it from future practice and duel selection"
+            style={styles.flagButton}
+          />
+        ) : null}
         {result ? (
           <Button label="Next →" onPress={loadNextQuestion} />
         ) : (
@@ -334,7 +363,8 @@ const styles = StyleSheet.create({
   explanationText: {},
 
   // Footer
-  footer: { padding: 20, borderTopWidth: 1 },
+  footer: { padding: 20, borderTopWidth: 1, gap: 10 },
+  flagButton: { marginBottom: 2 },
 
   // No more
   noMoreTitle: { textAlign: 'center', marginBottom: 10 },

@@ -41,6 +41,12 @@ export const questionService = {
       `/questions/${questionId}/answer`,
       answer
     ),
+
+  setVerified: (questionId: string, isVerified: boolean) =>
+    api.patch<{ success: boolean; data: unknown }>(
+      `/admin/questions/${questionId}/verify`,
+      { isVerified },
+    ),
 };
 
 function formatCategoryCounts(counts: Record<string, number> | undefined): string | undefined {

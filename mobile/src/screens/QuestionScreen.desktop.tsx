@@ -15,6 +15,7 @@ import MathText from '../components/MathText';
 import TitaAnswerPad from '../components/TitaAnswerPad';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { questionService, type AnswerResult, type Question } from '../services/questions';
 import { useTheme } from '../theme/ThemeProvider';
 import MobileQuestionScreen from './QuestionScreen.mobile';
@@ -46,6 +47,7 @@ function getCategoryCounts(questions: AnsweredQ[]): Record<string, number> {
 export default function QuestionScreenDesktop({ navigation, route }: Props) {
   const { categories, difficulty } = route.params;
   const { theme } = useTheme();
+  const { user: currentProfile } = useCurrentProfile();
   const categoryLabel = categories.join(' · ');
 
   const [question, setQuestion] = useState<Question | null>(null);
@@ -57,6 +59,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
   const [hoveredOption, setHoveredOption] = useState<number | null>(null);
   const [result, setResult] = useState<AnswerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [flaggingIssue, setFlaggingIssue] = useState(false);
 
   const session = useRef<SessionStats>({
     questionsAnswered: 0,
@@ -67,6 +70,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
   const questionStartTime = useRef<number>(Date.now());
 
   const qNumber = session.current.questionsAnswered + 1;
+  const isAdmin = currentProfile?.role === 'admin';
   useDocumentTitle(question ? `Practice · Q${qNumber} · CAT Duel` : 'Practice · CAT Duel');
 
   const handleEndSession = useCallback(() => {
@@ -85,6 +89,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
     setTypedAnswer('');
     setHoveredOption(null);
     setResult(null);
+    setFlaggingIssue(false);
     questionStartTime.current = Date.now();
 
     try {
@@ -143,6 +148,19 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
       setSubmitting(false);
     }
   }, [question, selectedOption, submitting, typedAnswer]);
+
+  const handleFlagIssue = useCallback(async () => {
+    if (!question || flaggingIssue) return;
+    setFlaggingIssue(true);
+
+    try {
+      await questionService.setVerified(question.id, false);
+      await loadNextQuestion();
+    } catch {
+      setError('Failed to flag question.');
+      setFlaggingIssue(false);
+    }
+  }, [flaggingIssue, loadNextQuestion, question]);
 
   const selectOption = useCallback((index: number) => {
     if (result) return;
@@ -254,14 +272,27 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
           <View style={[styles.modePill, { backgroundColor: theme.bg2, borderColor: theme.line }]}>
             <Text.Mono preset="chipLabel" color={theme.ink3}>PRACTICE</Text.Mono>
           </View>
-          <Pressable
-            onPress={handleEndSession}
-            accessibilityRole="button"
-            accessibilityLabel="End practice session"
-            style={({ pressed }) => [styles.endButton, { opacity: pressed ? 0.72 : 1 }]}
-          >
-            <Text.Sans preset="label" color={theme.ink3}>End session</Text.Sans>
-          </Pressable>
+          <View style={styles.headerActions}>
+            {isAdmin && question ? (
+              <Button
+                label="Flag issue"
+                variant="coral"
+                onPress={handleFlagIssue}
+                loading={flaggingIssue}
+                disabled={submitting}
+                accessibilityHint="Marks this question as unverified and removes it from future practice and duel selection"
+                style={styles.flagButton}
+              />
+            ) : null}
+            <Pressable
+              onPress={handleEndSession}
+              accessibilityRole="button"
+              accessibilityLabel="End practice session"
+              style={({ pressed }) => [styles.endButton, { opacity: pressed ? 0.72 : 1 }]}
+            >
+              <Text.Sans preset="label" color={theme.ink3}>End session</Text.Sans>
+            </Pressable>
+          </View>
         </View>
 
         <View style={[styles.practiceBody, { borderColor: theme.line, backgroundColor: theme.card }]}>
@@ -485,6 +516,16 @@ const styles = StyleSheet.create({
     minHeight: 36,
     justifyContent: 'center',
     paddingHorizontal: 10,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  flagButton: {
+    minHeight: 36,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
   practiceBody: {
     flex: 1,
