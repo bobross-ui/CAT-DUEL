@@ -16,6 +16,8 @@ import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
+import MathText from '../components/MathText';
+import TitaAnswerPad from '../components/TitaAnswerPad';
 import { radii } from '../theme/tokens';
 import { track } from '../services/analytics';
 import { queryKeys } from '../queries/keys';
@@ -33,6 +35,7 @@ interface DuelState {
   questionNumber: number;
   totalQuestions: number;
   selectedAnswer: number | null;
+  typedAnswer: string;
   showFeedback: boolean;
   yourScore: number;
   opponentScore: number;
@@ -45,6 +48,7 @@ const INITIAL: DuelState = {
   questionNumber: 0,
   totalQuestions: 0,
   selectedAnswer: null,
+  typedAnswer: '',
   showFeedback: false,
   yourScore: 0,
   opponentScore: 0,
@@ -154,7 +158,7 @@ export default function DuelScreen({ route, navigation }: Props) {
           questionOpacity.setValue(1);
           setDs(prev => ({
             ...prev, currentQuestion: question, questionNumber, totalQuestions,
-            selectedAnswer: null, showFeedback: false,
+            selectedAnswer: null, typedAnswer: '', showFeedback: false,
           }));
           return;
         }
@@ -164,13 +168,13 @@ export default function DuelScreen({ route, navigation }: Props) {
           questionStartTime.current = Date.now();
           setDs(prev => ({
             ...prev, currentQuestion: question, questionNumber, totalQuestions,
-            selectedAnswer: null, showFeedback: false,
+            selectedAnswer: null, typedAnswer: '', showFeedback: false,
           }));
           Animated.timing(questionOpacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
         });
       });
 
-      socket.on('answer:result', ({ yourScore }: { isCorrect: boolean; correctAnswer: number; yourScore: number }) => {
+      socket.on('answer:result', ({ yourScore }: { isCorrect: boolean; correctAnswer: number | null; correctAnswerText?: string | null; yourScore: number }) => {
         if (!mounted) return;
         pulseScore(yourScoreScale);
         setDs(prev => ({ ...prev, yourScore, showFeedback: true }));
@@ -235,6 +239,7 @@ export default function DuelScreen({ route, navigation }: Props) {
           totalQuestions,
           opponentProgress,
           selectedAnswer: null,
+          typedAnswer: '',
           showFeedback: false,
         }));
       });
@@ -293,12 +298,16 @@ export default function DuelScreen({ route, navigation }: Props) {
   }, []);
 
   function submitAnswer() {
-    if (ds.selectedAnswer === null || !ds.currentQuestion) return;
+    if (!ds.currentQuestion) return;
+    if (ds.currentQuestion.questionType === 'TITA' && ds.typedAnswer.trim().length === 0) return;
+    if (ds.currentQuestion.questionType === 'MCQ' && ds.selectedAnswer === null) return;
     void playHaptic('answer_submit');
     socketRef.current?.emit('answer:submit', {
       gameId,
       questionId: ds.currentQuestion.id,
-      selectedAnswer: ds.selectedAnswer,
+      ...(ds.currentQuestion.questionType === 'TITA'
+        ? { typedAnswer: ds.typedAnswer }
+        : { selectedAnswer: ds.selectedAnswer }),
       timeTakenMs: Date.now() - questionStartTime.current,
     });
   }
@@ -320,6 +329,7 @@ export default function DuelScreen({ route, navigation }: Props) {
   const oppName         = opponent.displayName ?? 'Opp';
   const opponentDone    = ds.opponentProgress && ds.opponentProgress.questionsAnswered >= ds.totalQuestions;
   const category        = [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ');
+  const isTita          = ds.currentQuestion.questionType === 'TITA';
 
   return (
     <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
@@ -411,13 +421,19 @@ export default function DuelScreen({ route, navigation }: Props) {
           </View>
 
           {/* Question */}
-          <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>
+          <MathText preset="question" color={theme.ink} style={styles.questionText}>
             {ds.currentQuestion.text}
-          </AppText.Serif>
+          </MathText>
 
-          {/* Options */}
-          <View style={styles.optionsContainer}>
-            {(ds.currentQuestion.options as string[]).map((option, index) => {
+          {isTita ? (
+            <TitaAnswerPad
+              value={ds.typedAnswer}
+              onChange={(value) => setDs(prev => ({ ...prev, typedAnswer: value }))}
+              disabled={ds.showFeedback}
+            />
+          ) : (
+            <View style={styles.optionsContainer}>
+              {(ds.currentQuestion.options ?? []).map((option, index) => {
               const isSelected = ds.selectedAnswer === index;
               return (
                 <Pressable
@@ -432,6 +448,7 @@ export default function DuelScreen({ route, navigation }: Props) {
                   onPress={() => !ds.showFeedback && setDs(prev => ({
                     ...prev,
                     selectedAnswer: prev.selectedAnswer === index ? null : index,
+                    typedAnswer: '',
                   }))}
                   disabled={ds.showFeedback}
                   accessibilityRole="button"
@@ -445,13 +462,14 @@ export default function DuelScreen({ route, navigation }: Props) {
                   >
                     {String.fromCharCode(65 + index)}
                   </AppText.Serif>
-                  <AppText.Sans preset="body" color={theme.ink} style={styles.optionText}>
+                  <MathText preset="body" color={theme.ink} style={styles.optionText}>
                     {option}
-                  </AppText.Sans>
+                  </MathText>
                 </Pressable>
               );
-            })}
-          </View>
+              })}
+            </View>
+          )}
         </ScrollView>
       </Animated.View>
 
@@ -469,7 +487,7 @@ export default function DuelScreen({ route, navigation }: Props) {
         </Pressable>
         {!ds.showFeedback && (
           <View style={styles.submitWrap}>
-            <Button label="Submit" onPress={submitAnswer} disabled={ds.selectedAnswer === null} />
+            <Button label="Submit" onPress={submitAnswer} disabled={isTita ? ds.typedAnswer.trim().length === 0 : ds.selectedAnswer === null} />
           </View>
         )}
       </View>

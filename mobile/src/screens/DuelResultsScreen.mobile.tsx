@@ -14,6 +14,7 @@ import { RootStackParamList } from '../navigation';
 import Button from '../components/Button';
 import ShareLinkModal from '../components/ShareLinkModal';
 import AppText from '../components/Text';
+import MathText from '../components/MathText';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
@@ -27,16 +28,20 @@ interface AnswerDetail {
   id: string;
   userId: string;
   questionId: string;
-  selectedAnswer: number;
+  selectedAnswer: number | null;
+  typedAnswer: string | null;
   isCorrect: boolean;
   timeTakenMs: number;
   question: {
     id: string;
     category: string;
+    questionType: 'MCQ' | 'TITA';
     subTopic: string | null;
+    subType: string | null;
     text: string;
-    options: string[];
-    correctAnswer: number;
+    options: string[] | null;
+    correctAnswer: number | null;
+    correctAnswerText: string | null;
     explanation: string;
   };
 }
@@ -58,6 +63,22 @@ function MarkCircle({ correct, dim = false }: { correct: boolean | null; dim?: b
     <View style={[styles.markCircle, { backgroundColor: bg, opacity: dim ? 0.5 : 1 }]}>
       <AppText.Sans preset="label" color={color} style={styles.markSymbol}>
         {symbol}
+      </AppText.Sans>
+    </View>
+  );
+}
+
+function AnswerValue({ label, value, correct }: { label: string; value: string; correct: boolean | null }) {
+  const { theme } = useTheme();
+  const color = correct === null ? theme.ink2 : correct ? theme.accentDeep : theme.coral;
+
+  return (
+    <View style={[styles.answerValue, { backgroundColor: theme.bg2, borderColor: theme.line }]}>
+      <AppText.Mono preset="chipLabel" color={theme.ink3} style={styles.uppercase}>
+        {label}
+      </AppText.Mono>
+      <AppText.Sans preset="bodyMed" color={color}>
+        {value}
       </AppText.Sans>
     </View>
   );
@@ -295,12 +316,18 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
                   {/* Expanded detail */}
                   {isExpanded && (
                     <View style={[styles.expandedSection, { borderTopColor: theme.line }]}>
-                      <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>
+                      <MathText preset="question" color={theme.ink} style={styles.questionText}>
                         {q.question.text}
-                      </AppText.Serif>
+                      </MathText>
 
-                      <View style={styles.optionsList}>
-                        {(q.question.options as string[]).map((opt, i) => {
+                      {q.question.questionType === 'TITA' ? (
+                        <View style={styles.titaReview}>
+                          <AnswerValue label="your answer" value={q.yourAnswer?.typedAnswer ?? '—'} correct={q.yourAnswer?.isCorrect ?? null} />
+                          <AnswerValue label="correct answer" value={q.question.correctAnswerText ?? '—'} correct />
+                        </View>
+                      ) : (
+                        <View style={styles.optionsList}>
+                          {(q.question.options ?? []).map((opt, i) => {
                           const isCorrectOpt  = i === q.question.correctAnswer;
                           const isYourWrong   = q.yourAnswer != null
                             && i === q.yourAnswer.selectedAnswer
@@ -320,13 +347,14 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
                               >
                                 {String.fromCharCode(65 + i)}
                               </AppText.Mono>
-                              <AppText.Sans preset="body" color={color} style={{ flex: 1 }}>
+                              <MathText preset="body" color={color} style={{ flex: 1 }}>
                                 {opt}
-                              </AppText.Sans>
+                              </MathText>
                             </View>
                           );
-                        })}
-                      </View>
+                          })}
+                        </View>
+                      )}
 
                       <AppText.Mono
                         preset="eyebrow"
@@ -335,9 +363,9 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
                       >
                         Explanation
                       </AppText.Mono>
-                      <AppText.Sans preset="body" color={theme.ink2}>
+                      <MathText preset="body" color={theme.ink2}>
                         {q.question.explanation}
-                      </AppText.Sans>
+                      </MathText>
                     </View>
                   )}
                 </Pressable>
@@ -474,6 +502,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'center',
   },
+  uppercase: {
+    textTransform: 'uppercase',
+  },
 
   // Expanded section
   expandedSection: {
@@ -482,6 +513,14 @@ const styles = StyleSheet.create({
   },
   questionText: { marginBottom: 14 },
   optionsList:  { gap: 6 },
+  titaReview: { gap: 8 },
+  answerValue: {
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

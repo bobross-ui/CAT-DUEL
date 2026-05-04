@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import MathText from '../components/MathText';
 import ShareLinkModal from '../components/ShareLinkModal';
 import Text from '../components/Text';
 import DesktopFrame from '../components/web/DesktopFrame';
@@ -24,16 +25,20 @@ interface AnswerDetail {
   id: string;
   userId: string;
   questionId: string;
-  selectedAnswer: number;
+  selectedAnswer: number | null;
+  typedAnswer: string | null;
   isCorrect: boolean;
   timeTakenMs: number;
   question: {
     id: string;
     category: string;
+    questionType: 'MCQ' | 'TITA';
     subTopic: string | null;
+    subType: string | null;
     text: string;
-    options: string[];
-    correctAnswer: number;
+    options: string[] | null;
+    correctAnswer: number | null;
+    correctAnswerText: string | null;
     explanation: string;
   };
 }
@@ -70,6 +75,22 @@ function MarkCircle({ correct, dim = false }: { correct: boolean | null; dim?: b
     <View style={[styles.markCircle, { backgroundColor: bg, opacity: dim ? 0.48 : 1 }]}>
       <Text.Sans preset="label" color={color} style={styles.markSymbol}>
         {symbol}
+      </Text.Sans>
+    </View>
+  );
+}
+
+function AnswerValue({ label, value, correct }: { label: string; value: string; correct: boolean | null }) {
+  const { theme } = useTheme();
+  const color = correct === null ? theme.ink2 : correct ? theme.accentDeep : theme.coral;
+
+  return (
+    <View style={[styles.answerValue, { backgroundColor: theme.card, borderColor: theme.line }]}>
+      <Text.Mono preset="chipLabel" color={theme.ink3} style={styles.uppercase}>
+        {label}
+      </Text.Mono>
+      <Text.Sans preset="bodyMed" color={color}>
+        {value}
       </Text.Sans>
     </View>
   );
@@ -273,12 +294,18 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
 
                     {isExpanded ? (
                       <View style={[styles.expandedReview, { backgroundColor: theme.bg2, borderBottomColor: theme.line2 }]}>
-                        <Text.Serif preset="questionLg" color={theme.ink} style={styles.expandedQuestion}>
+                        <MathText preset="question" color={theme.ink} style={styles.expandedQuestion}>
                           {row.question.text}
-                        </Text.Serif>
+                        </MathText>
 
-                        <View style={styles.optionsList}>
-                          {row.question.options.map((option, optionIndex) => {
+                        {row.question.questionType === 'TITA' ? (
+                          <View style={styles.titaReview}>
+                            <AnswerValue label="your answer" value={row.yourAnswer?.typedAnswer ?? '-'} correct={row.yourAnswer?.isCorrect ?? null} />
+                            <AnswerValue label="correct answer" value={row.question.correctAnswerText ?? '-'} correct />
+                          </View>
+                        ) : (
+                          <View style={styles.optionsList}>
+                            {(row.question.options ?? []).map((option, optionIndex) => {
                             const isCorrectOption = optionIndex === row.question.correctAnswer;
                             const isYourPick = row.yourAnswer?.selectedAnswer === optionIndex;
                             const isTheirPick = row.theirAnswer?.selectedAnswer === optionIndex;
@@ -302,9 +329,9 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
                                 <Text.Mono preset="mono" color={optionColor} style={styles.optionLetter}>
                                   {String.fromCharCode(65 + optionIndex)}
                                 </Text.Mono>
-                                <Text.Sans preset="body" color={optionColor} style={styles.optionText}>
+                                <MathText preset="body" color={optionColor} style={styles.optionText}>
                                   {option}
-                                </Text.Sans>
+                                </MathText>
                                 <View style={styles.optionTags}>
                                   {isYourPick ? (
                                     <Text.Mono preset="chipLabel" color={optionColor}>YOU</Text.Mono>
@@ -315,16 +342,17 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
                                 </View>
                               </View>
                             );
-                          })}
-                        </View>
+                            })}
+                          </View>
+                        )}
 
                         <View style={styles.explanationBlock}>
                           <Text.Mono preset="eyebrow" color={theme.ink3} style={styles.uppercase}>
                             Explanation
                           </Text.Mono>
-                          <Text.Sans preset="body" color={theme.ink2}>
+                          <MathText preset="body" color={theme.ink2}>
                             {row.question.explanation}
-                          </Text.Sans>
+                          </MathText>
                         </View>
                       </View>
                     ) : null}
@@ -585,6 +613,17 @@ const styles = StyleSheet.create({
   },
   optionsList: {
     gap: 8,
+  },
+  titaReview: {
+    gap: 8,
+    maxWidth: 480,
+  },
+  answerValue: {
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
   },
   optionRow: {
     flexDirection: 'row',

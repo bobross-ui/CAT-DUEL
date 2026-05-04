@@ -16,7 +16,9 @@ import EyebrowLabel from '../components/web/EyebrowLabel';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import MathText from '../components/MathText';
 import Text from '../components/Text';
+import TitaAnswerPad from '../components/TitaAnswerPad';
 import { useAuth } from '../context/AuthContext';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
@@ -44,6 +46,7 @@ interface DuelState {
   questionNumber: number;
   totalQuestions: number;
   selectedAnswer: number | null;
+  typedAnswer: string;
   showFeedback: boolean;
   yourScore: number;
   opponentScore: number;
@@ -56,6 +59,7 @@ const INITIAL: DuelState = {
   questionNumber: 0,
   totalQuestions: 0,
   selectedAnswer: null,
+  typedAnswer: '',
   showFeedback: false,
   yourScore: 0,
   opponentScore: 0,
@@ -136,6 +140,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   const opponentProgressPct = ds.totalQuestions > 0
     ? ((ds.opponentProgress?.questionsAnswered ?? 0) / ds.totalQuestions)
     : 0;
+  const isTita = ds.currentQuestion.questionType === 'TITA';
 
   useDocumentTitle(`${isTimerCritical ? '(!) ' : ''}${formatTime(ds.timeRemaining)} Duel · CAT Duel`);
   useUnsavedChangesWarning(duelActive);
@@ -164,20 +169,24 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   const selectAnswer = useCallback((index: number) => {
     setDs(prev => {
       if (prev.showFeedback) return prev;
-      return { ...prev, selectedAnswer: index };
+      return { ...prev, selectedAnswer: index, typedAnswer: '' };
     });
   }, []);
 
   const submitAnswer = useCallback(() => {
-    if (ds.selectedAnswer === null || !ds.currentQuestion) return;
+    if (!ds.currentQuestion) return;
+    if (ds.currentQuestion.questionType === 'TITA' && ds.typedAnswer.trim().length === 0) return;
+    if (ds.currentQuestion.questionType === 'MCQ' && ds.selectedAnswer === null) return;
     void playHaptic('answer_submit');
     socketRef.current?.emit('answer:submit', {
       gameId,
       questionId: ds.currentQuestion.id,
-      selectedAnswer: ds.selectedAnswer,
+      ...(ds.currentQuestion.questionType === 'TITA'
+        ? { typedAnswer: ds.typedAnswer }
+        : { selectedAnswer: ds.selectedAnswer }),
       timeTakenMs: Date.now() - questionStartTime.current,
     });
-  }, [ds.currentQuestion, ds.selectedAnswer, gameId, playHaptic]);
+  }, [ds.currentQuestion, ds.selectedAnswer, ds.typedAnswer, gameId, playHaptic]);
 
   const shortcuts = useMemo(() => [
     { key: '1', handler: () => selectAnswer(0) },
@@ -187,7 +196,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
     { key: 'Enter', handler: submitAnswer },
     { key: 'Escape', handler: handleQuit },
   ], [handleQuit, selectAnswer, submitAnswer]);
-  useKeyboardShortcuts(shortcuts, duelActive);
+  useKeyboardShortcuts(shortcuts, duelActive && !isTita);
 
   useEffect(() => {
     if (matchStartedTrackedRef.current) return;
@@ -221,6 +230,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
             questionNumber,
             totalQuestions,
             selectedAnswer: null,
+            typedAnswer: '',
             showFeedback: false,
           }));
         };
@@ -238,7 +248,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
         });
       });
 
-      socket.on('answer:result', ({ yourScore }: { isCorrect: boolean; correctAnswer: number; yourScore: number }) => {
+      socket.on('answer:result', ({ yourScore }: { isCorrect: boolean; correctAnswer: number | null; correctAnswerText?: string | null; yourScore: number }) => {
         if (!mounted) return;
         pulseScore(yourScoreScale);
         setDs(prev => ({ ...prev, yourScore, showFeedback: true }));
@@ -306,6 +316,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
           totalQuestions,
           opponentProgress,
           selectedAnswer: null,
+          typedAnswer: '',
           showFeedback: false,
         }));
       });
@@ -519,9 +530,9 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
               showsVerticalScrollIndicator
               contentContainerStyle={styles.passageScroll}
             >
-              <Text.Serif preset="questionLg" color={theme.ink2} style={styles.passageText} selectable={false}>
+              <MathText preset="question" color={theme.ink2} style={styles.passageText} selectable={false}>
                 {ds.currentQuestion.text}
-              </Text.Serif>
+              </MathText>
             </ScrollView>
           </View>
 
@@ -545,7 +556,13 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
               contentContainerStyle={styles.optionsContainer}
               showsVerticalScrollIndicator
             >
-              {(ds.currentQuestion.options as string[]).map((option, index) => {
+              {isTita ? (
+                <TitaAnswerPad
+                  value={ds.typedAnswer}
+                  onChange={(value) => setDs(prev => ({ ...prev, typedAnswer: value }))}
+                  disabled={ds.showFeedback}
+                />
+              ) : (ds.currentQuestion.options ?? []).map((option, index) => {
                 const isSelected = ds.selectedAnswer === index;
                 return (
                   <Pressable
@@ -576,9 +593,9 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
                         {String.fromCharCode(65 + index)}
                       </Text.Mono>
                     </View>
-                    <Text.Sans preset="body" color={theme.ink} style={styles.optionText} selectable={false}>
+                    <MathText preset="body" color={theme.ink} style={styles.optionText} selectable={false}>
                       {option}
-                    </Text.Sans>
+                    </MathText>
                     <View style={[styles.keyHint, { borderColor: theme.line, backgroundColor: theme.bg2 }]}>
                       <Text.Mono preset="chipLabel" color={theme.ink3}>{index + 1}</Text.Mono>
                     </View>
@@ -601,9 +618,9 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
             <Text.Sans preset="label" color={theme.ink3}>Quit</Text.Sans>
           </Pressable>
           <View style={styles.submitArea}>
-            <Text.Mono preset="mono" color={theme.ink3}>Press Enter to submit</Text.Mono>
+            <Text.Mono preset="mono" color={theme.ink3}>{isTita ? 'Use the keypad, then submit' : 'Press Enter to submit'}</Text.Mono>
             <View style={styles.submitButton}>
-              <Button label="Submit" onPress={submitAnswer} disabled={ds.selectedAnswer === null || ds.showFeedback} />
+              <Button label="Submit" onPress={submitAnswer} disabled={ds.showFeedback || (isTita ? ds.typedAnswer.trim().length === 0 : ds.selectedAnswer === null)} />
             </View>
           </View>
         </View>

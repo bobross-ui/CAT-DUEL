@@ -5,6 +5,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import AppText from '../components/Text';
+import MathText from '../components/MathText';
 import { useTheme } from '../theme/ThemeProvider';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useGamesDetail } from '../queries/games';
@@ -113,9 +114,25 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
                   {a.isCorrect ? 'Correct' : 'Wrong'}
                 </AppText.Mono>
               </View>
-              <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>{a.question.text}</AppText.Serif>
-              <View style={styles.optionsGrid}>
-                {(a.question.options as string[]).map((opt, i) => {
+              <MathText preset="question" color={theme.ink} style={styles.questionText}>{a.question.text}</MathText>
+              {a.question.questionType === 'TITA' ? (
+                <View style={styles.titaReview}>
+                  <View style={[styles.answerValue, { backgroundColor: theme.bg2, borderColor: theme.line }]}>
+                    <AppText.Mono preset="chipLabel" color={theme.ink3} style={styles.uppercase}>Your answer</AppText.Mono>
+                    <AppText.Sans preset="bodyMed" color={a.isCorrect ? theme.accentDeep : theme.coral}>
+                      {a.typedAnswer ?? '—'}
+                    </AppText.Sans>
+                  </View>
+                  <View style={[styles.answerValue, { backgroundColor: theme.bg2, borderColor: theme.line }]}>
+                    <AppText.Mono preset="chipLabel" color={theme.ink3} style={styles.uppercase}>Correct answer</AppText.Mono>
+                    <AppText.Sans preset="bodyMed" color={theme.accentDeep}>
+                      {a.question.correctAnswerText ?? '—'}
+                    </AppText.Sans>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.optionsGrid}>
+                  {(a.question.options ?? []).map((opt, i) => {
                   const isSelected = i === a.selectedAnswer;
                   const isCorrectOpt = i === a.question.correctAnswer;
                   return (
@@ -128,22 +145,20 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
                         isSelected && !isCorrectOpt && { backgroundColor: theme.coralSoft },
                       ]}
                     >
-                      <AppText.Sans
+                      <MathText
                         preset="body"
-                        style={[
-                          isCorrectOpt && { color: theme.accentDeep, fontWeight: '600' },
-                          isSelected && !isCorrectOpt && { color: theme.coral, fontWeight: '600' },
-                          !isCorrectOpt && !isSelected && { color: theme.ink2 },
-                        ]}
+                        color={isCorrectOpt ? theme.accentDeep : isSelected && !isCorrectOpt ? theme.coral : theme.ink2}
+                        style={isCorrectOpt || isSelected ? styles.boldAnswer : undefined}
                       >
-                        {String.fromCharCode(65 + i)}. {opt}
-                      </AppText.Sans>
+                        {`${String.fromCharCode(65 + i)}. ${opt}`}
+                      </MathText>
                     </View>
                   );
-                })}
-              </View>
+                  })}
+                </View>
+              )}
               <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.explanationLabel}>Explanation</AppText.Mono>
-              <AppText.Sans preset="body" color={theme.ink2} style={styles.explanationText}>{a.question.explanation}</AppText.Sans>
+              <MathText preset="body" color={theme.ink2} style={styles.explanationText}>{a.question.explanation}</MathText>
             </View>
           ))}
         </View>
@@ -200,6 +215,10 @@ const styles = StyleSheet.create({
   answerBadge: { marginLeft: 'auto', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 99 },
   questionText: { marginBottom: 12 },
   optionsGrid: { gap: 6, marginBottom: 12 },
+  titaReview: { gap: 8, marginBottom: 12 },
+  answerValue: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, gap: 4 },
+  uppercase: { textTransform: 'uppercase' },
+  boldAnswer: { fontWeight: '600' },
   optionRow: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
   explanationLabel: { textTransform: 'uppercase', marginBottom: 4 },
   explanationText: { lineHeight: 18 },

@@ -9,6 +9,8 @@ import { questionService, Question, AnswerResult } from '../services/questions';
 import AppText from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import Button from '../components/Button';
+import MathText from '../components/MathText';
+import TitaAnswerPad from '../components/TitaAnswerPad';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Question'>;
 
@@ -41,6 +43,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
   const [noMore, setNoMore] = useState(false);
   const [error, setError] = useState('');
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const [typedAnswer, setTypedAnswer] = useState('');
   const [result, setResult] = useState<AnswerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -60,6 +63,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
     setLoading(true);
     setError('');
     setSelectedOption(null);
+    setTypedAnswer('');
     setResult(null);
     questionStartTime.current = Date.now();
 
@@ -85,13 +89,20 @@ export default function QuestionScreen({ navigation, route }: Props) {
   }
 
   async function handleSubmit() {
-    if (selectedOption === null || !question) return;
+    if (!question) return;
+    if (question.questionType === 'MCQ' && selectedOption === null) return;
+    if (question.questionType === 'TITA' && typedAnswer.trim().length === 0) return;
     setSubmitting(true);
 
     const timeTakenMs = Date.now() - questionStartTime.current;
 
     try {
-      const res = await questionService.submitAnswer(question.id, selectedOption, timeTakenMs);
+      const res = await questionService.submitAnswer(
+        question.id,
+        question.questionType === 'TITA'
+          ? { typedAnswer, timeTakenMs }
+          : { selectedAnswer: selectedOption as number, timeTakenMs },
+      );
       const answerResult = res.data.data;
 
       session.current.questionsAnswered++;
@@ -159,6 +170,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
   }
 
   const qNumber = session.current.questionsAnswered + 1;
+  const isTita = question?.questionType === 'TITA';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
@@ -186,13 +198,19 @@ export default function QuestionScreen({ navigation, route }: Props) {
         </AppText.Mono>
 
         {/* Question */}
-        <AppText.Serif preset="questionLg" color={theme.ink} style={styles.questionText}>
+        <MathText preset="question" color={theme.ink} style={styles.questionText}>
           {question?.text}
-        </AppText.Serif>
+        </MathText>
 
-        {/* Options */}
-        <View style={styles.options}>
-          {question?.options.map((option, index) => {
+        {isTita ? (
+          <TitaAnswerPad
+            value={typedAnswer}
+            onChange={setTypedAnswer}
+            disabled={!!result}
+          />
+        ) : (
+          <View style={styles.options}>
+            {question?.options?.map((option, index) => {
             let borderColor = theme.line;
             let bg = theme.card;
             let letterColor = theme.ink3;
@@ -227,11 +245,12 @@ export default function QuestionScreen({ navigation, route }: Props) {
                 <AppText.Serif preset="scoreLg" color={letterColor} style={styles.letterKey}>
                   {String.fromCharCode(65 + index)}
                 </AppText.Serif>
-                <AppText.Sans preset="body" color={theme.ink} style={styles.optionText}>{option}</AppText.Sans>
+                <MathText preset="body" color={theme.ink} style={styles.optionText}>{option}</MathText>
               </TouchableOpacity>
             );
-          })}
-        </View>
+            })}
+          </View>
+        )}
 
         {/* Inline explanation after submit */}
         {result && (
@@ -239,9 +258,14 @@ export default function QuestionScreen({ navigation, route }: Props) {
             <AppText.Mono preset="eyebrow" color={result.isCorrect ? theme.accentDeep : theme.coral} style={styles.uppercase}>
               {result.isCorrect ? 'CORRECT' : 'INCORRECT'}
             </AppText.Mono>
-            <AppText.Sans preset="body" color={theme.ink2} style={styles.explanationText}>
+            {result.correctAnswerText ? (
+              <AppText.Sans preset="bodyMed" color={theme.ink2} style={styles.explanationText}>
+                Answer: {result.correctAnswerText}
+              </AppText.Sans>
+            ) : null}
+            <MathText preset="body" color={theme.ink2} style={styles.explanationText}>
               {result.explanation}
-            </AppText.Sans>
+            </MathText>
           </View>
         )}
       </ScrollView>
@@ -255,7 +279,7 @@ export default function QuestionScreen({ navigation, route }: Props) {
             label="Submit"
             onPress={handleSubmit}
             loading={submitting}
-            disabled={selectedOption === null}
+            disabled={isTita ? typedAnswer.trim().length === 0 : selectedOption === null}
           />
         )}
       </View>

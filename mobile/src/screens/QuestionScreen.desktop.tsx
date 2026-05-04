@@ -11,6 +11,8 @@ import DesktopFrame from '../components/web/DesktopFrame';
 import EyebrowLabel from '../components/web/EyebrowLabel';
 import Text from '../components/Text';
 import Button from '../components/Button';
+import MathText from '../components/MathText';
+import TitaAnswerPad from '../components/TitaAnswerPad';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { questionService, type AnswerResult, type Question } from '../services/questions';
@@ -51,6 +53,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
   const [noMore, setNoMore] = useState(false);
   const [error, setError] = useState('');
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const [typedAnswer, setTypedAnswer] = useState('');
   const [hoveredOption, setHoveredOption] = useState<number | null>(null);
   const [result, setResult] = useState<AnswerResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -79,6 +82,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
     setLoading(true);
     setError('');
     setSelectedOption(null);
+    setTypedAnswer('');
     setHoveredOption(null);
     setResult(null);
     questionStartTime.current = Date.now();
@@ -109,13 +113,20 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
   }, [loadNextQuestion]);
 
   const handleSubmit = useCallback(async () => {
-    if (selectedOption === null || !question || submitting) return;
+    if (!question || submitting) return;
+    if (question.questionType === 'MCQ' && selectedOption === null) return;
+    if (question.questionType === 'TITA' && typedAnswer.trim().length === 0) return;
     setSubmitting(true);
 
     const timeTakenMs = Date.now() - questionStartTime.current;
 
     try {
-      const res = await questionService.submitAnswer(question.id, selectedOption, timeTakenMs);
+      const res = await questionService.submitAnswer(
+        question.id,
+        question.questionType === 'TITA'
+          ? { typedAnswer, timeTakenMs }
+          : { selectedAnswer: selectedOption as number, timeTakenMs },
+      );
       const answerResult = res.data.data;
 
       session.current.questionsAnswered++;
@@ -131,7 +142,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
     } finally {
       setSubmitting(false);
     }
-  }, [question, selectedOption, submitting]);
+  }, [question, selectedOption, submitting, typedAnswer]);
 
   const selectOption = useCallback((index: number) => {
     if (result) return;
@@ -146,13 +157,30 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
     void handleSubmit();
   }, [handleSubmit, loadNextQuestion, result]);
 
-  const shortcuts = useMemo(() => [
-    { key: '1', handler: () => selectOption(0) },
-    { key: '2', handler: () => selectOption(1) },
-    { key: '3', handler: () => selectOption(2) },
-    { key: '4', handler: () => selectOption(3) },
-    { key: 'Enter', handler: handleEnter },
-  ], [handleEnter, selectOption]);
+  const isTita = question?.questionType === 'TITA';
+
+  const shortcuts = useMemo(() => {
+    if (isTita) {
+      return [
+        ...['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((key) => ({
+          key,
+          handler: () => !result && setTypedAnswer((value) => `${value}${key}`),
+        })),
+        { key: '.', handler: () => !result && setTypedAnswer((value) => value.includes('.') ? value : `${value}.`) },
+        { key: '-', handler: () => !result && setTypedAnswer((value) => value.length === 0 ? '-' : value) },
+        { key: 'Backspace', handler: () => !result && setTypedAnswer((value) => value.slice(0, -1)) },
+        { key: 'Enter', handler: handleEnter },
+      ];
+    }
+
+    return [
+      { key: '1', handler: () => selectOption(0) },
+      { key: '2', handler: () => selectOption(1) },
+      { key: '3', handler: () => selectOption(2) },
+      { key: '4', handler: () => selectOption(3) },
+      { key: 'Enter', handler: handleEnter },
+    ];
+  }, [handleEnter, isTita, result, selectOption]);
   useKeyboardShortcuts(shortcuts, !!question && !loading && !noMore && !error);
 
   const preventContextMenu = Platform.OS === 'web'
@@ -258,14 +286,14 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
               contentContainerStyle={styles.questionScroll}
               showsVerticalScrollIndicator
             >
-              <Text.Serif
-                preset="questionLg"
+              <MathText
+                preset="question"
                 color={theme.ink2}
                 style={styles.questionText}
                 selectable={false}
               >
                 {question?.text}
-              </Text.Serif>
+              </MathText>
             </ScrollView>
           </View>
 
@@ -289,8 +317,15 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
               contentContainerStyle={styles.answerScroll}
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.options}>
-                {question?.options.map((option, index) => {
+              {isTita ? (
+                <TitaAnswerPad
+                  value={typedAnswer}
+                  onChange={setTypedAnswer}
+                  disabled={!!result}
+                />
+              ) : (
+                <View style={styles.options}>
+                  {question?.options?.map((option, index) => {
                   let borderColor = theme.line;
                   let bg = theme.card;
                   let keyBg = theme.bg2;
@@ -342,9 +377,9 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
                       <View style={[styles.keyBadge, { backgroundColor: keyBg, borderColor: keyBorder }]}>
                         <Text.Mono preset="mono" color={keyColor}>{OPTION_KEYS[index]}</Text.Mono>
                       </View>
-                      <Text.Sans preset="body" color={theme.ink} style={styles.optionText} selectable={false}>
+                      <MathText preset="body" color={theme.ink} style={styles.optionText} selectable={false}>
                         {option}
-                      </Text.Sans>
+                      </MathText>
                       {!result && (
                         <View style={[styles.keyHint, { borderColor: theme.line, backgroundColor: theme.bg2 }]}>
                           <Text.Mono preset="chipLabel" color={theme.ink3}>{index + 1}</Text.Mono>
@@ -352,24 +387,30 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
                       )}
                     </Pressable>
                   );
-                })}
-              </View>
+                  })}
+                </View>
+              )}
 
               {result && (
                 <View style={[styles.explanationBlock, { backgroundColor: theme.bg2, borderColor: theme.line }]}>
                   <EyebrowLabel color={result.isCorrect ? theme.accentDeep : theme.coral}>
                     {result.isCorrect ? 'Accepted' : 'Rejected'}
                   </EyebrowLabel>
-                  <Text.Sans preset="body" color={theme.ink2} style={styles.explanationText}>
+                  {result.correctAnswerText ? (
+                    <Text.Sans preset="bodyMed" color={theme.ink2} style={styles.explanationText}>
+                      Answer: {result.correctAnswerText}
+                    </Text.Sans>
+                  ) : null}
+                  <MathText preset="body" color={theme.ink2} style={styles.explanationText}>
                     {result.explanation}
-                  </Text.Sans>
+                  </MathText>
                 </View>
               )}
             </ScrollView>
 
             <View style={[styles.answerFooter, { borderTopColor: theme.line }]}>
               <Text.Mono preset="mono" color={theme.ink3}>
-                {result ? 'Press Enter for the next question' : 'Press Enter to submit'}
+                {result ? 'Press Enter for the next question' : isTita ? 'Use the keypad, then press Enter' : 'Press Enter to submit'}
               </Text.Mono>
               <View style={styles.actionButton}>
                 {result ? (
@@ -379,7 +420,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
                     label="Submit"
                     onPress={handleSubmit}
                     loading={submitting}
-                    disabled={selectedOption === null}
+                    disabled={isTita ? typedAnswer.trim().length === 0 : selectedOption === null}
                   />
                 )}
               </View>

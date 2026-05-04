@@ -42,10 +42,12 @@ import { parseAppLink } from './linking';
 export interface ClientQuestion {
   id: string;
   category: string;
+  questionType: 'MCQ' | 'TITA';
   subTopic: string | null;
+  subType: string | null;
   difficulty: number;
   text: string;
-  options: string[];
+  options: string[] | null;
 }
 
 export interface InitialGameState {
@@ -77,16 +79,20 @@ type AnswerDetail = {
   id: string;
   userId: string;
   questionId: string;
-  selectedAnswer: number;
+  selectedAnswer: number | null;
+  typedAnswer: string | null;
   isCorrect: boolean;
   timeTakenMs: number;
   question: {
     id: string;
     category: string;
+    questionType: 'MCQ' | 'TITA';
     subTopic: string | null;
+    subType: string | null;
     text: string;
-    options: string[];
-    correctAnswer: number;
+    options: string[] | null;
+    correctAnswer: number | null;
+    correctAnswerText: string | null;
     explanation: string;
   };
 };

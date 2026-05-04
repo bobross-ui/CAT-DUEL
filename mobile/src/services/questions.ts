@@ -3,18 +3,25 @@ import api from './api';
 export interface Question {
   id: string;
   category: 'QUANT' | 'DILR' | 'VARC';
+  questionType: 'MCQ' | 'TITA';
   subTopic: string | null;
+  subType: string | null;
   difficulty: number;
   text: string;
-  options: string[];
+  options: string[] | null;
 }
 
 export interface AnswerResult {
   isCorrect: boolean;
-  correctAnswer: number;
+  correctAnswer: number | null;
+  correctAnswerText: string | null;
   explanation: string;
   timeTakenMs: number;
 }
+
+export type SubmitAnswerPayload =
+  | { selectedAnswer: number; timeTakenMs: number }
+  | { typedAnswer: string; timeTakenMs: number };
 
 export const questionService = {
   getNext: (filters: { categories: string[]; categoryCounts?: Record<string, number>; difficulty?: number }) =>
@@ -29,10 +36,10 @@ export const questionService = {
       }
     ),
 
-  submitAnswer: (questionId: string, selectedAnswer: number, timeTakenMs: number) =>
+  submitAnswer: (questionId: string, answer: SubmitAnswerPayload) =>
     api.post<{ success: boolean; data: AnswerResult }>(
       `/questions/${questionId}/answer`,
-      { selectedAnswer, timeTakenMs }
+      answer
     ),
 };
 
