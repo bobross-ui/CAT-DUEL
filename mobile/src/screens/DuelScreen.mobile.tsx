@@ -420,6 +420,16 @@ export default function DuelScreen({ route, navigation }: Props) {
             </View>
           </View>
 
+          {/* Passage (RC questions) */}
+          {ds.currentQuestion.passage && (
+            <View style={[styles.passageBlock, { backgroundColor: theme.bg2, borderColor: theme.line }]}>
+              <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.passageLabel}>PASSAGE</AppText.Mono>
+              <MathText preset="body" color={theme.ink2} style={styles.passageBodyText}>
+                {ds.currentQuestion.passage.text}
+              </MathText>
+            </View>
+          )}
+
           {/* Question */}
           <MathText preset="question" color={theme.ink} style={styles.questionText}>
             {ds.currentQuestion.text}
@@ -580,6 +590,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 3,
   },
+
+  // Passage block
+  passageBlock: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: 14,
+    marginBottom: 20,
+    gap: 8,
+  },
+  passageLabel:    { textTransform: 'uppercase' },
+  passageBodyText: { lineHeight: 26 },
 
   // Question + options
   questionText:     { marginBottom: 20 },

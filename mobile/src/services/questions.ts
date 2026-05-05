@@ -9,6 +9,8 @@ export interface Question {
   difficulty: number;
   text: string;
   options: string[] | null;
+  passageId: string | null;
+  passage: { id: string; text: string } | null;
 }
 
 export interface AnswerResult {

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import { Theme, lightTheme, darkTheme } from './themes';
 import { getStoredValue, setStoredValue } from '../services/storage';
 
@@ -38,6 +38,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const mode = preference === 'system' ? (system ?? 'light') : preference;
   const theme = mode === 'dark' ? darkTheme : lightTheme;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const thumb = mode === 'dark' ? 'rgba(255,255,255,0.18)' : 'rgba(28,27,26,0.22)';
+    const css = `
+      * { scrollbar-width: thin; scrollbar-color: ${thumb} transparent; }
+      *::-webkit-scrollbar { width: 6px; height: 6px; }
+      *::-webkit-scrollbar-track { background: transparent; }
+      *::-webkit-scrollbar-thumb { background: ${thumb}; border-radius: 3px; }
+    `;
+    const el = document.getElementById('cat-duel-scrollbar') ?? (() => {
+      const s = document.createElement('style');
+      s.id = 'cat-duel-scrollbar';
+      document.head.appendChild(s);
+      return s;
+    })();
+    el.textContent = css;
+  }, [mode]);
 
   return (
     <ThemeContext.Provider value={{ theme, mode, preference, setPreference }}>

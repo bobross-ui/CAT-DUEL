@@ -260,7 +260,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
   }
 
   return (
-    <DesktopFrame activeRoute="PracticeHome" contentStyle={styles.frameContent} showLeftRail={false}>
+    <DesktopFrame activeRoute="PracticeHome" contentStyle={styles.frameContent} showLeftRail={false} fillHeight>
       <View style={styles.page}>
         <View style={styles.header}>
           <View>
@@ -306,9 +306,9 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
           >
             <View style={styles.panelHeader}>
               <Text.Mono preset="eyebrow" color={theme.ink3} style={styles.uppercase}>
-                {question?.category || categoryLabel}
+                {question?.passage ? 'PASSAGE' : (question?.category || categoryLabel)}
               </Text.Mono>
-              {question?.subTopic ? (
+              {!question?.passage && question?.subTopic ? (
                 <Text.Mono preset="chipLabel" color={theme.ink3}>{question.subTopic}</Text.Mono>
               ) : null}
             </View>
@@ -323,7 +323,7 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
                 style={styles.questionText}
                 selectable={false}
               >
-                {question?.text}
+                {question?.passage ? question.passage.text : question?.text}
               </MathText>
             </ScrollView>
           </View>
@@ -348,6 +348,11 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
               contentContainerStyle={styles.answerScroll}
               showsVerticalScrollIndicator={false}
             >
+              {question?.passage && (
+                <MathText preset="body" color={theme.ink2} style={styles.questionStem} selectable={false}>
+                  {question.text}
+                </MathText>
+              )}
               {isTita ? (
                 <TitaAnswerPad
                   value={typedAnswer}
@@ -588,6 +593,10 @@ const styles = StyleSheet.create({
   },
   answerScrollView: {
     flex: 1,
+  },
+  questionStem: {
+    marginBottom: 14,
+    lineHeight: 28,
   },
   options: {
     gap: 12,

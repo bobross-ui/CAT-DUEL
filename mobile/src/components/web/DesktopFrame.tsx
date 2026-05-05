@@ -10,6 +10,8 @@ interface DesktopFrameProps {
   rightRailStyle?: StyleProp<ViewStyle>;
   rightRailContentStyle?: StyleProp<ViewStyle>;
   showLeftRail?: boolean;
+  /** When true, the main area is a View instead of ScrollView so inner panels can own their own scroll. */
+  fillHeight?: boolean;
 }
 
 export default function DesktopFrame({
@@ -20,19 +22,26 @@ export default function DesktopFrame({
   rightRailStyle,
   rightRailContentStyle,
   showLeftRail = true,
+  fillHeight = false,
 }: DesktopFrameProps) {
   const { theme } = useTheme();
 
   return (
     <View style={[styles.shell, { backgroundColor: theme.bg }]}>
       {showLeftRail ? <LeftRail activeRoute={activeRoute} /> : null}
-      <ScrollView
-        style={styles.main}
-        contentContainerStyle={[styles.mainContent, contentStyle]}
-        showsVerticalScrollIndicator
-      >
-        {children}
-      </ScrollView>
+      {fillHeight ? (
+        <View style={[styles.main, styles.mainContent, contentStyle]}>
+          {children}
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.main}
+          contentContainerStyle={[styles.mainContent, contentStyle]}
+          showsVerticalScrollIndicator
+        >
+          {children}
+        </ScrollView>
+      )}
       {rightRail ? (
         <ScrollView
           style={[styles.rightRail, { backgroundColor: theme.bg2, borderLeftColor: theme.line }, rightRailStyle]}

@@ -215,6 +215,16 @@ export default function QuestionScreen({ navigation, route }: Props) {
           Q {qNumber}
         </AppText.Mono>
 
+        {/* Passage (RC questions) */}
+        {question?.passage && (
+          <View style={[styles.passageBlock, { backgroundColor: theme.bg2, borderColor: theme.line }]}>
+            <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.passageLabel}>PASSAGE</AppText.Mono>
+            <MathText preset="body" color={theme.ink2} style={styles.passageBodyText}>
+              {question.passage.text}
+            </MathText>
+          </View>
+        )}
+
         {/* Question */}
         <MathText preset="question" color={theme.ink} style={styles.questionText}>
           {question?.text}
@@ -337,6 +347,15 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { padding: 24, paddingBottom: 16 },
   qNum: { marginBottom: 12 },
+  passageBlock: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    gap: 8,
+  },
+  passageLabel:    { textTransform: 'uppercase' },
+  passageBodyText: { lineHeight: 26 },
   questionText: { marginBottom: 28 },
 
   // Options

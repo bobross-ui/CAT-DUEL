@@ -506,6 +506,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
       rightRailStyle={styles.duelRightRail}
       rightRailContentStyle={styles.duelRightRailContent}
       showLeftRail={false}
+      fillHeight
     >
       <View style={styles.page}>
         <View style={styles.hudRow}>
@@ -559,7 +560,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
           >
             <View style={styles.panelHeader}>
               <Text.Mono preset="eyebrow" color={theme.ink3} style={styles.uppercase}>
-                {category || 'MIXED'}
+                {ds.currentQuestion.passage ? 'PASSAGE' : (category || 'MIXED')}
               </Text.Mono>
               <Text.Mono preset="chipLabel" color={theme.ink3}>Q{ds.questionNumber}</Text.Mono>
             </View>
@@ -569,7 +570,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
               contentContainerStyle={styles.passageScroll}
             >
               <MathText preset="question" color={theme.ink2} style={styles.passageText} selectable={false}>
-                {ds.currentQuestion.text}
+                {ds.currentQuestion.passage ? ds.currentQuestion.passage.text : ds.currentQuestion.text}
               </MathText>
             </ScrollView>
           </View>
@@ -594,6 +595,11 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
               contentContainerStyle={styles.optionsContainer}
               showsVerticalScrollIndicator
             >
+              {ds.currentQuestion.passage && (
+                <MathText preset="body" color={theme.ink2} style={styles.questionStem} selectable={false}>
+                  {ds.currentQuestion.text}
+                </MathText>
+              )}
               {isTita ? (
                 <TitaAnswerPad
                   value={ds.typedAnswer}
@@ -836,6 +842,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
+  },
+  questionStem: {
+    marginBottom: 14,
+    lineHeight: 28,
   },
   optionsContainer: {
     gap: 10,
