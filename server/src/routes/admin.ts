@@ -8,6 +8,7 @@ import { authMiddleware } from '../middleware/auth';
 import { adminOnly } from '../middleware/admin';
 import { validate } from '../middleware/validate';
 import { importQuestionsFromJsonl, JsonlImportResult } from '../services/questionImport';
+import { importPassagesFromJsonl, PassageImportResult } from '../services/passageImport';
 import { resetExtractedQuestions } from '../services/extractedQuestionReset';
 
 const router = Router();
@@ -399,6 +400,31 @@ router.delete('/passages/:id', async (req: Request, res: Response) => {
 
   await prisma.passage.delete({ where: { id: req.params.id } });
   res.json({ success: true, data: { deleted: true } });
+});
+
+// ── POST /api/admin/passages/import-jsonl ─────────────────────────────────
+
+router.post('/passages/import-jsonl', upload.fields(jsonlUploadFields.map((name) => ({ name, maxCount: 20 }))), async (req: Request, res: Response) => {
+  const files = getUploadedFiles(req);
+  if (files.length === 0) {
+    res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'JSONL file required (field name: file or files)' } });
+    return;
+  }
+
+  const result: PassageImportResult & { files: (PassageImportResult & { file: string })[] } = {
+    inserted: 0, skipped: 0, failed: 0, errors: [], files: [],
+  };
+
+  for (const file of files) {
+    const fileResult = await importPassagesFromJsonl(file.buffer.toString('utf-8'));
+    result.inserted += fileResult.inserted;
+    result.skipped += fileResult.skipped;
+    result.failed += fileResult.failed;
+    result.errors.push(...fileResult.errors.map((e) => ({ ...e, file: file.originalname })));
+    result.files.push({ file: file.originalname, ...fileResult });
+  }
+
+  res.status(result.inserted > 0 ? 201 : 200).json({ success: true, data: result });
 });
 
 // ── POST /api/admin/questions/bulk ─────────────────────────────────────────
