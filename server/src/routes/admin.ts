@@ -13,6 +13,7 @@ import { resetExtractedQuestions } from '../services/extractedQuestionReset';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 20 } });
+const uploadBulk = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 100 } });
 const jsonlUploadFields = ['file', 'files', 'files[]'] as const;
 
 // All admin routes require auth + admin role
@@ -404,7 +405,7 @@ router.delete('/passages/:id', async (req: Request, res: Response) => {
 
 // ── POST /api/admin/passages/import-jsonl ─────────────────────────────────
 
-router.post('/passages/import-jsonl', upload.fields(jsonlUploadFields.map((name) => ({ name, maxCount: 20 }))), async (req: Request, res: Response) => {
+router.post('/passages/import-jsonl', uploadBulk.fields(jsonlUploadFields.map((name) => ({ name, maxCount: 100 }))), async (req: Request, res: Response) => {
   const files = getUploadedFiles(req);
   if (files.length === 0) {
     res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'JSONL file required (field name: file or files)' } });
