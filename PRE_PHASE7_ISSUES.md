@@ -23,25 +23,19 @@ This file consolidates the cleanup work that should be resolved before moving fr
 - **Issue:** `GET /api/users/:id` can expose the full user row, including `firebaseUid` and `email`, to unauthenticated callers.
 - **Fix:** Require auth and return only public-safe fields. Only expose email to the current user.
 
-### 3. AI question generation has no rate limit
-- **Source:** Code Review 2.3, Phase 5.13
-- **Location:** `server/src/routes/admin.ts`
-- **Issue:** `POST /api/admin/questions/generate` can burn Gemini API budget quickly if an admin token is compromised.
-- **Fix:** Add per-admin rate limiting, log usage metadata where available, and consider a daily generation cap.
-
-### 4. Auth middleware writes on every request
+### 3. Auth middleware writes on every request
 - **Source:** Code Review 2.2, Phase 5.13
 - **Location:** `server/src/middleware/auth.ts`
 - **Issue:** Every authenticated request runs a Prisma upsert, creating unnecessary DB writes and `updatedAt` churn.
 - **Fix:** Use find-then-create, and only sync profile fields when they actually change. Keep the Phase 5 `touchStreak` behavior throttled.
 
-### 5. No admin bootstrap path
+### 4. No admin bootstrap path
 - **Source:** Code Review 2.4, Phase 5.13
 - **Location:** `server/src/middleware/admin.ts`, `server/src/middleware/auth.ts`
 - **Issue:** New users default to `role = "user"` and there is no supported way to promote the first admin without manual DB edits.
 - **Fix:** Add an `ADMIN_EMAILS` env allowlist or a promote-admin script.
 
-### 6. Production CORS is wide open
+### 5. Production CORS is wide open
 - **Source:** Code Review 2.5, Phase 5.13
 - **Location:** `server/src/index.ts`
 - **Issue:** API and Socket.io CORS use `origin: "*"`, which is unsafe for production.
@@ -51,25 +45,25 @@ This file consolidates the cleanup work that should be resolved before moving fr
 
 ## Should Fix Before Phase 7
 
-### 7. Question content is not sanitized
+### 6. Question content is not sanitized
 - **Source:** Code Review 2.6, Phase 5.13
-- **Location:** `server/src/routes/admin.ts`, `server/src/services/questionGenerator.ts`
+- **Location:** `server/src/routes/admin.ts`
 - **Issue:** Question text, options, and explanations are stored as-is.
 - **Fix:** Strip or escape HTML on input, or define a strict allowlist if formatted content is needed.
 
-### 8. Practice answers can duplicate per user/question
+### 7. Practice answers can duplicate per user/question
 - **Source:** Code Review 3.1, Phase 5.13
 - **Location:** `server/prisma/schema.prisma`
 - **Issue:** The practice-question exclusion logic assumes one answer per `(userId, questionId)`, but the database does not enforce it.
 - **Fix:** Add `@@unique([userId, questionId])` if retries are not planned, or dedupe the query if retries are planned.
 
-### 9. Match question balancing can silently under-return
+### 8. Match question balancing can silently under-return
 - **Source:** Code Review 3.4, Phase 5.13
 - **Location:** `server/src/services/gameSession.ts`
 - **Issue:** Sparse categories can produce fewer than the intended number of match questions without warning.
 - **Fix:** Log shortfalls, progressively widen difficulty ranges, and fail gracefully if too few questions are available.
 
-### 10. Server env vars are not validated at startup
+### 9. Server env vars are not validated at startup
 - **Source:** Code Review 6.6, Phase 5.13
 - **Location:** `server/src/config/env.ts`
 - **Issue:** Missing required env vars can let the server boot into a broken state.

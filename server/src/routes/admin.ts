@@ -7,7 +7,6 @@ import { Prisma } from '../generated/prisma/client';
 import { authMiddleware } from '../middleware/auth';
 import { adminOnly } from '../middleware/admin';
 import { validate } from '../middleware/validate';
-import { generateQuestions } from '../services/questionGenerator';
 import { importQuestionsFromJsonl, JsonlImportResult } from '../services/questionImport';
 import { resetExtractedQuestions } from '../services/extractedQuestionReset';
 
@@ -217,23 +216,6 @@ router.patch('/questions/:id/verify', async (req: Request, res: Response) => {
     data: { isVerified: parsed.data.isVerified },
   });
   res.json({ success: true, data: updated });
-});
-
-// ── POST /api/admin/questions/generate ────────────────────────────────────
-
-const generateSchema = z.object({
-  category: z.enum(['QUANT', 'DILR', 'VARC']),
-  difficulty: z.number().int().min(1).max(5),
-  subTopic: z.string().optional(),
-  count: z.number().int().min(1).max(20),
-});
-
-router.post('/questions/generate', validate(generateSchema), async (req: Request, res: Response) => {
-  const { category, difficulty, subTopic, count } = req.body;
-
-  const results = await generateQuestions({ category, difficulty, subTopic, count });
-
-  res.status(201).json({ success: true, data: results });
 });
 
 // ── POST /api/admin/questions/import-jsonl ─────────────────────────────────

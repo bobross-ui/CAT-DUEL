@@ -16,7 +16,6 @@ enum QuestionCategory {
 
 enum QuestionSource {
   MANUAL
-  AI
   EXTRACTED
 }
 

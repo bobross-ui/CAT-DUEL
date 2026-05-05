@@ -14,7 +14,6 @@ A real-time 1v1 competitive mobile app for CAT exam preparation. Players are mat
 | Database | PostgreSQL 16 via Prisma ORM |
 | Cache / Queue | Redis 7 |
 | Auth | Firebase Auth (email/password + Google) |
-| AI Questions | Claude API / Anthropic (Phase 2) |
 
 ---
 
@@ -205,7 +204,7 @@ docker compose down -v
 | Phase | Status | What's built |
 |---|---|---|
 | 1 | ✅ Done | Monorepo scaffold, Docker, Postgres + Redis, Firebase Auth, profile screen |
-| 2 | Upcoming | Question bank, Claude API question generation, solo practice mode |
+| 2 | Upcoming | Question bank, solo practice mode |
 | 3 | — | Socket.io matchmaking, real-time duel with live score sync |
 | 4 | — | Elo system, leaderboard, match history, rank tiers |
 | 5 | — | Animations, push notifications, Google Sign-in, offline caching |
