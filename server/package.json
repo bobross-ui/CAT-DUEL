@@ -13,6 +13,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.19.3",
+    "@types/katex": "^0.16.8",
     "cors": "^2.8.5",
     "csv-parse": "^6.2.1",
     "dotenv": "^16.0.0",
@@ -20,6 +21,7 @@
     "express-rate-limit": "^7.0.0",
     "firebase-admin": "^13.8.0",
     "ioredis": "^5.10.1",
+    "katex": "^0.16.45",
     "multer": "^2.1.1",
     "prisma": "^6.19.3",
     "socket.io": "^4.8.3",

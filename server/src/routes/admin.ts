@@ -9,6 +9,7 @@ import { adminOnly } from '../middleware/admin';
 import { validate } from '../middleware/validate';
 import { generateQuestions } from '../services/questionGenerator';
 import { importQuestionsFromJsonl, JsonlImportResult } from '../services/questionImport';
+import { resetExtractedQuestions } from '../services/extractedQuestionReset';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 20 } });
@@ -61,6 +62,7 @@ const verifyQuestionSchema = z.object({
 
 type QuestionInput = z.infer<typeof createQuestionSchema>;
 type JsonlImportFileError = JsonlImportResult['errors'][number] & { file: string };
+type JsonlImportFileWarning = JsonlImportResult['warnings'][number] & { file: string };
 
 function normalizeQuestionData(question: QuestionInput) {
   return {
@@ -103,6 +105,14 @@ router.get('/questions/stats', async (_req: Request, res: Response) => {
   );
 
   res.json({ success: true, data: { total, verified, unverified: total - verified, byCategory: byCategoryMap } });
+});
+
+// ── POST /api/admin/questions/reset-extracted ─────────────────────────────
+// Must be defined before /:id to avoid route conflict
+
+router.post('/questions/reset-extracted', async (_req: Request, res: Response) => {
+  const result = await resetExtractedQuestions();
+  res.json({ success: true, data: result });
 });
 
 // ── GET /api/admin/questions ───────────────────────────────────────────────
@@ -235,11 +245,15 @@ router.post('/questions/import-jsonl', upload.fields(jsonlUploadFields.map((name
     return;
   }
 
-  const result: Omit<JsonlImportResult, 'errors'> & { errors: JsonlImportFileError[] } = {
+  const result: Omit<JsonlImportResult, 'errors' | 'warnings'> & {
+    errors: JsonlImportFileError[];
+    warnings: JsonlImportFileWarning[];
+  } = {
     inserted: 0,
     skipped: 0,
     failed: 0,
     errors: [],
+    warnings: [],
   };
   const fileResults: (JsonlImportResult & { file: string })[] = [];
 
@@ -249,6 +263,7 @@ router.post('/questions/import-jsonl', upload.fields(jsonlUploadFields.map((name
     result.skipped += fileResult.skipped;
     result.failed += fileResult.failed;
     result.errors.push(...fileResult.errors.map((error) => ({ file: file.originalname, ...error })));
+    result.warnings.push(...fileResult.warnings.map((warning) => ({ file: file.originalname, ...warning })));
     fileResults.push({ file: file.originalname, ...fileResult });
   }
 

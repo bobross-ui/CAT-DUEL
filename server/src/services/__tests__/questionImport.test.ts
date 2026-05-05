@@ -48,7 +48,7 @@ describe('importQuestionsFromJsonl', () => {
     expect(createdRows.filter((row) => row.questionType === 'TITA')).toHaveLength(8);
     expect(createdRows.every((row) => row.category === 'QUANT')).toBe(true);
     expect(createdRows.every((row) => row.difficulty === 3)).toBe(true);
-    expect(createdRows.every((row) => row.isVerified === true)).toBe(true);
+    expect(createdRows.every((row) => row.isVerified === !row.answerMismatch)).toBe(true);
 
     const tita = createdRows.find((row) => row.questionType === 'TITA');
     expect(tita.options).toBeDefined();
@@ -78,7 +78,7 @@ describe('importQuestionsFromJsonl', () => {
     expect(result.errors[0]).toMatchObject({ row: 1, message: 'MCQ options must contain 4 choices' });
   });
 
-  it('normalizes extracted math text before storing questions', async () => {
+  it('stores extracted TeX unchanged before client rendering', async () => {
     const row = JSON.stringify({
       question_number: 1,
       category: 'QUANT',
@@ -97,8 +97,36 @@ describe('importQuestionsFromJsonl', () => {
 
     expect(result).toMatchObject({ inserted: 1, skipped: 0, failed: 0 });
     const created = create.mock.calls[0][0].data;
-    expect(created.text).toBe('A chord subtends 60° and another subtends 120°.');
-    expect(created.options).toEqual(['5√3', '2π', '8', '6√2']);
-    expect(created.explanation).toBe('Use 2⁶ˣ and log₂ 3/3 as examples.');
+    expect(created.text).toBe('A chord subtends $60^\\circ$ and another subtends $120^\\circ$.');
+    expect(created.options).toEqual(['$5\\sqrt{3}$', '$2\\pi$', '$8$', '$6\\sqrt{2}$']);
+    expect(created.explanation).toBe('Use $2^{6x}$ and $\\frac{\\log_2 3}{3}$ as examples.');
+    expect(created.isVerified).toBe(true);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('imports malformed TeX rows as unverified and returns warnings', async () => {
+    const row = JSON.stringify({
+      question_number: 2,
+      category: 'QUANT',
+      type: 'MCQ',
+      sub_type: 'QUANT_STANDARD',
+      text: 'This row has malformed math $\\frac{1}{$ but should still import.',
+      options: ['$1$', '$2$', '$3$', '$4$'],
+      correct_answer: '0',
+      sub_topic: 'Algebra',
+      explanation: 'This explanation is long enough for validation.',
+      source_pdf: 'sample.pdf',
+      answer_mismatch: false,
+    });
+
+    const result = await importQuestionsFromJsonl(row);
+
+    expect(result.inserted).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(result.warnings[0]).toMatchObject({ row: 1, field: 'text' });
+    const created = create.mock.calls[0][0].data;
+    expect(created.text).toBe('This row has malformed math $\\frac{1}{$ but should still import.');
+    expect(created.isVerified).toBe(false);
+    expect(created.answerMismatch).toBe(true);
   });
 });

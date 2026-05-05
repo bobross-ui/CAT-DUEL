@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { prisma } from '../models/prisma';
 import { Prisma } from '../generated/prisma/client';
-import { normalizeExtractedMathText } from './mathTextNormalizer';
+import { TexValidationWarning, validateTexValue } from './texValidation';
 
 const IMPORT_DIFFICULTY = 3;
 
@@ -41,6 +41,7 @@ export type JsonlImportResult = {
   skipped: number;
   failed: number;
   errors: { row: number; message: string }[];
+  warnings: TexValidationWarning[];
 };
 
 function parseLine(raw: string, lineNumber: number): ImportRow | { error: string } {
@@ -57,7 +58,7 @@ function parseLine(raw: string, lineNumber: number): ImportRow | { error: string
 }
 
 export async function importQuestionsFromJsonl(content: string): Promise<JsonlImportResult> {
-  const result: JsonlImportResult = { inserted: 0, skipped: 0, failed: 0, errors: [] };
+  const result: JsonlImportResult = { inserted: 0, skipped: 0, failed: 0, errors: [], warnings: [] };
   const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 
   for (let index = 0; index < lines.length; index++) {
@@ -84,6 +85,16 @@ export async function importQuestionsFromJsonl(content: string): Promise<JsonlIm
       continue;
     }
 
+    const texWarnings = [
+      ...validateTexValue(row.text, rowNumber, 'text'),
+      ...(row.options ?? []).flatMap((option, optionIndex) => (
+        validateTexValue(option, rowNumber, `options.${optionIndex}`)
+      )),
+      ...validateTexValue(row.explanation, rowNumber, 'explanation'),
+    ];
+    result.warnings.push(...texWarnings);
+    const hasMathValidationError = texWarnings.length > 0;
+
     await prisma.question.create({
       data: {
         category: row.category,
@@ -91,16 +102,16 @@ export async function importQuestionsFromJsonl(content: string): Promise<JsonlIm
         subTopic: row.sub_topic ?? null,
         subType: row.sub_type,
         difficulty: IMPORT_DIFFICULTY,
-        text: normalizeExtractedMathText(row.text),
-        options: row.type === 'MCQ' ? (row.options ?? []).map(normalizeExtractedMathText) : Prisma.DbNull,
+        text: row.text,
+        options: row.type === 'MCQ' ? (row.options ?? []) : Prisma.DbNull,
         correctAnswer: row.type === 'MCQ' ? Number(row.correct_answer) : null,
         correctAnswerText: row.type === 'TITA' ? row.correct_answer : null,
-        explanation: normalizeExtractedMathText(row.explanation),
+        explanation: row.explanation,
         source: 'EXTRACTED',
         sourcePdf: row.source_pdf,
         externalQuestionNumber: row.question_number,
-        answerMismatch: row.answer_mismatch,
-        isVerified: row.answer_mismatch === false,
+        answerMismatch: row.answer_mismatch || hasMathValidationError,
+        isVerified: row.answer_mismatch === false && !hasMathValidationError,
       },
     });
     result.inserted++;
