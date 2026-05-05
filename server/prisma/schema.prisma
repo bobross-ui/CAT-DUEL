@@ -62,6 +62,22 @@ model User {
   @@map("users")
 }
 
+model Passage {
+  id         String         @id @default(uuid())
+  externalId String?        @map("external_id")
+  text       String
+  source     QuestionSource @default(MANUAL)
+  sourcePdf  String?        @map("source_pdf")
+  isVerified Boolean        @default(false) @map("is_verified")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  questions Question[]
+
+  @@unique([sourcePdf, externalId])
+  @@map("passages")
+}
+
 model Question {
   id                     String           @id @default(uuid())
   category               QuestionCategory
@@ -81,14 +97,17 @@ model Question {
   isVerified             Boolean          @default(false) @map("is_verified")
   timesServed            Int              @default(0) @map("times_served")
   timesCorrect           Int              @default(0) @map("times_correct")
+  passageId              String?          @map("passage_id")
   createdAt              DateTime         @default(now()) @map("created_at")
   updatedAt              DateTime         @updatedAt @map("updated_at")
 
+  passage         Passage?         @relation(fields: [passageId], references: [id])
   practiceAnswers PracticeAnswer[]
   matchAnswers    MatchAnswer[]
 
   @@index([category, difficulty])
   @@index([isVerified, category])
+  @@index([passageId])
   @@unique([sourcePdf, externalQuestionNumber])
   @@map("questions")
 }
