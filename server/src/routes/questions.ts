@@ -118,6 +118,8 @@ async function findPracticeQuestionInCategories(
         difficulty: true,
         text: true,
         options: true,
+        passageId: true,
+        passage: { select: { id: true, text: true } },
         // correctAnswer and explanation are intentionally excluded
       },
       orderBy: { createdAt: 'asc' },
@@ -138,6 +140,8 @@ async function findPracticeQuestionInCategories(
         difficulty: true,
         text: true,
         options: true,
+        passageId: true,
+        passage: { select: { id: true, text: true } },
         // correctAnswer and explanation are intentionally excluded
       },
       orderBy: { createdAt: 'asc' },

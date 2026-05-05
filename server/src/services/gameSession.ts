@@ -523,6 +523,7 @@ async function getQuestionForClient(questionId: string) {
       difficulty: true,
       text: true,
       options: true,
+      passageId: true,
       // correctAnswer intentionally excluded — never sent before submission
       // explanation intentionally excluded — shown in results screen only
     },
