@@ -20,12 +20,9 @@ function MarkCircle({ isCorrect }: { isCorrect: boolean }) {
 }
 
 export default function PracticeSummaryScreen({ navigation, route }: Props) {
-  const total = route.params?.total ?? 0;
-  const correct = route.params?.correct ?? 0;
-  const questions = route.params?.questions;
+  const { total, correct, questions } = route.params;
   const { theme } = useTheme();
   const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
-  const hasSummary = typeof route.params?.total === 'number' && typeof route.params?.correct === 'number';
 
   return (
     <ScrollView
@@ -34,14 +31,14 @@ export default function PracticeSummaryScreen({ navigation, route }: Props) {
     >
       {/* ── Hero ── */}
       <AppText.Serif preset="verdict" color={theme.ink} style={styles.verdict}>
-        {hasSummary ? (accuracy >= 80 ? 'Strong.' : accuracy >= 50 ? 'Solid.' : 'Keep going.') : 'Session expired.'}
+        {accuracy >= 80 ? 'Strong.' : accuracy >= 50 ? 'Solid.' : 'Keep going.'}
       </AppText.Serif>
       <AppText.Mono preset="mono" color={theme.ink3} style={styles.sub}>
-        {hasSummary ? `${correct} of ${total} correct · ${accuracy}%` : 'Start a new practice set when you are ready.'}
+        {correct} of {total} correct · {accuracy}%
       </AppText.Mono>
 
       {/* ── Score Card ── */}
-      {hasSummary && <Card style={styles.scoreCard}>
+      <Card style={styles.scoreCard}>
         <View style={styles.scoreBlock}>
           <AppText.Serif preset="statVal" color={theme.accent}>{correct}</AppText.Serif>
           <AppText.Mono preset="eyebrow" color={theme.ink3}>CORRECT</AppText.Mono>
@@ -56,7 +53,7 @@ export default function PracticeSummaryScreen({ navigation, route }: Props) {
           <AppText.Serif preset="statVal" color={theme.ink}>{total}</AppText.Serif>
           <AppText.Mono preset="eyebrow" color={theme.ink3}>TOTAL</AppText.Mono>
         </View>
-      </Card>}
+      </Card>
 
       {/* ── Question review ── */}
       {questions && questions.length > 0 && (

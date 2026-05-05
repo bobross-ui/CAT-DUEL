@@ -95,22 +95,6 @@ export type PendingMatchPayload = {
   opponent: GamePlayerProfile;
   ratingImpact: RatingImpact;
 };
-export type GameResumePayload =
-  | (PendingMatchPayload & {
-      status: 'FOUND' | 'WAITING_FOR_PLAYERS' | 'COUNTDOWN';
-      countdownSeconds: number | null;
-    })
-  | {
-      status: 'ACTIVE';
-      gameId: string;
-      opponent: GamePlayerProfile;
-      initialState: {
-        duration: number;
-        totalQuestions: number;
-        firstQuestion: Awaited<ReturnType<typeof getQuestionForClient>>;
-        questionNumber: number;
-      };
-    };
 type MatchPersistUserStats = { gamesPlayed: number; wins: number; draws: number };
 
 function buildOpponentProgress(answered: number, totalQuestions: number) {
@@ -1302,52 +1286,6 @@ export async function getActiveGameForUser(userId: string): Promise<{
   const elapsed = Math.floor((Date.now() - (state.startedAt ?? Date.now())) / 1000);
 
   return {
-    gameId,
-    opponent: isPlayer1User ? state.player2Profile : state.player1Profile,
-    initialState: {
-      duration: Math.max(0, state.durationSeconds - elapsed),
-      totalQuestions: state.questionIds.length,
-      firstQuestion: withPassage(firstQuestion, state.passages),
-      questionNumber: Math.min(playerProgress + 1, state.questionIds.length),
-    },
-  };
-}
-
-export async function getGameResumeForUser(
-  gameId: string,
-  userId: string,
-): Promise<GameResumePayload | null> {
-  const state = await getGameState(gameId);
-  if (!state || !isParticipant(state, userId)) return null;
-
-  if (isPreStartStatus(state.status)) {
-    const pending = buildPendingMatchPayload(state, userId);
-    const countdownSeconds = state.status === 'COUNTDOWN'
-      ? Math.max(
-          0,
-          COUNTDOWN_SECONDS - Math.floor((Date.now() - (state.countdownStartedAt ?? Date.now())) / 1000),
-        )
-      : null;
-
-    return {
-      ...pending,
-      status: state.status,
-      countdownSeconds,
-    };
-  }
-
-  if (state.status !== 'ACTIVE') return null;
-
-  const isPlayer1User = isPlayer1(state, userId);
-  const playerProgress = isPlayer1User ? state.player1Progress : state.player2Progress;
-  const questionIndex = Math.min(playerProgress, state.questionIds.length - 1);
-  const firstQuestion = await getQuestionForClient(state.questionIds[questionIndex]);
-  if (!firstQuestion) return null;
-
-  const elapsed = Math.floor((Date.now() - (state.startedAt ?? Date.now())) / 1000);
-
-  return {
-    status: 'ACTIVE',
     gameId,
     opponent: isPlayer1User ? state.player2Profile : state.player1Profile,
     initialState: {

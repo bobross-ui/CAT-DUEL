@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import type { ActiveGamePayload, OpponentInfo } from '../navigation';
+import type { ActiveGamePayload } from '../navigation';
 import api from '../services/api';
 import { queryKeys } from './keys';
 
@@ -74,32 +74,18 @@ export interface MatchDetailData {
   status: string;
   player1Score: number;
   player2Score: number;
-  player1Answered: number;
-  player2Answered: number;
   player1EloChange: number;
   player2EloChange: number;
-  totalQuestions: number;
   durationSeconds: number;
   finishedAt: string;
-  player1: { id: string; displayName: string | null; avatarUrl: string | null; eloRating: number; rankTier: string };
-  player2: { id: string; displayName: string | null; avatarUrl: string | null; eloRating: number; rankTier: string };
+  player1: { id: string; displayName: string | null };
+  player2: { id: string; displayName: string | null };
   answers: AnswerDetail[];
 }
 
 type UseGamesOptions = {
   enabled?: boolean;
 };
-
-export type GameResumeData =
-  | {
-      status: 'FOUND' | 'WAITING_FOR_PLAYERS' | 'COUNTDOWN';
-      gameId: string;
-      duration: number;
-      opponent: OpponentInfo;
-      ratingImpact: { win: number; loss: number; draw?: number };
-      countdownSeconds: number | null;
-    }
-  | (ActiveGamePayload & { status: 'ACTIVE' });
 
 export async function fetchGamesHistory(page: number, limit: number) {
   const res = await api.get('/games/history', { params: { page, limit } });
@@ -119,11 +105,6 @@ async function getGamesDetail(gameId: string) {
 async function getGamesActive() {
   const res = await api.get('/games/active');
   return res.data.data as ActiveGamePayload | { gameId: null };
-}
-
-export async function fetchGameResume(gameId: string) {
-  const res = await api.get(`/games/${gameId}/resume`);
-  return res.data.data as GameResumeData;
 }
 
 export function useGamesHistory(page: number, limit: number, options: UseGamesOptions = {}) {
@@ -156,14 +137,5 @@ export function useGamesActive(options: UseGamesOptions = {}) {
     queryKey: queryKeys.games.active(),
     queryFn: getGamesActive,
     enabled: options.enabled ?? true,
-  });
-}
-
-export function useGameResume(gameId: string, options: UseGamesOptions = {}) {
-  return useQuery({
-    queryKey: queryKeys.games.resume(gameId),
-    queryFn: () => fetchGameResume(gameId),
-    enabled: (options.enabled ?? true) && Boolean(gameId),
-    retry: 1,
   });
 }

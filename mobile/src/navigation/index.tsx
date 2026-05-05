@@ -147,17 +147,17 @@ export type RootStackParamList = {
   DeepLinkedLeaderboard: { tier?: string };
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Matchmaking: { notice?: string } | undefined;
-  Found: { gameId: string; opponent?: OpponentInfo; ratingImpact?: { win: number; loss: number; draw?: number } | null };
-  Duel: { gameId: string; opponent?: OpponentInfo; initialState?: InitialGameState };
-  DuelResults: { gameId?: string; results?: GameFinishedPayload; userId?: string; opponent?: OpponentInfo };
+  Found: { gameId: string; opponent: OpponentInfo; ratingImpact: { win: number; loss: number; draw?: number } | null };
+  Duel: { gameId: string; opponent: OpponentInfo; initialState: InitialGameState };
+  DuelResults: { results: GameFinishedPayload; userId: string; opponent: OpponentInfo };
   PracticeHome: undefined;
-  Question: { categories?: string[]; difficulty?: number };
+  Question: { categories: string[]; difficulty?: number };
   PracticeSummary: {
-    total?: number;
-    correct?: number;
-    totalTimeMs?: number;
+    total: number;
+    correct: number;
+    totalTimeMs: number;
     questions?: { category: string; subTopic: string | null; isCorrect: boolean }[];
-  } | undefined;
+  };
   MatchHistory: undefined;
   MatchDetail: { matchId: string; opponentName?: string | null };
   PublicProfile: { userId: string };

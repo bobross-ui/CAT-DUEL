@@ -45,8 +45,7 @@ function getCategoryCounts(questions: AnsweredQ[]): Record<string, number> {
 }
 
 export default function QuestionScreenDesktop({ navigation, route }: Props) {
-  const categories = route.params?.categories ?? [];
-  const difficulty = route.params?.difficulty;
+  const { categories, difficulty } = route.params;
   const { theme } = useTheme();
   const { user: currentProfile } = useCurrentProfile();
   const categoryLabel = categories.join(' · ');
