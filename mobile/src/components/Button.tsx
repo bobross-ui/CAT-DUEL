@@ -63,11 +63,12 @@ export default function Button({
   const borderStyle = variant === 'ghost'
     ? { borderWidth: 1, borderColor: theme.line }
     : undefined;
+  const { containerStyle, pressableStyle } = splitButtonStyle(style);
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View style={[containerStyle, { transform: [{ scale }] }]}>
       <Pressable
-        style={[styles.base, { backgroundColor: bgColor }, borderStyle, style]}
+        style={[styles.base, { backgroundColor: bgColor }, borderStyle, pressableStyle]}
         onPress={onPress}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
@@ -95,3 +96,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+function splitButtonStyle(style: StyleProp<ViewStyle>) {
+  const flattened = StyleSheet.flatten(style);
+
+  if (!flattened) {
+    return { containerStyle: undefined, pressableStyle: undefined };
+  }
+
+  const containerStyle: ViewStyle = {};
+  const pressableStyle: ViewStyle = { ...flattened };
+  const container = containerStyle as Record<string, unknown>;
+  const pressable = pressableStyle as Record<string, unknown>;
+
+  containerStyleKeys.forEach((key) => {
+    container[key] = flattened[key];
+    delete pressable[key];
+  });
+
+  return { containerStyle, pressableStyle };
+}
+
+const containerStyleKeys = [
+  'alignSelf',
+  'flex',
+  'flexBasis',
+  'flexGrow',
+  'flexShrink',
+  'height',
+  'margin',
+  'marginBottom',
+  'marginEnd',
+  'marginHorizontal',
+  'marginLeft',
+  'marginRight',
+  'marginStart',
+  'marginTop',
+  'marginVertical',
+  'maxHeight',
+  'maxWidth',
+  'minHeight',
+  'minWidth',
+  'width',
+] as const;
