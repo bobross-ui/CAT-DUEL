@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Animated, ScrollView } from 'react-native';
+import { View, StyleSheet, Animated, ScrollView, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, InitialGameState } from '../navigation';
@@ -14,7 +14,7 @@ import { radii } from '../theme/tokens';
 import { getTier } from '../constants';
 import { track } from '../services/analytics';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { useGamesStats } from '../queries/games';
+import { useGameResume, useGamesStats } from '../queries/games';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Found'>;
 type PreStartStatus = 'waiting_for_opponent' | 'countdown';
@@ -126,13 +126,17 @@ function RuleCell({ label, value }: { label: string; value: string }) {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function FoundScreen({ navigation, route }: Props) {
-  const { gameId, opponent, ratingImpact } = route.params;
+  const { gameId } = route.params;
   const { theme, mode } = useTheme();
   const { playHaptic, reduceMotionEnabled } = useAppPreferences();
   const insets = useSafeAreaInsets();
 
   const { user: profile } = useCurrentProfile();
   const { data: stats } = useGamesStats();
+  const resumeQuery = useGameResume(gameId, { enabled: !route.params.opponent });
+  const resume = resumeQuery.data;
+  const opponent = route.params.opponent ?? (resume?.status !== 'ACTIVE' ? resume?.opponent : undefined);
+  const ratingImpact = route.params.ratingImpact ?? (resume?.status !== 'ACTIVE' ? resume?.ratingImpact : null);
   const [preStartStatus, setPreStartStatus] = useState<PreStartStatus>('waiting_for_opponent');
   const [countdown, setCountdown] = useState<number | null>(null);
   const [initialState, setInitialState] = useState<InitialGameState | null>(null);
@@ -148,6 +152,15 @@ export default function FoundScreen({ navigation, route }: Props) {
     return 'Match cancelled. Finding another match...';
   }
 
+  useEffect(() => {
+    if (resume?.status !== 'ACTIVE') return;
+    navigation.replace('Duel', {
+      gameId: resume.gameId,
+      opponent: resume.opponent,
+      initialState: resume.initialState,
+    });
+  }, [navigation, resume]);
+
   // Connect, join game, store initialState when server fires game:start
   useEffect(() => {
     if (!ratingImpact || trackedRatingPreviewRef.current) return;
@@ -160,6 +173,8 @@ export default function FoundScreen({ navigation, route }: Props) {
   }, [ratingImpact]);
 
   useEffect(() => {
+    if (!opponent) return undefined;
+
     let mounted = true;
     let removeListeners: (() => void) | null = null;
 
@@ -243,7 +258,7 @@ export default function FoundScreen({ navigation, route }: Props) {
         releaseGameSocket();
       }
     };
-  }, [gameId, navigation]);
+  }, [gameId, navigation, opponent]);
 
   // Tick down once countdown has started
   useEffect(() => {
@@ -261,12 +276,23 @@ export default function FoundScreen({ navigation, route }: Props) {
 
   // Navigate when countdown finishes AND game:start has been received
   useEffect(() => {
-    if (countdown !== null && countdown <= 0 && initialState && !navigatedRef.current) {
-      navigatedRef.current = true;
-      shouldKeepSocketRef.current = true;
-      navigation.replace('Duel', { gameId, opponent, initialState });
-    }
+    if (!opponent || countdown === null || countdown > 0 || !initialState || navigatedRef.current) return;
+    navigatedRef.current = true;
+    shouldKeepSocketRef.current = true;
+    navigation.replace('Duel', { gameId, opponent, initialState });
   }, [countdown, gameId, initialState, navigation, opponent]);
+
+  if (!opponent) {
+    return (
+      <View style={[styles.loading, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
+        {resumeQuery.isError ? (
+          <AppText.Sans preset="body" color={theme.coral}>Could not restore this match.</AppText.Sans>
+        ) : (
+          <ActivityIndicator color={theme.ink3} />
+        )}
+      </View>
+    );
+  }
 
   const myTierName  = profile ? getTier(profile.eloRating).name : '—';
   const oppTierName = getTier(opponent.eloRating).name;
@@ -369,6 +395,12 @@ export default function FoundScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
   container: { flex: 1 },
 
   scroll: {

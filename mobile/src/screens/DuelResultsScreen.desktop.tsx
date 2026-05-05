@@ -15,8 +15,11 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { track } from '../services/analytics';
 import { matchUrl } from '../navigation/linking';
+import type { GameFinishedPayload, OpponentInfo } from '../navigation';
+import { useGamesDetail } from '../queries/games';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
+import { buildResultsFromMatchDetail } from '../utils/matchResults';
 import MobileDuelResultsScreen from './DuelResultsScreen.mobile';
 
 type Props = ComponentProps<typeof MobileDuelResultsScreen>;
@@ -97,7 +100,50 @@ function AnswerValue({ label, value, correct }: { label: string; value: string; 
 }
 
 export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
-  const { results, userId, opponent } = route.params;
+  const { theme } = useTheme();
+  const { user } = useCurrentProfile();
+  const gameId = route.params.gameId ?? route.params.results?.gameId ?? '';
+  const detailQuery = useGamesDetail(gameId, { enabled: !route.params.results && Boolean(gameId) });
+  const restored = detailQuery.data && user?.id
+    ? buildResultsFromMatchDetail(detailQuery.data, user.id)
+    : null;
+  const results = route.params.results ?? restored?.results;
+  const userId = route.params.userId ?? user?.id;
+  const opponent = route.params.opponent ?? restored?.opponent;
+
+  if (!results || !userId || !opponent) {
+    return (
+      <DesktopFrame activeRoute="DuelResults">
+        <View style={styles.loading}>
+          <Text.Sans preset="body" color={detailQuery.isError ? theme.coral : theme.ink3}>
+            {detailQuery.isError ? 'Could not restore this result.' : 'Loading result...'}
+          </Text.Sans>
+        </View>
+      </DesktopFrame>
+    );
+  }
+
+  return (
+    <DuelResultsContent
+      navigation={navigation}
+      results={results}
+      userId={userId}
+      opponent={opponent}
+    />
+  );
+}
+
+function DuelResultsContent({
+  navigation,
+  results,
+  userId,
+  opponent,
+}: {
+  navigation: Props['navigation'];
+  results: GameFinishedPayload;
+  userId: string;
+  opponent: OpponentInfo;
+}) {
   const { theme } = useTheme();
   const { user } = useCurrentProfile();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -457,6 +503,12 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
   page: {
     gap: 28,
   },

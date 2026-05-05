@@ -21,6 +21,7 @@ import TitaAnswerPad from '../components/TitaAnswerPad';
 import { radii } from '../theme/tokens';
 import { track } from '../services/analytics';
 import { queryKeys } from '../queries/keys';
+import { useGameResume } from '../queries/games';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Duel'>;
 type ClientQuestion = NavClientQuestion;
@@ -92,25 +93,31 @@ function BlinkingDot({ color, animate }: { color: string; animate: boolean }) {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function DuelScreen({ route, navigation }: Props) {
-  const { gameId, opponent, initialState } = route.params;
+  const { gameId } = route.params;
   const { user } = useAuth();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const { playHaptic, reduceMotionEnabled } = useAppPreferences();
   const insets = useSafeAreaInsets();
+  const resumeQuery = useGameResume(gameId, {
+    enabled: !route.params.opponent || !route.params.initialState,
+  });
+  const resume = resumeQuery.data;
+  const opponent = route.params.opponent ?? (resume?.status === 'ACTIVE' ? resume.opponent : undefined);
+  const initialState = route.params.initialState ?? (resume?.status === 'ACTIVE' ? resume.initialState : undefined);
 
   const [ds, setDs] = useState<DuelState>({
     ...INITIAL,
-    timeRemaining: initialState.duration,
-    totalQuestions: initialState.totalQuestions,
-    currentQuestion: initialState.firstQuestion,
-    questionNumber: initialState.questionNumber,
+    timeRemaining: initialState?.duration ?? INITIAL.timeRemaining,
+    totalQuestions: initialState?.totalQuestions ?? INITIAL.totalQuestions,
+    currentQuestion: initialState?.firstQuestion ?? INITIAL.currentQuestion,
+    questionNumber: initialState?.questionNumber ?? INITIAL.questionNumber,
   });
   const [opponentDisconnectNotice, setOpponentDisconnectNotice] = useState<string | null>(null);
   const socketRef         = useRef<Socket | null>(null);
   const questionStartTime = useRef(Date.now());
   const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timerWarningSentRef = useRef(initialState.duration <= 60);
+  const timerWarningSentRef = useRef((initialState?.duration ?? INITIAL.timeRemaining) <= 60);
   const matchStartedTrackedRef = useRef(false);
 
   // Animations
@@ -127,13 +134,38 @@ export default function DuelScreen({ route, navigation }: Props) {
   }
 
   useEffect(() => {
+    if (!initialState) return;
     if (matchStartedTrackedRef.current) return;
     matchStartedTrackedRef.current = true;
     track('match_started', { matchId: gameId, mode: 'ranked_10_min' });
-  }, [gameId]);
+  }, [gameId, initialState]);
+
+  useEffect(() => {
+    if (!resume || resume.status === 'ACTIVE') return;
+    navigation.replace('Found', {
+      gameId: resume.gameId,
+      opponent: resume.opponent,
+      ratingImpact: resume.ratingImpact,
+    });
+  }, [navigation, resume]);
+
+  useEffect(() => {
+    if (!initialState || ds.currentQuestion) return;
+    setDs(prev => ({
+      ...prev,
+      timeRemaining: initialState.duration,
+      totalQuestions: initialState.totalQuestions,
+      currentQuestion: initialState.firstQuestion,
+      questionNumber: initialState.questionNumber,
+    }));
+    timerWarningSentRef.current = initialState.duration <= 60;
+  }, [ds.currentQuestion, initialState]);
 
   // ── Socket setup ─────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!opponent || !initialState) return undefined;
+
+    const activeOpponent = opponent;
     let mounted = true;
 
     async function connect() {
@@ -141,8 +173,9 @@ export default function DuelScreen({ route, navigation }: Props) {
       if (!mounted) return;
       socketRef.current = socket;
 
-      // Re-join on reconnect only — FoundScreen already joined for the initial connection
+      // Join immediately after refresh, and again on future reconnects.
       socket.on('connect', () => socket.emit('game:join', { gameId }));
+      if (socket.connected) socket.emit('game:join', { gameId });
 
       // Start the timer — game has already started when DuelScreen mounts
       timerRef.current = setInterval(() => {
@@ -267,7 +300,12 @@ export default function DuelScreen({ route, navigation }: Props) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.games.all() });
         void queryClient.invalidateQueries({ queryKey: queryKeys.leaderboard.all() });
         socket.disconnect();
-        navigation.replace('DuelResults', { results, userId: results.currentUserId, opponent });
+        navigation.replace('DuelResults', {
+          gameId: results.gameId,
+          results,
+          userId: results.currentUserId,
+          opponent: activeOpponent,
+        });
       });
 
       socket.on('game:error', ({ message }: { message: string }) => {
@@ -284,7 +322,7 @@ export default function DuelScreen({ route, navigation }: Props) {
       socketRef.current = null;
       releaseGameSocket();
     };
-  }, [gameId, navigation, opponent, playHaptic, queryClient, questionOpacity, reduceMotionEnabled]);
+  }, [gameId, initialState, navigation, opponent, playHaptic, queryClient, questionOpacity, reduceMotionEnabled]);
 
   useEffect(() => {
     if (ds.timeRemaining > 60 || timerWarningSentRef.current) return;
@@ -296,6 +334,16 @@ export default function DuelScreen({ route, navigation }: Props) {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => { handleQuit(); return true; });
     return () => handler.remove();
   }, []);
+
+  if (!opponent || !initialState || !ds.currentQuestion) {
+    return (
+      <View style={[styles.center, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
+        <AppText.Sans preset="body" color={resumeQuery.isError ? theme.coral : theme.ink3}>
+          {resumeQuery.isError ? 'Could not restore this duel.' : 'Loading duel...'}
+        </AppText.Sans>
+      </View>
+    );
+  }
 
   function submitAnswer() {
     if (!ds.currentQuestion) return;
@@ -507,6 +555,12 @@ export default function DuelScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
   container: { flex: 1 },
 
 

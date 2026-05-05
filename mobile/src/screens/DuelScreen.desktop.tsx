@@ -30,6 +30,7 @@ import { getTier } from '../constants';
 import { getGameSocket, releaseGameSocket } from '../services/socket';
 import { track } from '../services/analytics';
 import { queryKeys } from '../queries/keys';
+import { useGameResume } from '../queries/games';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
 import MobileDuelScreen from './DuelScreen.mobile';
@@ -102,26 +103,32 @@ function BlinkingDot({ color, animate }: { color: string; animate: boolean }) {
 }
 
 export default function DuelScreenDesktop({ route, navigation }: Props) {
-  const { gameId, opponent, initialState } = route.params;
+  const { gameId } = route.params;
   const { user: authUser } = useAuth();
   const { user: profile } = useCurrentProfile();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const { playHaptic, reduceMotionEnabled } = useAppPreferences();
+  const resumeQuery = useGameResume(gameId, {
+    enabled: !route.params.opponent || !route.params.initialState,
+  });
+  const resume = resumeQuery.data;
+  const opponent = route.params.opponent ?? (resume?.status === 'ACTIVE' ? resume.opponent : undefined);
+  const initialState = route.params.initialState ?? (resume?.status === 'ACTIVE' ? resume.initialState : undefined);
 
   const [ds, setDs] = useState<DuelState>({
     ...INITIAL,
-    timeRemaining: initialState.duration,
-    totalQuestions: initialState.totalQuestions,
-    currentQuestion: initialState.firstQuestion,
-    questionNumber: initialState.questionNumber,
+    timeRemaining: initialState?.duration ?? INITIAL.timeRemaining,
+    totalQuestions: initialState?.totalQuestions ?? INITIAL.totalQuestions,
+    currentQuestion: initialState?.firstQuestion ?? INITIAL.currentQuestion,
+    questionNumber: initialState?.questionNumber ?? INITIAL.questionNumber,
   });
   const [opponentDisconnectNotice, setOpponentDisconnectNotice] = useState<string | null>(null);
   const [duelActive, setDuelActive] = useState(true);
   const socketRef = useRef<Socket | null>(null);
   const questionStartTime = useRef(Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timerWarningSentRef = useRef(initialState.duration <= 60);
+  const timerWarningSentRef = useRef((initialState?.duration ?? INITIAL.timeRemaining) <= 60);
   const matchStartedTrackedRef = useRef(false);
 
   const questionOpacity = useRef(new Animated.Value(1)).current;
@@ -132,15 +139,17 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   const yourName = profile?.displayName ?? authUser?.displayName ?? 'You';
   const yourRating = profile?.eloRating ?? 0;
   const yourTier = profile ? getTier(profile.eloRating).name : 'Ranked';
-  const opponentName = opponent.displayName ?? 'Opponent';
-  const opponentTier = getTier(opponent.eloRating).name;
+  const opponentName = opponent?.displayName ?? 'Opponent';
+  const opponentTier = opponent ? getTier(opponent.eloRating).name : 'Ranked';
   const opponentDone = ds.opponentProgress && ds.opponentProgress.questionsAnswered >= ds.totalQuestions;
-  const category = [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ');
+  const category = ds.currentQuestion
+    ? [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ')
+    : '';
   const progressPct = ds.totalQuestions > 0 ? (ds.questionNumber - 1) / ds.totalQuestions : 0;
   const opponentProgressPct = ds.totalQuestions > 0
     ? ((ds.opponentProgress?.questionsAnswered ?? 0) / ds.totalQuestions)
     : 0;
-  const isTita = ds.currentQuestion.questionType === 'TITA';
+  const isTita = ds.currentQuestion?.questionType === 'TITA';
 
   useDocumentTitle(`${isTimerCritical ? '(!) ' : ''}${formatTime(ds.timeRemaining)} Duel · CAT Duel`);
   useUnsavedChangesWarning(duelActive);
@@ -237,12 +246,37 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   useKeyboardShortcuts(shortcuts, duelActive);
 
   useEffect(() => {
+    if (!initialState) return;
     if (matchStartedTrackedRef.current) return;
     matchStartedTrackedRef.current = true;
     track('match_started', { matchId: gameId, mode: 'ranked_10_min' });
-  }, [gameId]);
+  }, [gameId, initialState]);
 
   useEffect(() => {
+    if (!resume || resume.status === 'ACTIVE') return;
+    navigation.replace('Found', {
+      gameId: resume.gameId,
+      opponent: resume.opponent,
+      ratingImpact: resume.ratingImpact,
+    });
+  }, [navigation, resume]);
+
+  useEffect(() => {
+    if (!initialState || ds.currentQuestion) return;
+    setDs(prev => ({
+      ...prev,
+      timeRemaining: initialState.duration,
+      totalQuestions: initialState.totalQuestions,
+      currentQuestion: initialState.firstQuestion,
+      questionNumber: initialState.questionNumber,
+    }));
+    timerWarningSentRef.current = initialState.duration <= 60;
+  }, [ds.currentQuestion, initialState]);
+
+  useEffect(() => {
+    if (!opponent || !initialState) return undefined;
+
+    const activeOpponent = opponent;
     let mounted = true;
 
     async function connect() {
@@ -251,6 +285,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
       socketRef.current = socket;
 
       socket.on('connect', () => socket.emit('game:join', { gameId }));
+      if (socket.connected) socket.emit('game:join', { gameId });
 
       timerRef.current = setInterval(() => {
         setDs(prev => prev.timeRemaining <= 0 ? prev : { ...prev, timeRemaining: prev.timeRemaining - 1 });
@@ -383,7 +418,12 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.games.all() });
         void queryClient.invalidateQueries({ queryKey: queryKeys.leaderboard.all() });
         socket.disconnect();
-        navigation.replace('DuelResults', { results, userId: results.currentUserId, opponent });
+        navigation.replace('DuelResults', {
+          gameId: results.gameId,
+          results,
+          userId: results.currentUserId,
+          opponent: activeOpponent,
+        });
       });
 
       socket.on('game:error', ({ message }: { message: string }) => {
@@ -403,6 +443,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
     };
   }, [
     gameId,
+    initialState,
     navigation,
     opponent,
     playHaptic,
@@ -419,6 +460,18 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
     timerWarningSentRef.current = true;
     void playHaptic('timer_warning');
   }, [ds.timeRemaining, playHaptic]);
+
+  if (!opponent || !initialState || !ds.currentQuestion) {
+    return (
+      <DesktopFrame activeRoute="Duel" showLeftRail={false}>
+        <View style={styles.center}>
+          <Text.Sans preset="body" color={resumeQuery.isError ? theme.coral : theme.ink3}>
+            {resumeQuery.isError ? 'Could not restore this duel.' : 'Loading duel...'}
+          </Text.Sans>
+        </View>
+      </DesktopFrame>
+    );
+  }
 
   const preventContextMenu = Platform.OS === 'web'
     ? { onContextMenu: (event: { preventDefault: () => void }) => event.preventDefault() }
@@ -720,6 +773,12 @@ function LegendSwatch({ label, color, border }: { label: string; color: string; 
 }
 
 const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
   frameContent: {
     flexGrow: 1,
   },

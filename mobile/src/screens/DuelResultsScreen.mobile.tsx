@@ -6,11 +6,12 @@ import {
   Pressable,
   Animated,
   Easing,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation';
+import { GameFinishedPayload, OpponentInfo, RootStackParamList } from '../navigation';
 import Button from '../components/Button';
 import ShareLinkModal from '../components/ShareLinkModal';
 import AppText from '../components/Text';
@@ -21,6 +22,9 @@ import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
 import { matchUrl } from '../navigation/linking';
 import { track } from '../services/analytics';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useGamesDetail } from '../queries/games';
+import { buildResultsFromMatchDetail } from '../utils/matchResults';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DuelResults'>;
 
@@ -86,7 +90,51 @@ function AnswerValue({ label, value, correct }: { label: string; value: string; 
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function DuelResultsScreen({ route, navigation }: Props) {
-  const { results, userId, opponent } = route.params;
+  const { theme } = useTheme();
+  const gameId = route.params.gameId ?? route.params.results?.gameId ?? '';
+  const { user } = useCurrentProfile();
+  const detailQuery = useGamesDetail(gameId, { enabled: !route.params.results && Boolean(gameId) });
+
+  const restored = detailQuery.data && user?.id
+    ? buildResultsFromMatchDetail(detailQuery.data, user.id)
+    : null;
+  const results = route.params.results ?? restored?.results;
+  const userId = route.params.userId ?? user?.id;
+  const opponent = route.params.opponent ?? restored?.opponent;
+
+  if (!results || !userId || !opponent) {
+    return (
+      <View style={[styles.loading, { backgroundColor: theme.bg }]}>
+        {detailQuery.isError ? (
+          <AppText.Sans preset="body" color={theme.coral}>Could not restore this result.</AppText.Sans>
+        ) : (
+          <ActivityIndicator color={theme.ink3} />
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <DuelResultsContent
+      navigation={navigation}
+      results={results}
+      userId={userId}
+      opponent={opponent}
+    />
+  );
+}
+
+function DuelResultsContent({
+  navigation,
+  results,
+  userId,
+  opponent,
+}: {
+  navigation: Props['navigation'];
+  results: GameFinishedPayload;
+  userId: string;
+  opponent: OpponentInfo;
+}) {
   const { theme } = useTheme();
   const { reduceMotionEnabled } = useAppPreferences();
   const insets = useSafeAreaInsets();
@@ -410,6 +458,12 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
   screen: { flex: 1 },
   scroll: { paddingBottom: 40 },
 

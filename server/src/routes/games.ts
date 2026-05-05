@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
-import { getActiveGameForUser } from '../services/gameSession';
+import { getActiveGameForUser, getGameResumeForUser } from '../services/gameSession';
 import { prisma } from '../models/prisma';
 import { redis } from '../config/redis';
 
@@ -165,6 +165,20 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
         eloHistory: eloStats.eloHistory,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/games/:id/resume — restore pre-start or active duel state after web refresh
+router.get('/:id/resume', authMiddleware, async (req, res, next) => {
+  try {
+    const resume = await getGameResumeForUser(req.params.id, req.user.id);
+    if (!resume) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Game not found' } });
+    }
+
+    res.json({ success: true, data: resume });
   } catch (err) {
     next(err);
   }

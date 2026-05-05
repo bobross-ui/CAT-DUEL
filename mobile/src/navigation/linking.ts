@@ -16,6 +16,21 @@ export const linking: LinkingOptions<RootStackParamList> = {
   prefixes: [APP_WEB_URL, Linking.createURL('/')],
   config: {
     screens: {
+      Login: 'login',
+      Onboarding: 'onboarding',
+      MainTabs: {
+        screens: {
+          Home: '',
+          Play: 'play',
+          Ranks: {
+            path: 'ranks/:tier?',
+            parse: {
+              tier: (tier: string) => tier.toUpperCase(),
+            },
+          },
+          Me: 'me',
+        },
+      },
       DeepLinkedProfile: 'profile/:userId',
       DeepLinkedMatch: 'match/:matchId',
       DeepLinkedLeaderboard: {
@@ -24,6 +39,40 @@ export const linking: LinkingOptions<RootStackParamList> = {
           tier: (tier: string) => tier.toUpperCase(),
         },
       },
+      Matchmaking: 'matchmaking',
+      Found: 'found/:gameId',
+      Duel: 'duel/:gameId',
+      DuelResults: 'duel-results/:gameId?',
+      PracticeHome: 'practice',
+      Question: {
+        path: 'practice/question/:categories?/:difficulty?',
+        parse: {
+          categories: (categories: string) => categories.split(',').filter(Boolean),
+          difficulty: Number,
+        },
+        stringify: {
+          categories: (categories: string[]) => categories.join(','),
+          difficulty: String,
+        },
+      },
+      PracticeSummary: {
+        path: 'practice/summary/:total?/:correct?/:totalTimeMs?',
+        parse: {
+          total: Number,
+          correct: Number,
+          totalTimeMs: Number,
+        },
+        stringify: {
+          total: String,
+          correct: String,
+          totalTimeMs: String,
+        },
+      },
+      MatchHistory: 'history',
+      MatchDetail: 'history/:matchId',
+      PublicProfile: 'public-profile/:userId',
+      Settings: 'settings',
+      Debug: 'debug',
     },
   },
 };
