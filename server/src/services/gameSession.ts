@@ -56,6 +56,11 @@ export interface GamePlayerProfile {
   eloRating: number;
 }
 
+interface ClientPassage {
+  id: string;
+  text: string;
+}
+
 interface GameState {
   gameId: string;
   status: 'FOUND' | 'WAITING_FOR_PLAYERS' | 'COUNTDOWN' | 'ACTIVE' | 'FINISHED' | 'CANCELLED';
@@ -67,6 +72,7 @@ interface GameState {
   player2RatingImpact: RatingImpact;
   questionIds: string[];
   answerKeys: Record<string, AnswerKey>; // server-only, never sent to clients
+  passages: Record<string, ClientPassage>;
   player1Progress: number;
   player2Progress: number;
   player1Score: number;
@@ -477,7 +483,7 @@ function balanceByCategory<T extends { category: string }>(
 async function selectQuestionsForMatch(
   p1Elo: number,
   p2Elo: number,
-): Promise<{ questionIds: string[]; answerKeys: Record<string, AnswerKey> }> {
+): Promise<{ questionIds: string[]; answerKeys: Record<string, AnswerKey>; passages: Record<string, ClientPassage> }> {
   const avgElo = (p1Elo + p2Elo) / 2;
 
   let minDiff: number, maxDiff: number;
@@ -491,22 +497,33 @@ async function selectQuestionsForMatch(
       isVerified: true,
       difficulty: { gte: minDiff, lte: maxDiff },
     },
-    select: { id: true, category: true, questionType: true, correctAnswer: true, correctAnswerText: true },
+    select: {
+      id: true,
+      category: true,
+      questionType: true,
+      correctAnswer: true,
+      correctAnswerText: true,
+      passage: { select: { id: true, text: true } },
+    },
   });
 
   const balanced = balanceByCategory(questions, QUESTION_COUNT);
 
   const questionIds = balanced.map((q) => q.id);
   const answerKeys: Record<string, AnswerKey> = {};
+  const passages: Record<string, ClientPassage> = {};
   for (const q of balanced) {
     answerKeys[q.id] = {
       questionType: q.questionType,
       correctAnswer: q.correctAnswer,
       correctAnswerText: q.correctAnswerText,
     };
+    if (q.passage) {
+      passages[q.passage.id] = q.passage;
+    }
   }
 
-  return { questionIds, answerKeys };
+  return { questionIds, answerKeys, passages };
 }
 
 // ─── Client-safe question (no correctAnswer or explanation) ───────────────────
@@ -967,7 +984,7 @@ export async function initializeGame(
     gameNs: Namespace;
   },
 ): Promise<void> {
-  const { questionIds, answerKeys } = await selectQuestionsForMatch(player1.elo, player2.elo);
+  const { questionIds, answerKeys, passages } = await selectQuestionsForMatch(player1.elo, player2.elo);
   const joinDeadlineAt = Date.now() + PRESTART_TIMEOUT_MS;
 
   const state: GameState = {
@@ -981,6 +998,7 @@ export async function initializeGame(
     player2RatingImpact: options.player2RatingImpact,
     questionIds,
     answerKeys,
+    passages,
     player1Progress: 0,
     player2Progress: 0,
     player1Score: 0,
