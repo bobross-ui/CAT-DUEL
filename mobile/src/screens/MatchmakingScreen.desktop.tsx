@@ -264,6 +264,7 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
   const [documentHidden, setDocumentHidden] = useState(false);
   const [matchFoundWhileHidden, setMatchFoundWhileHidden] = useState(false);
   const matchmakingSocketRef = useRef<Socket | null>(null);
+  const gameSocketRef = useRef<Socket | null>(null);
   const shouldKeepGameSocketRef = useRef(false);
   const navigatedRef = useRef(false);
   const requeueingRef = useRef(false);
@@ -394,6 +395,8 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
     getGameSocket().then((socket) => {
       if (!mounted) return;
 
+      gameSocketRef.current = socket;
+
       const join = () => socket.emit('game:join', { gameId: foundMatch.gameId });
       const handleStatus = ({ status, seconds }: { gameId: string; status: PreStartStatus; seconds?: number }) => {
         if (!mounted) return;
@@ -451,6 +454,7 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
     return () => {
       mounted = false;
       removeListeners?.();
+      gameSocketRef.current = null;
       if (!shouldKeepGameSocketRef.current) {
         void disconnectGameSocket();
         releaseGameSocket();
@@ -488,6 +492,9 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
   function handleCancel() {
     if (phase === 'SEARCHING' || phase === 'CONNECTING') {
       matchmakingSocketRef.current?.emit('queue:leave');
+    }
+    if (foundMatch) {
+      gameSocketRef.current?.emit('game:cancel_prestart', { gameId: foundMatch.gameId });
     }
     navigation.navigate('MainTabs');
   }

@@ -237,6 +237,48 @@ async function saveGameStateFields(
     .exec();
 }
 
+async function markPreStartPlayerJoined(
+  state: GameState,
+  userId: string,
+): Promise<{
+  status: GameState['status'];
+  player1Joined: boolean;
+  player2Joined: boolean;
+} | null> {
+  const joinedField = state.player1Id === userId
+    ? 'player1Joined'
+    : state.player2Id === userId
+      ? 'player2Joined'
+      : null;
+
+  if (!joinedField) return null;
+
+  const key = gameStateKey(state.gameId);
+  await redis
+    .multi()
+    .hset(key, {
+      [joinedField]: JSON.stringify(true),
+      status: JSON.stringify('WAITING_FOR_PLAYERS'),
+    })
+    .expire(key, getStateTtlSeconds(state))
+    .exec();
+
+  const readiness = await redis.hmget(
+    key,
+    'status',
+    'player1Joined',
+    'player2Joined',
+  );
+  const [statusRaw, player1JoinedRaw, player2JoinedRaw] = readiness;
+  if (!statusRaw) return null;
+
+  return {
+    status: JSON.parse(statusRaw),
+    player1Joined: player1JoinedRaw ? JSON.parse(player1JoinedRaw) : false,
+    player2Joined: player2JoinedRaw ? JSON.parse(player2JoinedRaw) : false,
+  };
+}
+
 function socketKey(userId: string) {
   return `socket:game:${userId}`;
 }
@@ -346,6 +388,7 @@ async function cancelPreStartGame(
   gameId: string,
   gameNs: Namespace,
   reason: 'join_timeout' | 'opponent_left' | 'cancelled',
+  excludedRequeueUserId?: string,
 ): Promise<void> {
   const lock = await redis.set(`game:${gameId}:cancelling`, '1', 'EX', 30, 'NX');
   if (!lock) return;
@@ -353,12 +396,15 @@ async function cancelPreStartGame(
   const state = await getGameState(gameId);
   if (!state || !isPreStartStatus(state.status)) return;
 
+  state.status = 'CANCELLED';
+  await saveGameStateFields(state, ['status'], getStateTtlSeconds(state));
+
   await emitToParticipants(gameNs, state, 'match:cancelled', { gameId, reason });
 
   const requeueTargets = [
     state.player1Joined ? state.player1Id : null,
     state.player2Joined ? state.player2Id : null,
-  ].filter((value): value is string => value != null);
+  ].filter((value): value is string => value != null && value !== excludedRequeueUserId);
 
   await Promise.all(
     requeueTargets.map((userId) =>
@@ -514,6 +560,7 @@ async function startCountdown(
     // Re-read from Redis — state may have changed (e.g. both players disconnected)
     const current = await getGameState(gameId);
     if (!current || current.status !== 'COUNTDOWN' || !bothPlayersJoined(current)) return;
+    if (await redis.get(`game:${gameId}:cancelling`)) return;
 
     current.status = 'ACTIVE';
     current.countdownStartedAt = null;
@@ -1034,11 +1081,10 @@ export function registerGameHandlers(gameNs: Namespace): void {
       }
 
       if (state.status === 'FOUND' || state.status === 'WAITING_FOR_PLAYERS') {
-        setJoined(state, user.id, true);
-        state.status = 'WAITING_FOR_PLAYERS';
-        await saveGameState(state, getStateTtlSeconds(state));
+        const readiness = await markPreStartPlayerJoined(state, user.id);
+        if (!readiness || readiness.status !== 'WAITING_FOR_PLAYERS') return;
 
-        if (!bothPlayersJoined(state)) {
+        if (!readiness.player1Joined || !readiness.player2Joined) {
           socket.emit('match:status', {
             gameId,
             status: 'waiting_for_opponent',
@@ -1054,7 +1100,16 @@ export function registerGameHandlers(gameNs: Namespace): void {
           30,
           'NX',
         );
-        if (lock) await startCountdown(gameId, state, gameNs);
+        if (lock) {
+          const latestState = await getGameState(gameId);
+          if (
+            latestState &&
+            latestState.status === 'WAITING_FOR_PLAYERS' &&
+            bothPlayersJoined(latestState)
+          ) {
+            await startCountdown(gameId, latestState, gameNs);
+          }
+        }
       }
     });
 
@@ -1100,6 +1155,13 @@ export function registerGameHandlers(gameNs: Namespace): void {
       await endGame(gameId, gameNs, { forcedWinnerId: opponentId }).catch((err) =>
         console.error(`Forfeit endGame error [${gameId}]:`, err),
       );
+    });
+
+    socket.on('game:cancel_prestart', async ({ gameId }: { gameId: string }) => {
+      const state = await getGameState(gameId);
+      if (!state || !isPreStartStatus(state.status) || !isParticipant(state, user.id)) return;
+
+      await cancelPreStartGame(gameId, gameNs, 'opponent_left', user.id);
     });
 
     socket.on('disconnect', async () => {
