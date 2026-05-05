@@ -30,6 +30,7 @@ const questionSchemaBase = z.object({
   correctAnswer: z.number().int().min(0).max(3).nullable().optional(),
   correctAnswerText: z.string().min(1).nullable().optional(),
   explanation: z.string().min(10),
+  passageId: z.string().uuid().nullable().optional(),
 });
 
 const createQuestionSchema = questionSchemaBase.extend({
@@ -52,12 +53,24 @@ const createQuestionSchema = questionSchemaBase.extend({
       ctx.addIssue({ code: 'custom', path: ['correctAnswerText'], message: 'TITA correctAnswerText is required' });
     }
   }
+
+  if (question.passageId && question.category !== 'VARC') {
+    ctx.addIssue({ code: 'custom', path: ['passageId'], message: 'passageId is only valid for VARC questions' });
+  }
 });
 
 const updateQuestionSchema = questionSchemaBase.partial();
 const verifyQuestionSchema = z.object({
   isVerified: z.boolean().default(true),
 });
+
+const createPassageSchema = z.object({
+  text: z.string().min(10),
+  sourcePdf: z.string().nullable().optional(),
+  externalId: z.string().nullable().optional(),
+});
+
+const updatePassageSchema = createPassageSchema.partial();
 
 type QuestionInput = z.infer<typeof createQuestionSchema>;
 type JsonlImportFileError = JsonlImportResult['errors'][number] & { file: string };
@@ -83,6 +96,15 @@ function getUploadedFiles(req: Request) {
 // ── POST /api/admin/questions ──────────────────────────────────────────────
 
 router.post('/questions', validate(createQuestionSchema), async (req: Request, res: Response) => {
+  const { passageId } = req.body as { passageId?: string };
+  if (passageId) {
+    const exists = await prisma.passage.findUnique({ where: { id: passageId }, select: { id: true } });
+    if (!exists) {
+      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Passage not found' } });
+      return;
+    }
+  }
+
   const question = await prisma.question.create({
     data: { ...normalizeQuestionData(req.body), source: 'MANUAL' },
   });
@@ -176,6 +198,15 @@ router.patch('/questions/:id', async (req: Request, res: Response) => {
     return;
   }
 
+  const { passageId } = merged.data as { passageId?: string | null };
+  if (passageId) {
+    const exists = await prisma.passage.findUnique({ where: { id: passageId }, select: { id: true } });
+    if (!exists) {
+      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Passage not found' } });
+      return;
+    }
+  }
+
   const updated = await prisma.question.update({
     where: { id: req.params.id },
     data: normalizeQuestionData(merged.data),
@@ -250,6 +281,124 @@ router.post('/questions/import-jsonl', upload.fields(jsonlUploadFields.map((name
   }
 
   res.status(result.inserted > 0 ? 201 : 200).json({ success: true, data: { ...result, files: fileResults } });
+});
+
+// ── POST /api/admin/passages ───────────────────────────────────────────────
+
+router.post('/passages', validate(createPassageSchema), async (req: Request, res: Response) => {
+  const passage = await prisma.passage.create({
+    data: { ...req.body, source: 'MANUAL' },
+  });
+  res.status(201).json({ success: true, data: passage });
+});
+
+// ── GET /api/admin/passages ────────────────────────────────────────────────
+
+router.get('/passages', async (req: Request, res: Response) => {
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
+  const { verified } = req.query;
+
+  const where: Record<string, unknown> = {};
+  if (verified !== undefined) where.isVerified = verified === 'true';
+
+  const [passages, total] = await Promise.all([
+    prisma.passage.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { questions: true } } },
+    }),
+    prisma.passage.count({ where }),
+  ]);
+
+  res.json({ success: true, data: { passages, total, page, limit } });
+});
+
+// ── GET /api/admin/passages/:id ────────────────────────────────────────────
+
+router.get('/passages/:id', async (req: Request, res: Response) => {
+  const passage = await prisma.passage.findUnique({
+    where: { id: req.params.id },
+    include: { questions: true },
+  });
+
+  if (!passage) {
+    res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Passage not found' } });
+    return;
+  }
+
+  res.json({ success: true, data: passage });
+});
+
+// ── PATCH /api/admin/passages/:id ─────────────────────────────────────────
+
+router.patch('/passages/:id', async (req: Request, res: Response) => {
+  const passage = await prisma.passage.findUnique({ where: { id: req.params.id } });
+  if (!passage) {
+    res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Passage not found' } });
+    return;
+  }
+
+  const parsed = updatePassageSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0].message } });
+    return;
+  }
+
+  const updated = await prisma.passage.update({
+    where: { id: req.params.id },
+    data: parsed.data,
+  });
+  res.json({ success: true, data: updated });
+});
+
+// ── PATCH /api/admin/passages/:id/verify ──────────────────────────────────
+
+router.patch('/passages/:id/verify', async (req: Request, res: Response) => {
+  const passage = await prisma.passage.findUnique({ where: { id: req.params.id } });
+  if (!passage) {
+    res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Passage not found' } });
+    return;
+  }
+
+  const parsed = verifyQuestionSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0].message } });
+    return;
+  }
+
+  const updated = await prisma.passage.update({
+    where: { id: req.params.id },
+    data: { isVerified: parsed.data.isVerified },
+  });
+  res.json({ success: true, data: updated });
+});
+
+// ── DELETE /api/admin/passages/:id ────────────────────────────────────────
+
+router.delete('/passages/:id', async (req: Request, res: Response) => {
+  const passage = await prisma.passage.findUnique({
+    where: { id: req.params.id },
+    include: { _count: { select: { questions: true } } },
+  });
+
+  if (!passage) {
+    res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Passage not found' } });
+    return;
+  }
+
+  if (passage._count.questions > 0) {
+    res.status(409).json({
+      success: false,
+      error: { code: 'CONFLICT', message: `Cannot delete passage with ${passage._count.questions} linked question(s)` },
+    });
+    return;
+  }
+
+  await prisma.passage.delete({ where: { id: req.params.id } });
+  res.json({ success: true, data: { deleted: true } });
 });
 
 // ── POST /api/admin/questions/bulk ─────────────────────────────────────────
