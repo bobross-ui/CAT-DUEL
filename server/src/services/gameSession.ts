@@ -528,6 +528,16 @@ async function selectQuestionsForMatch(
 
 // ─── Client-safe question (no correctAnswer or explanation) ───────────────────
 
+function withPassage<T extends { passageId: string | null }>(
+  question: T,
+  passages: Record<string, ClientPassage>,
+): T & { passage: ClientPassage | null } {
+  return {
+    ...question,
+    passage: question.passageId ? (passages[question.passageId] ?? null) : null,
+  };
+}
+
 async function getQuestionForClient(questionId: string) {
   return prisma.question.findUnique({
     where: { id: questionId },
@@ -602,7 +612,7 @@ async function startCountdown(
     gameNs.to(gameId).emit('game:start', {
       duration: current.durationSeconds,
       totalQuestions: current.questionIds.length,
-      firstQuestion,
+      firstQuestion: firstQuestion ? withPassage(firstQuestion, current.passages) : null,
       questionNumber: 1,
     });
 
@@ -711,7 +721,7 @@ async function handleAnswer(
 
   if (nextQuestion) {
     socket.emit('game:question', {
-      question: nextQuestion,
+      question: withPassage(nextQuestion, state.passages),
       questionNumber: newProgress + 1,
       totalQuestions: state.questionIds.length,
     });
@@ -1078,7 +1088,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
           yourScore: isPlayer1User ? state.player1Score : state.player2Score,
           opponentScore: isPlayer1User ? state.player2Score : state.player1Score,
           timeRemaining: Math.max(0, state.durationSeconds - elapsed),
-          currentQuestion,
+          currentQuestion: currentQuestion ? withPassage(currentQuestion, state.passages) : null,
           questionNumber: Math.min(playerProgress + 1, state.questionIds.length),
           totalQuestions: state.questionIds.length,
           opponentProgress: buildOpponentProgress(opponentAnswered, state.questionIds.length),
@@ -1281,7 +1291,7 @@ export async function getActiveGameForUser(userId: string): Promise<{
     initialState: {
       duration: Math.max(0, state.durationSeconds - elapsed),
       totalQuestions: state.questionIds.length,
-      firstQuestion,
+      firstQuestion: withPassage(firstQuestion, state.passages),
       questionNumber: Math.min(playerProgress + 1, state.questionIds.length),
     },
   };
