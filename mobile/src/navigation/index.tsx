@@ -39,6 +39,11 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { queryKeys } from '../queries/keys';
 import { parseAppLink } from './linking';
 
+export interface ClientPassage {
+  id: string;
+  text: string;
+}
+
 export interface ClientQuestion {
   id: string;
   category: string;
@@ -48,6 +53,8 @@ export interface ClientQuestion {
   difficulty: number;
   text: string;
   options: string[] | null;
+  passageId: string | null;
+  passage: ClientPassage | null;
 }
 
 export interface InitialGameState {
