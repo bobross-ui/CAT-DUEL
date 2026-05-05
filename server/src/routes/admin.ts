@@ -253,7 +253,7 @@ router.patch('/questions/:id/verify', async (req: Request, res: Response) => {
 
 // ── POST /api/admin/questions/import-jsonl ─────────────────────────────────
 
-router.post('/questions/import-jsonl', upload.fields(jsonlUploadFields.map((name) => ({ name, maxCount: 20 }))), async (req: Request, res: Response) => {
+router.post('/questions/import-jsonl', uploadBulk.fields(jsonlUploadFields.map((name) => ({ name, maxCount: 100 }))), async (req: Request, res: Response) => {
   const files = getUploadedFiles(req);
   if (files.length === 0) {
     res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'JSONL file required (field name: file or files)' } });

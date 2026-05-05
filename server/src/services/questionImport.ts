@@ -7,15 +7,16 @@ const IMPORT_DIFFICULTY = 3;
 
 const importRowSchema = z.object({
   question_number: z.number().int().positive(),
-  category: z.literal('QUANT'),
+  category: z.enum(['QUANT', 'DILR', 'VARC']),
   type: z.enum(['MCQ', 'TITA']),
-  sub_type: z.literal('QUANT_STANDARD'),
+  sub_type: z.string().min(1),
   text: z.string().min(10),
   options: z.array(z.string().min(1)).length(4).nullable(),
   correct_answer: z.string().min(1),
   sub_topic: z.string().min(1).nullable().optional(),
   explanation: z.string().min(10),
   source_pdf: z.string().min(1),
+  passage_id: z.string().nullable().optional(),
   answer_mismatch: z.boolean(),
 }).superRefine((row, ctx) => {
   if (row.type === 'MCQ') {
@@ -44,7 +45,7 @@ export type JsonlImportResult = {
   warnings: TexValidationWarning[];
 };
 
-function parseLine(raw: string, lineNumber: number): ImportRow | { error: string } {
+function parseLine(raw: string): ImportRow | { error: string } {
   try {
     const parsed = JSON.parse(raw);
     const result = importRowSchema.safeParse(parsed);
@@ -57,13 +58,21 @@ function parseLine(raw: string, lineNumber: number): ImportRow | { error: string
   }
 }
 
+async function resolvePassageId(passageExternalId: string, sourcePdf: string): Promise<string | null> {
+  const passage = await prisma.passage.findUnique({
+    where: { sourcePdf_externalId: { sourcePdf, externalId: passageExternalId } },
+    select: { id: true },
+  });
+  return passage?.id ?? null;
+}
+
 export async function importQuestionsFromJsonl(content: string): Promise<JsonlImportResult> {
   const result: JsonlImportResult = { inserted: 0, skipped: 0, failed: 0, errors: [], warnings: [] };
   const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 
   for (let index = 0; index < lines.length; index++) {
     const rowNumber = index + 1;
-    const row = parseLine(lines[index], rowNumber);
+    const row = parseLine(lines[index]);
     if ('error' in row) {
       result.failed++;
       result.errors.push({ row: rowNumber, message: row.error });
@@ -95,6 +104,16 @@ export async function importQuestionsFromJsonl(content: string): Promise<JsonlIm
     result.warnings.push(...texWarnings);
     const hasMathValidationError = texWarnings.length > 0;
 
+    let passageId: string | null = null;
+    if (row.passage_id) {
+      passageId = await resolvePassageId(row.passage_id, row.source_pdf);
+      if (!passageId) {
+        result.failed++;
+        result.errors.push({ row: rowNumber, message: `Passage not found for passage_id "${row.passage_id}" — import passages first` });
+        continue;
+      }
+    }
+
     await prisma.question.create({
       data: {
         category: row.category,
@@ -112,6 +131,7 @@ export async function importQuestionsFromJsonl(content: string): Promise<JsonlIm
         externalQuestionNumber: row.question_number,
         answerMismatch: row.answer_mismatch || hasMathValidationError,
         isVerified: row.answer_mismatch === false && !hasMathValidationError,
+        passageId,
       },
     });
     result.inserted++;
