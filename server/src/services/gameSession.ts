@@ -61,6 +61,18 @@ interface ClientPassage {
   text: string;
 }
 
+interface ClientQuestion {
+  id: string;
+  category: 'QUANT' | 'DILR' | 'VARC';
+  questionType: 'MCQ' | 'TITA';
+  subTopic: string | null;
+  subType: string | null;
+  difficulty: number;
+  text: string;
+  options: unknown;
+  passageId: string | null;
+}
+
 interface GameState {
   gameId: string;
   status: 'FOUND' | 'WAITING_FOR_PLAYERS' | 'COUNTDOWN' | 'ACTIVE' | 'FINISHED' | 'CANCELLED';
@@ -71,6 +83,7 @@ interface GameState {
   player1RatingImpact: RatingImpact;
   player2RatingImpact: RatingImpact;
   questionIds: string[];
+  questions: Record<string, ClientQuestion>;
   answerKeys: Record<string, AnswerKey>; // server-only, never sent to clients
   passages: Record<string, ClientPassage>;
   player1Progress: number;
@@ -487,7 +500,12 @@ function balanceByCategory<T extends { category: string }>(
 async function selectQuestionsForMatch(
   p1Elo: number,
   p2Elo: number,
-): Promise<{ questionIds: string[]; answerKeys: Record<string, AnswerKey>; passages: Record<string, ClientPassage> }> {
+): Promise<{
+  questionIds: string[];
+  questions: Record<string, ClientQuestion>;
+  answerKeys: Record<string, AnswerKey>;
+  passages: Record<string, ClientPassage>;
+}> {
   const avgElo = (p1Elo + p2Elo) / 2;
 
   let minDiff: number, maxDiff: number;
@@ -496,7 +514,7 @@ async function selectQuestionsForMatch(
   else if (avgElo < 1600) { minDiff = 3; maxDiff = 4; }
   else                    { minDiff = 4; maxDiff = 5; }
 
-  const questions = await prisma.question.findMany({
+  const questionRows = await prisma.question.findMany({
     where: {
       isVerified: true,
       difficulty: { gte: minDiff, lte: maxDiff },
@@ -505,18 +523,36 @@ async function selectQuestionsForMatch(
       id: true,
       category: true,
       questionType: true,
+      subTopic: true,
+      subType: true,
+      difficulty: true,
+      text: true,
+      options: true,
       correctAnswer: true,
       correctAnswerText: true,
+      passageId: true,
       passage: { select: { id: true, text: true } },
     },
   });
 
-  const balanced = balanceByCategory(questions, QUESTION_COUNT);
+  const balanced = balanceByCategory(questionRows, QUESTION_COUNT);
 
   const questionIds = balanced.map((q) => q.id);
+  const clientQuestions: Record<string, ClientQuestion> = {};
   const answerKeys: Record<string, AnswerKey> = {};
   const passages: Record<string, ClientPassage> = {};
   for (const q of balanced) {
+    clientQuestions[q.id] = {
+      id: q.id,
+      category: q.category,
+      questionType: q.questionType,
+      subTopic: q.subTopic,
+      subType: q.subType,
+      difficulty: q.difficulty,
+      text: q.text,
+      options: q.options,
+      passageId: q.passageId,
+    };
     answerKeys[q.id] = {
       questionType: q.questionType,
       correctAnswer: q.correctAnswer,
@@ -527,7 +563,7 @@ async function selectQuestionsForMatch(
     }
   }
 
-  return { questionIds, answerKeys, passages };
+  return { questionIds, questions: clientQuestions, answerKeys, passages };
 }
 
 // ─── Client-safe question (no correctAnswer or explanation) ───────────────────
@@ -540,25 +576,6 @@ function withPassage<T extends { passageId: string | null }>(
     ...question,
     passage: question.passageId ? (passages[question.passageId] ?? null) : null,
   };
-}
-
-async function getQuestionForClient(questionId: string) {
-  return prisma.question.findUnique({
-    where: { id: questionId },
-    select: {
-      id: true,
-      category: true,
-      questionType: true,
-      subTopic: true,
-      subType: true,
-      difficulty: true,
-      text: true,
-      options: true,
-      passageId: true,
-      // correctAnswer intentionally excluded — never sent before submission
-      // explanation intentionally excluded — shown in results screen only
-    },
-  });
 }
 
 async function incrementQuestionServeCounts(questionIds: string[]): Promise<void> {
@@ -606,8 +623,8 @@ async function startCountdown(
       pendingMatchKey(current.player2Id),
     );
 
-    const [firstQuestion] = await Promise.all([
-      getQuestionForClient(current.questionIds[0]),
+    const firstQuestion = current.questions[current.questionIds[0]] ?? null;
+    await Promise.all([
       incrementQuestionServeCounts(current.questionIds),
       saveGameState(current, getStateTtlSeconds(current)),
     ]);
@@ -710,18 +727,16 @@ async function handleAnswer(
     opponentScore: state[scoreKey],
   });
 
-  // Persist state and fetch next question in parallel
+  // Persist state and read the preloaded next question
   const newProgress = state[progressKey];
   socket.to(gameId).emit('opponent:progress', buildOpponentProgress(newProgress, state.questionIds.length));
   const changedFields: (keyof GameState)[] = [answerKey, progressKey];
   if (isCorrect) changedFields.push(scoreKey);
 
-  const [nextQuestion] = await Promise.all([
-    newProgress < state.questionIds.length
-      ? getQuestionForClient(state.questionIds[newProgress])
-      : Promise.resolve(null),
-    saveGameStateFields(state, changedFields),
-  ]);
+  const nextQuestion = newProgress < state.questionIds.length
+    ? state.questions[state.questionIds[newProgress]] ?? null
+    : null;
+  await saveGameStateFields(state, changedFields);
 
   if (nextQuestion) {
     socket.emit('game:question', {
@@ -998,7 +1013,7 @@ export async function initializeGame(
     gameNs: Namespace;
   },
 ): Promise<void> {
-  const { questionIds, answerKeys, passages } = await selectQuestionsForMatch(player1.elo, player2.elo);
+  const { questionIds, questions, answerKeys, passages } = await selectQuestionsForMatch(player1.elo, player2.elo);
   const joinDeadlineAt = Date.now() + PRESTART_TIMEOUT_MS;
 
   const state: GameState = {
@@ -1011,6 +1026,7 @@ export async function initializeGame(
     player1RatingImpact: options.player1RatingImpact,
     player2RatingImpact: options.player2RatingImpact,
     questionIds,
+    questions,
     answerKeys,
     passages,
     player1Progress: 0,
@@ -1081,9 +1097,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
         const playerProgress = isPlayer1User ? state.player1Progress : state.player2Progress;
         const opponentAnswered = isPlayer1User ? state.player2Progress : state.player1Progress;
         const questionIndex = Math.min(playerProgress, state.questionIds.length - 1);
-        const currentQuestion = await getQuestionForClient(
-          state.questionIds[questionIndex],
-        );
+        const currentQuestion = state.questions[state.questionIds[questionIndex]] ?? null;
         const elapsed = Math.floor(
           (Date.now() - (state.startedAt ?? Date.now())) / 1000,
         );
@@ -1265,7 +1279,7 @@ export async function getActiveGameForUser(userId: string): Promise<{
   initialState: {
     duration: number;
     totalQuestions: number;
-    firstQuestion: Awaited<ReturnType<typeof getQuestionForClient>>;
+    firstQuestion: ClientQuestion & { passage: ClientPassage | null };
     questionNumber: number;
   };
 } | null> {
@@ -1281,7 +1295,7 @@ export async function getActiveGameForUser(userId: string): Promise<{
   const isPlayer1User = isPlayer1(state, userId);
   const playerProgress = isPlayer1User ? state.player1Progress : state.player2Progress;
   const questionIndex = Math.min(playerProgress, state.questionIds.length - 1);
-  const firstQuestion = await getQuestionForClient(state.questionIds[questionIndex]);
+  const firstQuestion = state.questions[state.questionIds[questionIndex]] ?? null;
   if (!firstQuestion) {
     await redis.del(`active_game:${userId}`);
     return null;
