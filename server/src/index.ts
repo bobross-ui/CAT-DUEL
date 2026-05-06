@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import { env } from './config/env';
+import { corsOptions, socketCorsOptions } from './config/cors';
 import { socketAuthMiddleware } from './middleware/socketAuth';
 import { registerMatchmakingHandlers } from './services/matchmaking';
 import { startMatchmakingLoop } from './services/matchmakingLoop';
@@ -22,7 +23,7 @@ const httpServer = createServer(app);
 
 // --- Socket.io ---
 export const io = new Server(httpServer, {
-  cors: { origin: '*' },
+  cors: socketCorsOptions,
   pingInterval: 10000,
   pingTimeout: 5000,
 });
@@ -39,7 +40,7 @@ startMatchmakingLoop(matchmakingNs, gameNs);
 startQuestionServeCountFlush();
 
 // --- Express middleware ---
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.use('/api', healthRouter);

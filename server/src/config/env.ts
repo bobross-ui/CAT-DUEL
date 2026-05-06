@@ -11,7 +11,6 @@ const envSchema = z.object({
   FIREBASE_PROJECT_ID: z.string().min(1),
   FIREBASE_CLIENT_EMAIL: z.string().email(),
   FIREBASE_PRIVATE_KEY: z.string().min(1).transform((key) => key.replace(/\\n/g, '\n')),
-  GEMINI_API_KEY: z.string().min(1),
   ALLOWED_ORIGINS: z.string().min(1),
 }).superRefine((values, ctx) => {
   if (values.NODE_ENV !== 'production') {
