@@ -107,8 +107,12 @@ function buildOpponentProgress(answered: number, totalQuestions: number) {
 }
 
 async function buildResultsAnswers(state: GameState): Promise<ResultsAnswerDetail[]> {
+  const answeredQuestionIds = state.questionIds.filter((questionId) =>
+    state.player1Answers[questionId] || state.player2Answers[questionId]
+  );
+
   const questions = await prisma.question.findMany({
-    where: { id: { in: state.questionIds } },
+    where: { id: { in: answeredQuestionIds } },
     select: {
       id: true,
       category: true,
