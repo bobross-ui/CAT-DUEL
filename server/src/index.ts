@@ -1,6 +1,7 @@
 import { createServer } from 'http';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import { Server } from 'socket.io';
 import { env } from './config/env';
 import { corsOptions, socketCorsOptions } from './config/cors';
@@ -40,6 +41,18 @@ startMatchmakingLoop(matchmakingNs, gameNs);
 startQuestionServeCountFlush();
 
 // --- Express middleware ---
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  hsts: env.NODE_ENV === 'production'
+    ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+    : false,
+}));
 app.use(cors(corsOptions));
 app.use(express.json());
 
