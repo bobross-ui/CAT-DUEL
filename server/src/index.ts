@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import { Server } from 'socket.io';
 import { env } from './config/env';
 import { corsOptions, socketCorsOptions } from './config/cors';
+import { verifyRedisConnection } from './config/redis';
 import { socketAuthMiddleware } from './middleware/socketAuth';
 import { registerMatchmakingHandlers } from './services/matchmaking';
 import { startMatchmakingLoop } from './services/matchmakingLoop';
@@ -35,11 +36,6 @@ export const gameNs = io.of('/game');
 matchmakingNs.use(socketAuthMiddleware);
 gameNs.use(socketAuthMiddleware);
 
-registerMatchmakingHandlers(matchmakingNs);
-registerGameHandlers(gameNs);
-startMatchmakingLoop(matchmakingNs, gameNs);
-startQuestionServeCountFlush();
-
 // --- Express middleware ---
 app.use(helmet({
   contentSecurityPolicy: {
@@ -66,6 +62,20 @@ app.use('/api/leaderboard', leaderboardRouter);
 
 app.use(errorHandler);
 
-httpServer.listen(env.PORT, () => {
-  console.log(`Server running on port ${env.PORT} (${env.NODE_ENV})`);
+async function startServer(): Promise<void> {
+  await verifyRedisConnection();
+
+  registerMatchmakingHandlers(matchmakingNs);
+  registerGameHandlers(gameNs);
+  startMatchmakingLoop(matchmakingNs, gameNs);
+  startQuestionServeCountFlush();
+
+  httpServer.listen(env.PORT, () => {
+    console.log(`Server running on port ${env.PORT} (${env.NODE_ENV})`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Server startup failed:', err);
+  process.exit(1);
 });

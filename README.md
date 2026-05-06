@@ -85,12 +85,15 @@ PORT=3000
 NODE_ENV=development
 DATABASE_URL=postgresql://catduel:catduel@localhost:5432/catduel
 REDIS_URL=redis://localhost:6379
+REDIS_TLS=false
 
 # Firebase Admin SDK (from Firebase console → Project Settings → Service Accounts)
 FIREBASE_PROJECT_ID=your-project-id
 FIREBASE_CLIENT_EMAIL=your-client-email@your-project.iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
+
+For production, Redis must be private-network only and require AUTH/ACL credentials. Set `REDIS_URL` to a TLS URL such as `rediss://default:<password>@<private-host>:6379`; the server refuses to boot with a plaintext Redis URL when `NODE_ENV=production`.
 
 ### 4. Run database migrations
 
