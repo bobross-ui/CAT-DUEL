@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import admin from '../config/firebase';
-import { prisma } from '../models/prisma';
 import { touchStreak } from '../services/streak';
-import { cacheUser, getCachedUserByFirebaseUid } from '../services/userCache';
+import { getCachedUserByFirebaseUid } from '../services/userCache';
 import { authenticatedGlobalRateLimit } from './rateLimit';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -21,17 +20,10 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       return;
     }
 
-    let user = await getCachedUserByFirebaseUid(decoded.uid);
+    const user = await getCachedUserByFirebaseUid(decoded.uid);
     if (!user) {
-      user = await prisma.user.create({
-        data: {
-          firebaseUid: decoded.uid,
-          email: decoded.email ?? '',
-          displayName: decoded.name ?? null,
-          avatarUrl: decoded.picture ?? null,
-        },
-      });
-      await cacheUser(user);
+      res.status(401).json({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+      return;
     }
 
     req.user = user;

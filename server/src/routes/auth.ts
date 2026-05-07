@@ -1,9 +1,67 @@
 import { Router } from 'express';
+import { Prisma } from '../generated/prisma/client';
+import admin from '../config/firebase';
 import { authMiddleware } from '../middleware/auth';
+import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
+import { cacheUser, getCachedUserByFirebaseUid } from '../services/userCache';
 import { startOfUtcDay } from '../services/streak';
+import { z } from 'zod';
 
 const router = Router();
+
+const bootstrapSchema = z.object({
+  displayName: z.string().min(1).max(50).optional(),
+});
+
+router.post('/bootstrap', validate(bootstrapSchema), async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing token' } });
+    return;
+  }
+
+  try {
+    const token = authHeader.split(' ')[1];
+    const decoded = await admin.auth().verifyIdToken(token).catch(() => null);
+    if (!decoded) {
+      res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
+      return;
+    }
+
+    const existingUser = await getCachedUserByFirebaseUid(decoded.uid);
+    if (existingUser) {
+      res.json({ success: true, data: existingUser });
+      return;
+    }
+
+    try {
+      const user = await prisma.user.create({
+        data: {
+          firebaseUid: decoded.uid,
+          email: decoded.email ?? '',
+          displayName: req.body.displayName ?? decoded.name ?? null,
+          avatarUrl: decoded.picture ?? null,
+        },
+      });
+      await cacheUser(user);
+
+      res.status(201).json({ success: true, data: user });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const user = await getCachedUserByFirebaseUid(decoded.uid);
+        if (user) {
+          res.json({ success: true, data: user });
+          return;
+        }
+      }
+
+      throw error;
+    }
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get('/me', authMiddleware, async (req, res, next) => {
   try {

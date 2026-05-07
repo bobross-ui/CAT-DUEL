@@ -9,12 +9,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 import type { ComponentProps } from 'react';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { z } from 'zod';
-import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { useUpdateMe } from '../queries/users';
 import Text from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
@@ -25,9 +22,8 @@ type Field = 'displayName' | 'email' | 'password';
 type ButtonName = 'submit' | 'google' | 'toggle';
 
 export default function LoginScreenDesktop() {
-  const { signInWithEmail, signInWithGoogle } = useAuth();
+  const { registerWithEmail, signInWithEmail, signInWithGoogle } = useAuth();
   const { theme } = useTheme();
-  const updateMe = useUpdateMe();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -56,10 +52,8 @@ export default function LoginScreenDesktop() {
     setLoading(true);
     try {
       if (isRegistering) {
-        const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
         const nextDisplayName = parsedDisplayName?.success ? parsedDisplayName.data : '';
-        await updateProfile(newUser, { displayName: nextDisplayName });
-        await updateMe.mutateAsync({ displayName: nextDisplayName });
+        await registerWithEmail(email, password, nextDisplayName);
       } else {
         await signInWithEmail(email, password);
       }

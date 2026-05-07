@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
   User,
+  createUserWithEmailAndPassword,
   getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -9,12 +10,14 @@ import {
   signInWithRedirect,
   signOut as firebaseSignOut,
   GoogleAuthProvider,
+  updateProfile,
 } from 'firebase/auth';
 import { Platform } from 'react-native';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import { auth } from '../config/firebase';
+import api from '../services/api';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -24,6 +27,8 @@ const googleProvider = new GoogleAuthProvider();
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
+  bootstrapUser: (firebaseUser: User, input?: BootstrapUserInput) => Promise<void>;
+  registerWithEmail: (email: string, password: string, displayName: string) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -31,9 +36,15 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+interface BootstrapUserInput {
+  displayName?: string;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const authStateSeq = useRef(0);
+  const pendingBootstrapInput = useRef<BootstrapUserInput | undefined>(undefined);
 
   const redirectUri = makeRedirectUri();
 
@@ -43,9 +54,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      const seq = authStateSeq.current + 1;
+      authStateSeq.current = seq;
+
+      if (!firebaseUser) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const bootstrapInput = pendingBootstrapInput.current;
+        pendingBootstrapInput.current = undefined;
+        await bootstrapUser(firebaseUser, bootstrapInput);
+        if (authStateSeq.current !== seq) return;
+        setUser(firebaseUser);
+      } catch (error) {
+        console.warn('User bootstrap failed', error);
+        if (authStateSeq.current !== seq) return;
+        setUser(null);
+        await firebaseSignOut(auth).catch(() => {});
+      } finally {
+        if (authStateSeq.current === seq) setLoading(false);
+      }
     });
     return unsubscribe;
   }, []);
@@ -70,6 +103,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password);
   };
 
+  const registerWithEmail = async (email: string, password: string, displayName: string) => {
+    pendingBootstrapInput.current = { displayName };
+    const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(newUser, { displayName });
+  };
+
   const signInWithGoogle = async () => {
     if (Platform.OS === 'web') {
       try {
@@ -92,10 +131,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithEmail, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, bootstrapUser, registerWithEmail, signInWithEmail, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );
+}
+
+async function bootstrapUser(firebaseUser: User, input?: BootstrapUserInput) {
+  await firebaseUser.getIdToken();
+  await api.post('/auth/bootstrap', input ?? {});
 }
 
 function isPopupFallbackError(error: unknown) {

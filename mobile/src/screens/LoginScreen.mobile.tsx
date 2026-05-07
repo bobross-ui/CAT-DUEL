@@ -6,21 +6,17 @@ import {
   Platform,
   View,
 } from 'react-native';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { z } from 'zod';
-import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeProvider';
-import { useUpdateMe } from '../queries/users';
 import Button from '../components/Button';
 import AppText from '../components/Text';
 
 const displayNameSchema = z.string().trim().min(2, 'Display name must be at least 2 characters.').max(30, 'Display name must be 30 characters or less.');
 
 export default function LoginScreen() {
-  const { signInWithEmail, signInWithGoogle } = useAuth();
+  const { registerWithEmail, signInWithEmail, signInWithGoogle } = useAuth();
   const { theme } = useTheme();
-  const updateMe = useUpdateMe();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -42,9 +38,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       if (isRegistering) {
-        const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(newUser, { displayName: parsedDisplayName!.data });
-        await updateMe.mutateAsync({ displayName: parsedDisplayName!.data });
+        await registerWithEmail(email, password, parsedDisplayName!.data);
       } else {
         await signInWithEmail(email, password);
       }
