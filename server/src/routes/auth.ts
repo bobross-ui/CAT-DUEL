@@ -55,6 +55,12 @@ router.post('/bootstrap', validate(bootstrapSchema), async (req, res, next) => {
           res.json({ success: true, data: user });
           return;
         }
+
+        res.status(409).json({
+          success: false,
+          error: { code: 'DISPLAY_NAME_TAKEN', message: 'That display name is already taken.' },
+        });
+        return;
       }
 
       throw error;
