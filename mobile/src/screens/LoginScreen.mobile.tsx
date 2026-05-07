@@ -41,9 +41,10 @@ export default function LoginScreen() {
         await signInWithEmail(email, password);
       }
     } catch (err: unknown) {
-      const code = (err as { code?: string })?.code;
+      const code = getAuthErrorCode(err);
       if (code === 'auth/email-already-in-use') setError('Email already registered. Sign in instead.');
       else if (code === 'auth/weak-password') setError('Password must be at least 6 characters.');
+      else if (code === 'DISPLAY_NAME_TAKEN') setError('That display name is already taken.');
       else setError(isRegistering ? 'Registration failed.' : 'Invalid email or password.');
     } finally {
       setLoading(false);
@@ -140,6 +141,11 @@ export default function LoginScreen() {
       <View style={{ height: 1 }} />
     </KeyboardAvoidingView>
   );
+}
+
+function getAuthErrorCode(error: unknown) {
+  return (error as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code
+    ?? (error as { code?: string })?.code;
 }
 
 function getGoogleSignInErrorMessage(err: unknown) {

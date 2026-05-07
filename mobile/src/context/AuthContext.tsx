@@ -40,11 +40,17 @@ interface BootstrapUserInput {
   displayName?: string;
 }
 
+interface PendingBootstrap {
+  input: BootstrapUserInput;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const authStateSeq = useRef(0);
-  const pendingBootstrapInput = useRef<BootstrapUserInput | undefined>(undefined);
+  const pendingBootstrap = useRef<PendingBootstrap | null>(null);
 
   const redirectUri = makeRedirectUri();
 
@@ -64,20 +70,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      setLoading(true);
+      const pending = pendingBootstrap.current;
+      if (!pending) setLoading(true);
       try {
-        const bootstrapInput = pendingBootstrapInput.current;
-        pendingBootstrapInput.current = undefined;
+        const bootstrapInput = pending?.input;
+        pendingBootstrap.current = null;
         await bootstrapUser(firebaseUser, bootstrapInput);
+        pending?.resolve();
         if (authStateSeq.current !== seq) return;
         setUser(firebaseUser);
       } catch (error) {
         console.warn('User bootstrap failed', error);
+        pending?.reject(error);
         if (authStateSeq.current !== seq) return;
         setUser(null);
         await firebaseSignOut(auth).catch(() => {});
       } finally {
-        if (authStateSeq.current === seq) setLoading(false);
+        if (!pending && authStateSeq.current === seq) setLoading(false);
       }
     });
     return unsubscribe;
@@ -104,9 +113,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const registerWithEmail = async (email: string, password: string, displayName: string) => {
-    pendingBootstrapInput.current = { displayName };
-    const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password);
+    const bootstrapPromise = new Promise<void>((resolve, reject) => {
+      pendingBootstrap.current = { input: { displayName }, resolve, reject };
+    });
+    const { user: newUser } = await createUserWithEmailAndPassword(auth, email, password).catch((error) => {
+      pendingBootstrap.current = null;
+      throw error;
+    });
     await updateProfile(newUser, { displayName });
+    await bootstrapPromise;
   };
 
   const signInWithGoogle = async () => {

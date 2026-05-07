@@ -55,6 +55,15 @@ router.post('/bootstrap', validate(bootstrapSchema), async (req, res, next) => {
           res.json({ success: true, data: user });
           return;
         }
+
+        await admin.auth().deleteUser(decoded.uid).catch((deleteError) => {
+          console.error('[auth/bootstrap] failed to clean up Firebase user after bootstrap conflict:', deleteError);
+        });
+        res.status(409).json({
+          success: false,
+          error: { code: 'DISPLAY_NAME_TAKEN', message: 'That display name is already taken.' },
+        });
+        return;
       }
 
       throw error;
