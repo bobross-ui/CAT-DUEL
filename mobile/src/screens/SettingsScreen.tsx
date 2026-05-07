@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as WebBrowser from 'expo-web-browser';
-import { deleteUser, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from 'firebase/auth';
+import { EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from 'firebase/auth';
 import { z } from 'zod';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
@@ -148,9 +148,6 @@ export default function SettingsScreen({ navigation }: Props) {
       }
 
       await deleteMe.mutateAsync();
-      if (auth.currentUser) {
-        await deleteUser(auth.currentUser).catch(() => {});
-      }
       await signOut().catch(() => {});
     } catch (err: unknown) {
       const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;
