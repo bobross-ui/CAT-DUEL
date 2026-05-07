@@ -11,7 +11,7 @@ export async function socketAuthMiddleware(
   if (!token) return next(new Error('UNAUTHORIZED'));
 
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
+    const decoded = await admin.auth().verifyIdToken(token, true);
     const user = await getCachedUserByFirebaseUid(decoded.uid);
     if (!user) return next(new Error('USER_NOT_FOUND'));
     const accepted = await registerSocketConnection(user.id, socket);

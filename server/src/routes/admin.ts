@@ -2,11 +2,13 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
+import firebaseAdmin from '../config/firebase';
 import { prisma } from '../models/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { authMiddleware } from '../middleware/auth';
 import { adminOnly } from '../middleware/admin';
 import { validate } from '../middleware/validate';
+import { invalidateUserById } from '../services/userCache';
 import { importQuestionsFromJsonl, JsonlImportResult } from '../services/questionImport';
 import { importPassagesFromJsonl, PassageImportResult } from '../services/passageImport';
 import { resetExtractedQuestions } from '../services/extractedQuestionReset';
@@ -94,6 +96,26 @@ function getUploadedFiles(req: Request) {
   const filesByField = req.files as Partial<Record<typeof jsonlUploadFields[number], Express.Multer.File[]>> | undefined;
   return jsonlUploadFields.flatMap((field) => filesByField?.[field] ?? []);
 }
+
+// ── POST /api/admin/users/:id/revoke-tokens ────────────────────────────────
+
+export async function revokeUserTokens(req: Request, res: Response) {
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, firebaseUid: true },
+  });
+  if (!user) {
+    res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+    return;
+  }
+
+  await firebaseAdmin.auth().revokeRefreshTokens(user.firebaseUid);
+  await invalidateUserById(user.id);
+
+  res.json({ success: true, data: { revoked: true } });
+}
+
+router.post('/users/:id/revoke-tokens', revokeUserTokens);
 
 // ── POST /api/admin/questions ──────────────────────────────────────────────
 

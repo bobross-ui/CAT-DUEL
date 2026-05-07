@@ -14,7 +14,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = await admin.auth().verifyIdToken(token).catch(() => null);
+    const decoded = await admin.auth().verifyIdToken(token, true).catch(() => null);
     if (!decoded) {
       res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
       return;
