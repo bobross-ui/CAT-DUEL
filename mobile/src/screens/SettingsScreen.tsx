@@ -51,7 +51,6 @@ export default function SettingsScreen({ navigation }: Props) {
   const [editError, setEditError] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [deleteVisible, setDeleteVisible] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -68,7 +67,6 @@ export default function SettingsScreen({ navigation }: Props) {
   }
 
   function openDeleteAccount() {
-    setDeleteConfirm('');
     setDeletePassword('');
     setDeleteError('');
     setDeleteVisible(true);
@@ -133,10 +131,6 @@ export default function SettingsScreen({ navigation }: Props) {
   }
 
   async function deleteAccount() {
-    if (deleteConfirm !== 'DELETE') {
-      setDeleteError('Type DELETE to confirm.');
-      return;
-    }
     if (isEmailAuth && !deletePassword) {
       setDeleteError('Enter your password to continue.');
       return;
@@ -291,18 +285,8 @@ export default function SettingsScreen({ navigation }: Props) {
               Delete account
             </AppText.Serif>
             <AppText.Sans preset="body" color={theme.ink2} style={styles.modalBody}>
-              This permanently removes your account and match history. Type DELETE to confirm.
+              This permanently removes your account and match history.
             </AppText.Sans>
-            <TextInput
-              style={[styles.input, { borderColor: theme.line, color: theme.ink, backgroundColor: theme.bg2 }]}
-              value={deleteConfirm}
-              onChangeText={setDeleteConfirm}
-              autoCapitalize="characters"
-              placeholder="DELETE"
-              placeholderTextColor={theme.ink3}
-              accessibilityLabel="Delete confirmation"
-              accessibilityHint="Type DELETE to confirm permanent account deletion"
-            />
             {isEmailAuth ? (
               <TextInput
                 style={[styles.input, { borderColor: theme.line, color: theme.ink, backgroundColor: theme.bg2 }]}
