@@ -26,6 +26,7 @@ function createRateLimit(
   windowMs: number,
   limit: number,
   keyGenerator: (req: Request) => string,
+  options: { skipFailedRequests?: boolean } = {},
 ) {
   return rateLimit({
     windowMs,
@@ -38,6 +39,7 @@ function createRateLimit(
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     skip: (request) => request.method === 'OPTIONS',
+    skipFailedRequests: options.skipFailedRequests,
     message: rateLimitResponse,
   });
 }
@@ -68,6 +70,7 @@ export const deleteAccountRateLimit = createRateLimit(
   24 * 60 * 60_000,
   1,
   userKey,
+  { skipFailedRequests: true },
 );
 
 export const practiceAnswerRateLimit = createRateLimit(
