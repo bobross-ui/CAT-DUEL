@@ -7,13 +7,15 @@ import { authMiddleware } from '../middleware/auth';
 import { deleteAccountRateLimit, updateProfileRateLimit } from '../middleware/rateLimit';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
+import { displayNameSchema, publicDisplayName } from '../services/displayName';
+import { invalidateLeaderboardCaches } from '../services/leaderboard';
 import { invalidateUserByFirebaseUid, invalidateUserById } from '../services/userCache';
 
 const router = Router();
 const RECENT_AUTH_SECONDS = 5 * 60;
 
 const updateProfileSchema = z.object({
-  displayName: z.string().min(1).max(50).optional(),
+  displayName: displayNameSchema.optional(),
   avatarUrl: z.string().url().optional(),
   onboardingCompletedAt: z.string().datetime().optional(),
 });
@@ -33,8 +35,10 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
       eloRating: user.eloRating,
       gamesPlayed: user.gamesPlayed,
       createdAt: user.createdAt,
+      deletedAt: user.deletedAt,
       ...(isOwnProfile && { email: user.email }),
     };
+    publicData.displayName = publicDisplayName(user);
     res.set('Cache-Control', 'private, max-age=60');
     res.json({ success: true, data: publicData });
   } catch (err) {
@@ -87,29 +91,21 @@ router.delete('/me', authMiddleware, deleteAccountRateLimit, async (req, res, ne
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.matchAnswer.deleteMany({
-        where: {
-          match: {
-            OR: [
-              { player1Id: req.user.id },
-              { player2Id: req.user.id },
-            ],
-          },
-        },
-      });
       await tx.practiceAnswer.deleteMany({ where: { userId: req.user.id } });
-      await tx.match.deleteMany({
-        where: {
-          OR: [
-            { player1Id: req.user.id },
-            { player2Id: req.user.id },
-          ],
+      await tx.user.update({
+        where: { id: req.user.id },
+        data: {
+          firebaseUid: `deleted:${req.user.firebaseUid}`,
+          email: null,
+          displayName: null,
+          avatarUrl: null,
+          deletedAt: new Date(),
         },
       });
-      await tx.user.delete({ where: { id: req.user.id } });
     });
 
     await invalidateUserByFirebaseUid(req.user.firebaseUid);
+    await invalidateLeaderboardCaches(req.user.id);
     await admin.auth().deleteUser(req.user.firebaseUid);
 
     res.json({ success: true });

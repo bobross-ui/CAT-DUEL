@@ -2,7 +2,7 @@ import { createElement, useCallback, useMemo, useState, type ComponentProps } fr
 import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { z } from 'zod';
+import { displayNameSchema } from '../utils/displayName';
 import DesktopFrame from '../components/web/DesktopFrame';
 import EyebrowLabel from '../components/web/EyebrowLabel';
 import Avatar from '../components/Avatar';
@@ -23,8 +23,6 @@ import { useTheme } from '../theme/ThemeProvider';
 import MobileProfileScreen from './ProfileScreen.mobile';
 
 type Props = ComponentProps<typeof MobileProfileScreen>;
-
-const displayNameSchema = z.string().trim().min(2, 'Name must be at least 2 characters.').max(30, 'Name must be 30 characters or less.');
 const CHART_WIDTH = 640;
 const CHART_HEIGHT = 180;
 

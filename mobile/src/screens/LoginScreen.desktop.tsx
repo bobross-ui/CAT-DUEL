@@ -9,14 +9,12 @@ import {
   type ViewStyle,
 } from 'react-native';
 import type { ComponentProps } from 'react';
-import { z } from 'zod';
+import { displayNameSchema } from '../utils/displayName';
 import { useAuth } from '../context/AuthContext';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import Text from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
-
-const displayNameSchema = z.string().trim().min(2, 'Display name must be at least 2 characters.').max(30, 'Display name must be 30 characters or less.');
 
 type Field = 'displayName' | 'email' | 'password';
 type ButtonName = 'submit' | 'google' | 'toggle';

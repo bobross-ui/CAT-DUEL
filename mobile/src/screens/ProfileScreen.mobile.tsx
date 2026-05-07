@@ -6,7 +6,7 @@ import {
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { z } from 'zod';
+import { displayNameSchema } from '../utils/displayName';
 import { useAuth } from '../context/AuthContext';
 import { MainTabParamList, RootStackParamList } from '../navigation';
 import TierBadge from '../components/TierBadge';
@@ -30,8 +30,6 @@ type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Me'>,
   NativeStackScreenProps<RootStackParamList>
 >;
-
-const displayNameSchema = z.string().trim().min(2, 'Name must be at least 2 characters.').max(30, 'Name must be 30 characters or less.');
 
 export default function ProfileScreen({ navigation }: Props) {
   const { signOut } = useAuth();

@@ -2,6 +2,7 @@ import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
 import type { User } from '../generated/prisma/client';
 import { RankTier } from './elo';
+import { publicDisplayName } from './displayName';
 
 const MIN_GAMES_TO_RANK = 5;
 const GLOBAL_CACHE_KEY = 'leaderboard:global:v2:top100';
@@ -49,10 +50,10 @@ export async function getUserGlobalRank(userId: string): Promise<number | null> 
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { eloRating: true, gamesPlayed: true, createdAt: true },
+    select: { eloRating: true, gamesPlayed: true, createdAt: true, deletedAt: true },
   });
 
-  if (!user || user.gamesPlayed < MIN_GAMES_TO_RANK) {
+  if (!user || user.deletedAt || user.gamesPlayed < MIN_GAMES_TO_RANK) {
     try {
       await redis.set(cacheKey, JSON.stringify(null), 'EX', USER_GLOBAL_RANK_CACHE_TTL);
     } catch (err) {
@@ -64,6 +65,7 @@ export async function getUserGlobalRank(userId: string): Promise<number | null> 
   const higherCount = await prisma.user.count({
     where: {
       gamesPlayed: { gte: MIN_GAMES_TO_RANK },
+      deletedAt: null,
       OR: [
         { eloRating: { gt: user.eloRating } },
         {
@@ -94,6 +96,18 @@ export async function invalidateUserGlobalRank(userId: string): Promise<void> {
   }
 }
 
+export async function invalidateLeaderboardCaches(userId: string): Promise<void> {
+  try {
+    await redis.del(
+      GLOBAL_CACHE_KEY,
+      userGlobalRankCacheKey(userId),
+      ...RANK_TIERS.map((tier) => `leaderboard:tier:${tier}:v2:top100`),
+    );
+  } catch (err) {
+    console.error('[leaderboard] cache invalidate failed:', err);
+  }
+}
+
 export async function getGlobalLeaderboard(currentUserId: string): Promise<LeaderboardResponse> {
   const cached = await redis.get(GLOBAL_CACHE_KEY);
   let top100: LeaderboardEntry[];
@@ -111,11 +125,11 @@ export async function getGlobalLeaderboard(currentUserId: string): Promise<Leade
   } else {
     const [rows, counts] = await Promise.all([
       prisma.user.findMany({
-        where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK } },
+        where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null },
         orderBy: [{ eloRating: 'desc' }, { createdAt: 'asc' }],
         take: 100,
         select: {
-          id: true, displayName: true, avatarUrl: true,
+          id: true, displayName: true, avatarUrl: true, deletedAt: true,
           eloRating: true, rankTier: true, gamesPlayed: true, winRate: true,
         },
       }),
@@ -125,7 +139,7 @@ export async function getGlobalLeaderboard(currentUserId: string): Promise<Leade
     top100 = rows.map((u, i) => ({
       rank: i + 1,
       userId: u.id,
-      displayName: u.displayName ?? 'Anonymous',
+      displayName: publicDisplayName(u),
       avatarUrl: u.avatarUrl,
       eloRating: u.eloRating,
       rankTier: u.rankTier as RankTier,
@@ -147,7 +161,7 @@ export async function getGlobalLeaderboard(currentUserId: string): Promise<Leade
 
   const [currentUserRank, totalRanked] = await Promise.all([
     getUserGlobalRank(currentUserId),
-    prisma.user.count({ where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK } } }),
+    prisma.user.count({ where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null } }),
   ]);
 
   return { entries: withFlag, currentUserRank, totalRanked, tierCounts };
@@ -165,12 +179,12 @@ export async function getAroundMeLeaderboard(userId: string): Promise<Leaderboar
   const skip = startRank - 1;
 
   const rows = await prisma.user.findMany({
-    where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK } },
+    where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null },
     orderBy: [{ eloRating: 'desc' }, { createdAt: 'asc' }],
     skip,
     take: 10,
     select: {
-      id: true, displayName: true, avatarUrl: true,
+      id: true, displayName: true, avatarUrl: true, deletedAt: true,
       eloRating: true, rankTier: true, gamesPlayed: true, winRate: true,
     },
   });
@@ -178,7 +192,7 @@ export async function getAroundMeLeaderboard(userId: string): Promise<Leaderboar
   const entries = rows.map((u, i) => ({
     rank: startRank + i,
     userId: u.id,
-    displayName: u.displayName ?? 'Anonymous',
+    displayName: publicDisplayName(u),
     avatarUrl: u.avatarUrl,
     eloRating: u.eloRating,
     rankTier: u.rankTier as RankTier,
@@ -187,7 +201,7 @@ export async function getAroundMeLeaderboard(userId: string): Promise<Leaderboar
     isCurrentUser: u.id === userId,
   }));
 
-  const totalRanked = await prisma.user.count({ where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK } } });
+  const totalRanked = await prisma.user.count({ where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null } });
   return { entries, currentUserRank: userRank, totalRanked };
 }
 
@@ -200,11 +214,11 @@ export async function getTierLeaderboard(tier: RankTier, user: User): Promise<Le
     entries = JSON.parse(cached);
   } else {
     const rows = await prisma.user.findMany({
-      where: { rankTier: tier, gamesPlayed: { gte: MIN_GAMES_TO_RANK } },
+      where: { rankTier: tier, gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null },
       orderBy: [{ eloRating: 'desc' }, { createdAt: 'asc' }],
       take: 100,
       select: {
-        id: true, displayName: true, avatarUrl: true,
+        id: true, displayName: true, avatarUrl: true, deletedAt: true,
         eloRating: true, rankTier: true, gamesPlayed: true, winRate: true,
       },
     });
@@ -212,7 +226,7 @@ export async function getTierLeaderboard(tier: RankTier, user: User): Promise<Le
     entries = rows.map((u, i) => ({
       rank: i + 1,
       userId: u.id,
-      displayName: u.displayName ?? 'Anonymous',
+      displayName: publicDisplayName(u),
       avatarUrl: u.avatarUrl,
       eloRating: u.eloRating,
       rankTier: u.rankTier as RankTier,
@@ -227,7 +241,7 @@ export async function getTierLeaderboard(tier: RankTier, user: User): Promise<Le
   const withFlag = entries.map(e => ({ ...e, isCurrentUser: e.userId === user.id }));
 
   const totalRanked = await prisma.user.count({
-    where: { rankTier: tier, gamesPlayed: { gte: MIN_GAMES_TO_RANK } },
+    where: { rankTier: tier, gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null },
   });
 
   let currentUserRank: number | null = null;
@@ -236,6 +250,7 @@ export async function getTierLeaderboard(tier: RankTier, user: User): Promise<Le
       where: {
         rankTier: tier,
         gamesPlayed: { gte: MIN_GAMES_TO_RANK },
+        deletedAt: null,
         OR: [
           { eloRating: { gt: user.eloRating } },
           { AND: [{ eloRating: user.eloRating }, { createdAt: { lt: user.createdAt } }] },
@@ -252,7 +267,7 @@ async function getTierCounts(): Promise<Record<RankTier, number>> {
   const counts = Object.fromEntries(RANK_TIERS.map((tier) => [tier, 0])) as Record<RankTier, number>;
   const rows = await prisma.user.groupBy({
     by: ['rankTier'],
-    where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK } },
+    where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null },
     _count: { _all: true },
   });
 

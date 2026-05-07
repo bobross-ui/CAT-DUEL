@@ -6,13 +6,11 @@ import {
   Platform,
   View,
 } from 'react-native';
-import { z } from 'zod';
+import { displayNameSchema } from '../utils/displayName';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeProvider';
 import Button from '../components/Button';
 import AppText from '../components/Text';
-
-const displayNameSchema = z.string().trim().min(2, 'Display name must be at least 2 characters.').max(30, 'Display name must be 30 characters or less.');
 
 export default function LoginScreen() {
   const { registerWithEmail, signInWithEmail, signInWithGoogle } = useAuth();

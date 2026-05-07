@@ -14,7 +14,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as WebBrowser from 'expo-web-browser';
 import { EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from 'firebase/auth';
-import { z } from 'zod';
+import { displayNameSchema } from '../utils/displayName';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useAppPreferences } from '../context/AppPreferencesContext';
@@ -29,8 +29,6 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useDeleteMe, useUpdateMe } from '../queries/users';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
-
-const displayNameSchema = z.string().trim().min(2, 'Name must be at least 2 characters.').max(30, 'Name must be 30 characters or less.');
 const appVersion = process.env.EXPO_PUBLIC_APP_VERSION ?? '1.0.0';
 const buildNumber = process.env.EXPO_PUBLIC_BUILD_NUMBER ?? 'dev';
 

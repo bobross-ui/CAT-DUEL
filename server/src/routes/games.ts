@@ -3,6 +3,7 @@ import { authMiddleware } from '../middleware/auth';
 import { getActiveGameForUser } from '../services/gameSession';
 import { prisma } from '../models/prisma';
 import { redis } from '../config/redis';
+import { publicDisplayName } from '../services/displayName';
 
 const router = Router();
 
@@ -31,8 +32,8 @@ router.get('/history', authMiddleware, async (req, res, next) => {
         skip,
         take: limit,
         include: {
-          player1: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true } },
-          player2: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true } },
+          player1: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } },
+          player2: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } },
         },
       }),
       prisma.match.count({
@@ -60,7 +61,7 @@ router.get('/history', authMiddleware, async (req, res, next) => {
         yourEloChange,
         opponent: {
           id: opponent.id,
-          displayName: opponent.displayName,
+          displayName: publicDisplayName(opponent),
           avatarUrl: opponent.avatarUrl,
           eloRating: opponent.eloRating,
           rankTier: opponent.rankTier,
@@ -176,8 +177,8 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
     const match = await prisma.match.findUnique({
       where: { id: req.params.id },
       include: {
-        player1: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true } },
-        player2: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true } },
+        player1: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } },
+        player2: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } },
         answers: {
           include: {
             question: {
@@ -207,7 +208,14 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
     }
 
     res.set('Cache-Control', 'private, immutable, max-age=86400');
-    res.json({ success: true, data: match });
+    res.json({
+      success: true,
+      data: {
+        ...match,
+        player1: { ...match.player1, displayName: publicDisplayName(match.player1) },
+        player2: { ...match.player2, displayName: publicDisplayName(match.player2) },
+      },
+    });
   } catch (err) {
     next(err);
   }

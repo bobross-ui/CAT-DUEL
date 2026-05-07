@@ -4,6 +4,7 @@ import admin from '../config/firebase';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
+import { displayNameSchema } from '../services/displayName';
 import { cacheUser, getCachedUserByFirebaseUid } from '../services/userCache';
 import { startOfUtcDay } from '../services/streak';
 import { z } from 'zod';
@@ -11,7 +12,7 @@ import { z } from 'zod';
 const router = Router();
 
 const bootstrapSchema = z.object({
-  displayName: z.string().min(1).max(50).optional(),
+  displayName: displayNameSchema.optional(),
 });
 
 router.post('/bootstrap', validate(bootstrapSchema), async (req, res, next) => {

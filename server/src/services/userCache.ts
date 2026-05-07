@@ -14,6 +14,7 @@ function reviveUser(raw: string): User {
     updatedAt: string;
     lastActiveDate: string | null;
     onboardingCompletedAt: string | null;
+    deletedAt: string | null;
   };
 
   return {
@@ -23,6 +24,7 @@ function reviveUser(raw: string): User {
     updatedAt: new Date(user.updatedAt),
     lastActiveDate: user.lastActiveDate ? new Date(user.lastActiveDate) : null,
     onboardingCompletedAt: user.onboardingCompletedAt ? new Date(user.onboardingCompletedAt) : null,
+    deletedAt: user.deletedAt ? new Date(user.deletedAt) : null,
   };
 }
 
