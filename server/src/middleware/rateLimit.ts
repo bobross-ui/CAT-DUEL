@@ -1,5 +1,5 @@
-import { NextFunction, Request, RequestHandler, Response } from 'express';
-import { RateLimitRequestHandler, rateLimit } from 'express-rate-limit';
+import { Request } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { RedisStore, RedisReply } from 'rate-limit-redis';
 import { redis } from '../config/redis';
 
@@ -26,28 +26,20 @@ function createRateLimit(
   windowMs: number,
   limit: number,
   keyGenerator: (req: Request) => string,
-): RequestHandler {
-  let limiter: RateLimitRequestHandler | null = null;
-
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!limiter) {
-      limiter = rateLimit({
-        windowMs,
-        limit,
-        keyGenerator,
-        store: new RedisStore({
-          prefix,
-          sendCommand: sendRedisCommand,
-        }),
-        standardHeaders: 'draft-7',
-        legacyHeaders: false,
-        skip: (request) => request.method === 'OPTIONS',
-        message: rateLimitResponse,
-      });
-    }
-
-    return limiter(req, res, next);
-  };
+) {
+  return rateLimit({
+    windowMs,
+    limit,
+    keyGenerator,
+    store: new RedisStore({
+      prefix,
+      sendCommand: sendRedisCommand,
+    }),
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skip: (request) => request.method === 'OPTIONS',
+    message: rateLimitResponse,
+  });
 }
 
 export const unauthenticatedGlobalRateLimit = createRateLimit(
