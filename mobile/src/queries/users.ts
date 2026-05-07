@@ -73,12 +73,7 @@ export function useCompleteOnboarding() {
 }
 
 export function useDeleteMe() {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: deleteMe,
-    onSuccess: () => {
-      queryClient.clear();
-    },
   });
 }
