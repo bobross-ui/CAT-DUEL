@@ -27,6 +27,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     }
 
     req.user = user;
+    req.firebaseToken = decoded;
     authenticatedGlobalRateLimit(req, res, (rateLimitErr) => {
       if (rateLimitErr) {
         next(rateLimitErr);

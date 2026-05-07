@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as WebBrowser from 'expo-web-browser';
-import { deleteUser, sendPasswordResetEmail } from 'firebase/auth';
+import { deleteUser, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from 'firebase/auth';
 import { z } from 'zod';
 import { auth } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
@@ -52,6 +52,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const [savingName, setSavingName] = useState(false);
   const [deleteVisible, setDeleteVisible] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
 
@@ -64,6 +65,13 @@ export default function SettingsScreen({ navigation }: Props) {
     setEditName(currentProfile?.displayName ?? '');
     setEditError('');
     setEditVisible(true);
+  }
+
+  function openDeleteAccount() {
+    setDeleteConfirm('');
+    setDeletePassword('');
+    setDeleteError('');
+    setDeleteVisible(true);
   }
 
   async function saveDisplayName() {
@@ -129,10 +137,22 @@ export default function SettingsScreen({ navigation }: Props) {
       setDeleteError('Type DELETE to confirm.');
       return;
     }
+    if (isEmailAuth && !deletePassword) {
+      setDeleteError('Enter your password to continue.');
+      return;
+    }
 
     setDeleting(true);
     setDeleteError('');
     try {
+      if (isEmailAuth) {
+        const email = auth.currentUser?.email;
+        if (!auth.currentUser || !email) throw new Error('MISSING_AUTH_USER');
+        const credential = EmailAuthProvider.credential(email, deletePassword);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+        await auth.currentUser.getIdToken(true);
+      }
+
       await deleteMe.mutateAsync();
       if (auth.currentUser) {
         await deleteUser(auth.currentUser).catch(() => {});
@@ -140,9 +160,16 @@ export default function SettingsScreen({ navigation }: Props) {
       await signOut().catch(() => {});
     } catch (err: unknown) {
       const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;
-      setDeleteError(code === 'ACTIVE_MATCH'
-        ? 'Finish your current match before deleting your account.'
-        : 'Failed to delete account. Please try again.');
+      const firebaseCode = (err as { code?: string })?.code;
+      if (code === 'ACTIVE_MATCH') {
+        setDeleteError('Finish your current match before deleting your account.');
+      } else if (code === 'REAUTH_REQUIRED') {
+        setDeleteError('Sign out and sign back in before deleting your account.');
+      } else if (firebaseCode === 'auth/invalid-credential' || firebaseCode === 'auth/wrong-password') {
+        setDeleteError('Password is incorrect.');
+      } else {
+        setDeleteError('Failed to delete account. Please try again.');
+      }
     } finally {
       setDeleting(false);
     }
@@ -225,7 +252,7 @@ export default function SettingsScreen({ navigation }: Props) {
             <Button
               label="Delete account"
               variant="coral"
-              onPress={() => setDeleteVisible(true)}
+              onPress={openDeleteAccount}
               accessibilityHint="Opens account deletion confirmation"
             />
           </View>
@@ -276,6 +303,18 @@ export default function SettingsScreen({ navigation }: Props) {
               accessibilityLabel="Delete confirmation"
               accessibilityHint="Type DELETE to confirm permanent account deletion"
             />
+            {isEmailAuth ? (
+              <TextInput
+                style={[styles.input, { borderColor: theme.line, color: theme.ink, backgroundColor: theme.bg2 }]}
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+                secureTextEntry
+                textContentType="password"
+                placeholder="Password"
+                placeholderTextColor={theme.ink3}
+                accessibilityLabel="Password"
+              />
+            ) : null}
             {deleteError ? <AppText.Sans preset="small" color={theme.coral}>{deleteError}</AppText.Sans> : null}
             <View style={styles.modalActions}>
               <Button label="Cancel" variant="ghost" onPress={() => setDeleteVisible(false)} disabled={deleting} style={styles.modalButton} />

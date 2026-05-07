@@ -10,6 +10,7 @@ import { prisma } from '../models/prisma';
 import { invalidateUserByFirebaseUid, invalidateUserById } from '../services/userCache';
 
 const router = Router();
+const RECENT_AUTH_SECONDS = 5 * 60;
 
 const updateProfileSchema = z.object({
   displayName: z.string().min(1).max(50).optional(),
@@ -64,6 +65,18 @@ router.patch('/me', authMiddleware, updateProfileRateLimit, validate(updateProfi
 
 router.delete('/me', authMiddleware, deleteAccountRateLimit, async (req, res, next) => {
   try {
+    const authAgeSeconds = Math.floor(Date.now() / 1000) - req.firebaseToken.auth_time;
+    if (authAgeSeconds > RECENT_AUTH_SECONDS) {
+      res.status(401).json({
+        success: false,
+        error: {
+          code: 'REAUTH_REQUIRED',
+          message: 'Please sign in again before deleting your account.',
+        },
+      });
+      return;
+    }
+
     const activeGameId = await redis.get(`active_game:${req.user.id}`);
     if (activeGameId) {
       res.status(409).json({
