@@ -4,6 +4,7 @@ import { Prisma } from '../generated/prisma/client';
 import admin from '../config/firebase';
 import { redis } from '../config/redis';
 import { authMiddleware } from '../middleware/auth';
+import { deleteAccountRateLimit, updateProfileRateLimit } from '../middleware/rateLimit';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
 import { invalidateUserByFirebaseUid, invalidateUserById } from '../services/userCache';
@@ -40,7 +41,7 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
   }
 });
 
-router.patch('/me', authMiddleware, validate(updateProfileSchema), async (req, res, next) => {
+router.patch('/me', authMiddleware, updateProfileRateLimit, validate(updateProfileSchema), async (req, res, next) => {
   try {
     const { onboardingCompletedAt, ...profileData } = req.body;
     const user = await prisma.user.update({
@@ -61,7 +62,7 @@ router.patch('/me', authMiddleware, validate(updateProfileSchema), async (req, r
   }
 });
 
-router.delete('/me', authMiddleware, async (req, res, next) => {
+router.delete('/me', authMiddleware, deleteAccountRateLimit, async (req, res, next) => {
   try {
     const activeGameId = await redis.get(`active_game:${req.user.id}`);
     if (activeGameId) {

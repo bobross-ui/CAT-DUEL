@@ -1,5 +1,6 @@
 import { Socket } from 'socket.io';
 import admin from '../config/firebase';
+import { registerSocketConnection } from '../services/socketRateLimit';
 import { getCachedUserByFirebaseUid } from '../services/userCache';
 
 export async function socketAuthMiddleware(
@@ -13,6 +14,8 @@ export async function socketAuthMiddleware(
     const decoded = await admin.auth().verifyIdToken(token);
     const user = await getCachedUserByFirebaseUid(decoded.uid);
     if (!user) return next(new Error('USER_NOT_FOUND'));
+    const accepted = await registerSocketConnection(user.id, socket);
+    if (!accepted) return next(new Error('TOO_MANY_CONNECTIONS'));
     socket.data.user = user;
     next();
   } catch {

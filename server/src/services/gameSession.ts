@@ -6,6 +6,7 @@ import { invalidateUserGlobalRank } from './leaderboard';
 import { bufferQuestionServes } from './questionServeBuffer';
 import { invalidateUserById } from './userCache';
 import { gradeAnswer } from './answerGrading';
+import { enforceSocketEventLimit } from './socketRateLimit';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1058,6 +1059,8 @@ export function registerGameHandlers(gameNs: Namespace): void {
     );
 
     socket.on('game:join', async ({ gameId }: { gameId: string }) => {
+      if (!(await enforceSocketEventLimit(socket, 'game:join', user.id))) return;
+
       const state = await getGameState(gameId);
       if (!state) return socket.emit('game:error', { message: 'Game not found' });
 
@@ -1162,7 +1165,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
 
     socket.on(
       'answer:submit',
-      ({
+      async ({
         gameId,
         questionId,
         selectedAnswer,
@@ -1175,18 +1178,22 @@ export function registerGameHandlers(gameNs: Namespace): void {
         typedAnswer?: string;
         timeTakenMs: number;
       }) => {
-        handleAnswer(
-          socket,
-          user.id,
-          gameId,
-          questionId,
-          selectedAnswer ?? null,
-          typedAnswer ?? null,
-          timeTakenMs,
-          gameNs,
-        ).catch((err) =>
-          console.error(`Answer handling error [${gameId}]:`, err),
-        );
+        try {
+          if (!(await enforceSocketEventLimit(socket, 'answer:submit', user.id))) return;
+
+          await handleAnswer(
+            socket,
+            user.id,
+            gameId,
+            questionId,
+            selectedAnswer ?? null,
+            typedAnswer ?? null,
+            timeTakenMs,
+            gameNs,
+          );
+        } catch (err) {
+          console.error(`Answer handling error [${gameId}]:`, err);
+        }
       },
     );
 

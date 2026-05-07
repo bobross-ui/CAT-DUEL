@@ -3,6 +3,7 @@ import admin from '../config/firebase';
 import { prisma } from '../models/prisma';
 import { touchStreak } from '../services/streak';
 import { cacheUser, getCachedUserByFirebaseUid } from '../services/userCache';
+import { authenticatedGlobalRateLimit } from './rateLimit';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -33,12 +34,19 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       await cacheUser(user);
     }
 
-    void touchStreak(user.id).catch((error) => {
-      console.error('[authMiddleware] touchStreak failed:', error);
-    });
-
     req.user = user;
-    next();
+    authenticatedGlobalRateLimit(req, res, (rateLimitErr) => {
+      if (rateLimitErr) {
+        next(rateLimitErr);
+        return;
+      }
+
+      void touchStreak(user.id).catch((error) => {
+        console.error('[authMiddleware] touchStreak failed:', error);
+      });
+
+      next();
+    });
   } catch (err) {
     next(err);
   }

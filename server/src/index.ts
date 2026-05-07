@@ -6,6 +6,7 @@ import { Server } from 'socket.io';
 import { env } from './config/env';
 import { corsOptions, socketCorsOptions } from './config/cors';
 import { verifyRedisConnection } from './config/redis';
+import { unauthenticatedGlobalRateLimit } from './middleware/rateLimit';
 import { socketAuthMiddleware } from './middleware/socketAuth';
 import { registerMatchmakingHandlers } from './services/matchmaking';
 import { startMatchmakingLoop } from './services/matchmakingLoop';
@@ -50,6 +51,7 @@ app.use(helmet({
     : false,
 }));
 app.use(cors(corsOptions));
+app.use(unauthenticatedGlobalRateLimit);
 app.use(express.json());
 
 app.use('/api', healthRouter);

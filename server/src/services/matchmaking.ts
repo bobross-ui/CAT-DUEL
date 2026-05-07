@@ -10,6 +10,7 @@ import {
   RatingImpact,
 } from './gameSession';
 import { calculateMatchElo } from './elo';
+import { enforceSocketEventLimit } from './socketRateLimit';
 
 export type QueuePlayer = GamePlayer;
 
@@ -113,6 +114,8 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
     const user = socket.data.user;
 
     socket.on('queue:join', async () => {
+      if (!(await enforceSocketEventLimit(socket, 'queue:join', user.id))) return;
+
       const alreadyInQueue = await redis.zscore('matchmaking_queue', user.id);
       if (alreadyInQueue) return;
 
@@ -137,6 +140,8 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
     });
 
     socket.on('queue:leave', async () => {
+      if (!(await enforceSocketEventLimit(socket, 'queue:leave', user.id))) return;
+
       await redis.zrem('matchmaking_queue', user.id);
       await redis.del(`queue_joined:${user.id}`, `socket:mm:${user.id}`);
       socket.emit('queue:left');

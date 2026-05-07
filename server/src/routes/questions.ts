@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../models/prisma';
 import { authMiddleware } from '../middleware/auth';
+import { practiceAnswerRateLimit } from '../middleware/rateLimit';
 import { validate } from '../middleware/validate';
 import { bufferQuestionServes } from '../services/questionServeBuffer';
 import { gradeAnswer } from '../services/answerGrading';
@@ -162,7 +163,7 @@ const answerSchema = z.object({
   message: 'selectedAnswer or typedAnswer is required',
 });
 
-router.post('/:id/answer', validate(answerSchema), async (req: Request, res: Response) => {
+router.post('/:id/answer', practiceAnswerRateLimit, validate(answerSchema), async (req: Request, res: Response) => {
   const question = await prisma.question.findUnique({ where: { id: req.params.id } });
   if (!question) {
     res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Question not found' } });
