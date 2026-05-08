@@ -13,7 +13,7 @@ import { unauthenticatedGlobalRateLimit } from './middleware/rateLimit';
 import { socketAuthMiddleware } from './middleware/socketAuth';
 import { registerMatchmakingHandlers } from './services/matchmaking';
 import { startMatchmakingLoop, stopMatchmakingLoop } from './services/matchmakingLoop';
-import { registerGameHandlers } from './services/gameSession';
+import { registerGameHandlers, recoverActiveGames } from './services/gameSession';
 import { startQuestionServeCountFlush, stopQuestionServeCountFlush, flushQuestionServeCounts } from './services/questionServeBuffer';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
@@ -158,6 +158,7 @@ async function startServer(): Promise<void> {
   registerGameHandlers(gameNs);
 
   if (env.RUN_BACKGROUND_JOBS) {
+    await recoverActiveGames(gameNs);
     startMatchmakingLoop(matchmakingNs, gameNs);
     startQuestionServeCountFlush();
   }

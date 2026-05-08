@@ -1357,3 +1357,51 @@ export async function getPendingMatchForUser(
 export async function getPendingGameId(userId: string): Promise<string | null> {
   return redis.get(pendingMatchKey(userId));
 }
+
+export async function recoverActiveGames(gameNs: Namespace): Promise<void> {
+  const gameIds = new Set<string>();
+
+  for (const pattern of ['active_game:*', 'pending_match:*']) {
+    let cursor = '0';
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      cursor = nextCursor;
+      for (const key of keys) {
+        const gameId = await redis.get(key);
+        if (gameId) gameIds.add(gameId);
+      }
+    } while (cursor !== '0');
+  }
+
+  const now = Date.now();
+  for (const gameId of gameIds) {
+    try {
+      const state = await getGameState(gameId);
+      if (!state) continue;
+
+      if (state.status === 'COUNTDOWN') {
+        const elapsed = now - (state.countdownStartedAt ?? now);
+        if (elapsed > 30_000) {
+          await redis.del(
+            pendingMatchKey(state.player1Id),
+            pendingMatchKey(state.player2Id),
+            gameStateKey(gameId),
+          );
+        }
+        continue;
+      }
+
+      if (state.status !== 'ACTIVE' || !state.startedAt) continue;
+
+      const endTime = state.startedAt + state.durationSeconds * 1000;
+      if (now >= endTime) {
+        await endGame(gameId, gameNs);
+      } else {
+        const remainingSeconds = Math.ceil((endTime - now) / 1000);
+        startGameTimer(gameId, remainingSeconds, gameNs);
+      }
+    } catch (err) {
+      console.error(`[recoverActiveGames] failed for game ${gameId}:`, err);
+    }
+  }
+}
