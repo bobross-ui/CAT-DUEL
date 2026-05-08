@@ -6,26 +6,10 @@ const INITIAL_RANGE = 150;
 const EXPANDED_RANGE = 300;
 const EXPAND_AFTER_MS = 30_000;
 const TIMEOUT_MS = 60_000;
-const LOCK_KEY = 'matchmaking:lock';
-const LOCK_TTL_SECONDS = 10;
 const CLAIM_TTL_SECONDS = 30;
 
 function claimKey(userId: string): string {
   return `matchmaking:claim:${userId}`;
-}
-
-async function releaseLock(token: string): Promise<void> {
-  await redis.eval(
-    `
-    if redis.call("get", KEYS[1]) == ARGV[1] then
-      return redis.call("del", KEYS[1])
-    end
-    return 0
-    `,
-    1,
-    LOCK_KEY,
-    token,
-  );
 }
 
 async function claimPlayers(player1: QueuePlayer, player2: QueuePlayer): Promise<string | null> {
@@ -87,12 +71,7 @@ function parseQueueEntries(raw: string[]): QueuePlayer[] {
 }
 
 async function runMatchmaking(matchmakingNs: Namespace, gameNs: Namespace): Promise<void> {
-  const lockToken = `${process.pid}:${crypto.randomUUID()}`;
-  const lock = await redis.set(LOCK_KEY, lockToken, 'EX', LOCK_TTL_SECONDS, 'NX');
-  if (!lock) return;
-
-  try {
-    const raw = await redis.zrangebyscore(
+  const raw = await redis.zrangebyscore(
       'matchmaking_queue',
       '-inf',
       '+inf',
@@ -148,9 +127,6 @@ async function runMatchmaking(matchmakingNs: Namespace, gameNs: Namespace): Prom
         );
       }
     }
-  } finally {
-    await releaseLock(lockToken);
-  }
 }
 
 let matchmakingTimer: ReturnType<typeof setInterval> | null = null;

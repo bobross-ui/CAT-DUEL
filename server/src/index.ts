@@ -156,8 +156,11 @@ async function startServer(): Promise<void> {
 
   registerMatchmakingHandlers(matchmakingNs);
   registerGameHandlers(gameNs);
-  startMatchmakingLoop(matchmakingNs, gameNs);
-  startQuestionServeCountFlush();
+
+  if (env.RUN_BACKGROUND_JOBS) {
+    startMatchmakingLoop(matchmakingNs, gameNs);
+    startQuestionServeCountFlush();
+  }
 
   httpServer.listen(env.PORT, () => {
     console.log(`Server running on port ${env.PORT} (${env.NODE_ENV})`);
