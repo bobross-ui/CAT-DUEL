@@ -9,7 +9,7 @@ Each task lists: **Where**, **What**, **Library / approach**, **Acceptance**. No
 
 ## Phase 0 — Pre-flight setup (½ day)
 
-### 0.1 Add the env vars used downstream
+### ✅ 0.1 Add the env vars used downstream
 - **Where:** `server/src/config/env.ts`
 - **What:** Extend the Zod schema with the variables introduced by later tasks so they are validated up front.
   - `GAME_DURATION_SECONDS` (z.coerce.number, default `600`)
@@ -20,7 +20,7 @@ Each task lists: **Where**, **What**, **Library / approach**, **Acceptance**. No
   - `ALLOW_PROD_SEED` (z.enum(['true','false']), default `'false'`)
 - **Acceptance:** Server still boots in dev with no new vars set; production rejects missing required ones.
 
-### 0.2 Set up a working test command
+### ✅ 0.2 Set up a working test command
 - **Where:** root `package.json`, `server/package.json`
 - **What:** Ensure `npm test --workspace=server` runs cleanly. The codebase already has Jest tests under `server/src/**/__tests__/*`. Fix any unrelated fixture failures noted in `PRE_DEPLOYMENT_OPTIMIZATIONS.md` (`questionImport.test.ts`, `extractedFixtures.test.ts`) before adding CI gating in 5.1, otherwise CI will block all merges from day one.
 - **Acceptance:** `npm test` passes locally on a fresh clone.
@@ -31,13 +31,13 @@ Each task lists: **Where**, **What**, **Library / approach**, **Acceptance**. No
 
 Each item is independently shippable. Aim for one PR per task to keep review loads sane.
 
-### 1.1 Restore game duration to 10 minutes
+### ✅ 1.1 Restore game duration to 10 minutes
 - **Where:** `server/src/services/matchmaking.ts:63`, `server/src/services/gameSession.ts:175`
 - **What:** Replace the hardcoded 2-minute duration constants with a single import from `env.GAME_DURATION_SECONDS` (added in 0.1).
 - **Library:** none.
 - **Acceptance:** `grep -n "120\|2 \* 60" server/src` returns nothing related to duration; new env var is documented in `README.md`.
 
-### 1.2 Make answer timing server-authoritative
+### ✅ 1.2 Make answer timing server-authoritative
 - **Where:** `server/src/services/gameSession.ts` — the question-serve sites (lines ~596, ~707) and `handleAnswer` (lines ~681, ~712).
 - **What:**
   1. When a question is served to a player, write a per-(gameId, playerId, questionId) `servedAt` timestamp into the existing Redis game state (or a sibling hash). It already exists implicitly via the timer but is not used for grading.
@@ -47,7 +47,7 @@ Each item is independently shippable. Aim for one PR per task to keep review loa
 - **Library:** none — `Date.now()` and existing ioredis client.
 - **Acceptance:** Forging `timeTakenMs: 0` from a tampered client produces a `MatchAnswer` row with the real elapsed time. A unit test on `handleAnswer` covers the late-submit rejection.
 
-### 1.3 Graceful shutdown
+### ✅ 1.3 Graceful shutdown
 - **Where:** `server/src/index.ts`. Will also need exported stop functions on `services/matchmakingLoop.ts` and `services/questionServeBuffer.ts` (currently `start*` only).
 - **What:** Register handlers for `SIGTERM` and `SIGINT` that, in order:
   1. Stop accepting new HTTP connections and drain in-flight ones.

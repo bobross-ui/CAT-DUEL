@@ -153,10 +153,19 @@ async function runMatchmaking(matchmakingNs: Namespace, gameNs: Namespace): Prom
   }
 }
 
+let matchmakingTimer: ReturnType<typeof setInterval> | null = null;
+
 export function startMatchmakingLoop(matchmakingNs: Namespace, gameNs: Namespace): void {
-  setInterval(() => {
+  matchmakingTimer = setInterval(() => {
     runMatchmaking(matchmakingNs, gameNs).catch((err) =>
       console.error('Matchmaking loop error:', err),
     );
   }, 2000);
+}
+
+export function stopMatchmakingLoop(): void {
+  if (matchmakingTimer) {
+    clearInterval(matchmakingTimer);
+    matchmakingTimer = null;
+  }
 }

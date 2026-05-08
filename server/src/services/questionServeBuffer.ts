@@ -52,10 +52,19 @@ export async function flushQuestionServeCounts(): Promise<void> {
   }
 }
 
+let flushTimer: ReturnType<typeof setInterval> | null = null;
+
 export function startQuestionServeCountFlush(): void {
-  setInterval(() => {
+  flushTimer = setInterval(() => {
     flushQuestionServeCounts().catch((err) =>
       console.error('[questionServeBuffer] flush failed:', err),
     );
   }, FLUSH_INTERVAL_MS);
+}
+
+export function stopQuestionServeCountFlush(): void {
+  if (flushTimer) {
+    clearInterval(flushTimer);
+    flushTimer = null;
+  }
 }
