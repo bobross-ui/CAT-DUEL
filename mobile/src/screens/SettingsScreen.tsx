@@ -26,6 +26,7 @@ import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDeleteMe, useUpdateMe } from '../queries/users';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -42,6 +43,7 @@ export default function SettingsScreen({ navigation }: Props) {
     setAnalyticsEnabled,
   } = useAppPreferences();
   const { user: currentProfile, loading } = useCurrentProfile();
+  const queryClient = useQueryClient();
   const updateMe = useUpdateMe();
   const deleteMe = useDeleteMe();
   const [editVisible, setEditVisible] = useState(false);
@@ -146,6 +148,7 @@ export default function SettingsScreen({ navigation }: Props) {
       }
 
       await deleteMe.mutateAsync();
+      queryClient.clear();
       await signOut().catch(() => {});
     } catch (err: unknown) {
       const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;

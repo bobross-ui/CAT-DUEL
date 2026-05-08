@@ -250,7 +250,7 @@ export default function RootNavigator({
   useEffect(() => {
     if (!firebaseUser) {
       previousStreakRef.current = null;
-      queryClient.removeQueries({ queryKey: queryKeys.me() });
+      queryClient.clear();
       resetAnalytics();
     }
   }, [firebaseUser, queryClient]);
