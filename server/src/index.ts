@@ -134,8 +134,8 @@ async function shutdown(exitCode = 0): Promise<void> {
   }
 }
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGTERM', () => shutdown());
+process.on('SIGINT', () => shutdown());
 
 process.on('uncaughtException', (err) => {
   console.error({ err, type: 'uncaughtException' }, 'Uncaught exception — shutting down');
