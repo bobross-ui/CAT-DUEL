@@ -27,18 +27,17 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
       res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
       return;
     }
-    const isOwnProfile = req.user.id === user.id;
     const publicData = {
       id: user.id,
-      displayName: user.displayName,
+      displayName: publicDisplayName(user),
       avatarUrl: user.avatarUrl,
       eloRating: user.eloRating,
+      rankTier: user.rankTier,
       gamesPlayed: user.gamesPlayed,
-      createdAt: user.createdAt,
-      deletedAt: user.deletedAt,
-      ...(isOwnProfile && { email: user.email }),
+      wins: user.wins,
+      currentStreak: user.currentStreak,
+      longestStreak: user.longestStreak,
     };
-    publicData.displayName = publicDisplayName(user);
     res.set('Cache-Control', 'private, max-age=60');
     res.json({ success: true, data: publicData });
   } catch (err) {

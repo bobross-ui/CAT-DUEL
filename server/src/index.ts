@@ -78,7 +78,7 @@ app.use(helmet({
 }));
 app.use(cors(corsOptions));
 app.use(unauthenticatedGlobalRateLimit);
-app.use(express.json());
+app.use(express.json({ limit: '32kb' }));
 
 app.use('/api', healthRouter);
 app.use('/api/auth', authRouter);
