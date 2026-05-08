@@ -90,7 +90,7 @@ app.use('/api/leaderboard', leaderboardRouter);
 app.use(errorHandler);
 
 // --- Graceful shutdown ---
-async function shutdown(): Promise<void> {
+async function shutdown(exitCode = 0): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
 
@@ -126,7 +126,7 @@ async function shutdown(): Promise<void> {
 
     clearTimeout(hardExit);
     console.log('Graceful shutdown complete');
-    process.exit(0);
+    process.exit(exitCode);
   } catch (err) {
     console.error('Error during shutdown:', err);
     process.exit(1);
@@ -135,6 +135,16 @@ async function shutdown(): Promise<void> {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+process.on('uncaughtException', (err) => {
+  console.error({ err, type: 'uncaughtException' }, 'Uncaught exception — shutting down');
+  shutdown(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error({ reason, type: 'unhandledRejection' }, 'Unhandled rejection — shutting down');
+  shutdown(1);
+});
 
 async function startServer(): Promise<void> {
   await verifyRedisConnection();
