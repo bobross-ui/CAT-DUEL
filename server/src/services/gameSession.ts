@@ -312,6 +312,15 @@ function pendingMatchKey(userId: string) {
   return `pending_match:${userId}`;
 }
 
+function servedAtKey(gameId: string, userId: string, questionId: string) {
+  return `served_at:${gameId}:${userId}:${questionId}`;
+}
+
+export function isAnswerLate(startedAt: number | null, durationSeconds: number, now = Date.now()): boolean {
+  if (!startedAt) return false;
+  return now > startedAt + durationSeconds * 1000;
+}
+
 function isPreStartStatus(status: GameState['status']) {
   return status === 'FOUND' || status === 'WAITING_FOR_PLAYERS' || status === 'COUNTDOWN';
 }
@@ -626,9 +635,13 @@ async function startCountdown(
     );
 
     const firstQuestion = current.questions[current.questionIds[0]] ?? null;
+    const firstQuestionId = current.questionIds[0];
+    const servedAt = current.startedAt!;
     await Promise.all([
       incrementQuestionServeCounts(current.questionIds),
       saveGameState(current, getStateTtlSeconds(current)),
+      redis.set(servedAtKey(gameId, current.player1Id, firstQuestionId), servedAt, 'EX', current.durationSeconds + 60),
+      redis.set(servedAtKey(gameId, current.player2Id, firstQuestionId), servedAt, 'EX', current.durationSeconds + 60),
     ]);
 
     // Send start + first question in one event so mobile never has a blank ACTIVE state
@@ -679,11 +692,12 @@ async function handleAnswer(
   questionId: string,
   selectedAnswer: number | null,
   typedAnswer: string | null,
-  timeTakenMs: number,
   gameNs: Namespace,
 ): Promise<void> {
   const state = await getGameState(gameId);
   if (!state || state.status !== 'ACTIVE') return;
+
+  if (isAnswerLate(state.startedAt, state.durationSeconds)) return;
 
   const isPlayer1 = state.player1Id === userId;
   if (!isPlayer1 && state.player2Id !== userId) return;
@@ -705,6 +719,9 @@ async function handleAnswer(
   if (!expectedAnswer) return;
 
   const isCorrect = gradeAnswer(expectedAnswer, { selectedAnswer, typedAnswer });
+
+  const servedAtRaw = await redis.get(servedAtKey(gameId, userId, questionId));
+  const timeTakenMs = servedAtRaw ? Date.now() - parseInt(servedAtRaw, 10) : 0;
 
   state[answerKey][questionId] = {
     selected: selectedAnswer,
@@ -741,6 +758,8 @@ async function handleAnswer(
   await saveGameStateFields(state, changedFields);
 
   if (nextQuestion) {
+    const nextQuestionId = state.questionIds[newProgress];
+    await redis.set(servedAtKey(gameId, userId, nextQuestionId), Date.now(), 'EX', state.durationSeconds + 60);
     socket.emit('game:question', {
       question: withPassage(nextQuestion, state.passages),
       questionNumber: newProgress + 1,
@@ -1171,13 +1190,11 @@ export function registerGameHandlers(gameNs: Namespace): void {
         questionId,
         selectedAnswer,
         typedAnswer,
-        timeTakenMs,
       }: {
         gameId: string;
         questionId: string;
         selectedAnswer?: number;
         typedAnswer?: string;
-        timeTakenMs: number;
       }) => {
         try {
           if (!(await enforceSocketEventLimit(socket, 'answer:submit', user.id))) return;
@@ -1189,7 +1206,6 @@ export function registerGameHandlers(gameNs: Namespace): void {
             questionId,
             selectedAnswer ?? null,
             typedAnswer ?? null,
-            timeTakenMs,
             gameNs,
           );
         } catch (err) {
