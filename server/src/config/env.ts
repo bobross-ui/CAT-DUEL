@@ -13,6 +13,12 @@ const envSchema = z.object({
   FIREBASE_CLIENT_EMAIL: z.string().email(),
   FIREBASE_PRIVATE_KEY: z.string().min(1).transform((key) => key.replace(/\\n/g, '\n')),
   ALLOWED_ORIGINS: z.string().min(1),
+  GAME_DURATION_SECONDS: z.coerce.number().int().positive().default(600),
+  RUN_BACKGROUND_JOBS: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  SENTRY_DSN: z.string().url().optional(),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  TRUST_PROXY: z.coerce.number().int().nonnegative().default(0),
+  ALLOW_PROD_SEED: z.enum(['true', 'false']).default('false'),
 }).superRefine((values, ctx) => {
   if (values.NODE_ENV !== 'production') {
     return;

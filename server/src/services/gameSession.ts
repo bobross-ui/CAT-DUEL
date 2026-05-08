@@ -1,4 +1,5 @@
 import { Namespace, Socket } from 'socket.io';
+import { env } from '../config/env';
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
 import { calculateMatchElo, getRankTier, MatchEloResult } from './elo';
@@ -172,7 +173,7 @@ async function buildResultsAnswers(state: GameState): Promise<ResultsAnswerDetai
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const QUESTION_COUNT = 20;
-const GAME_DURATION_SECONDS = 120; // TODO: restore to 600 after testing
+const GAME_DURATION_SECONDS = env.GAME_DURATION_SECONDS;
 const COUNTDOWN_SECONDS = 3;
 const PRESTART_TIMEOUT_MS = 10_000;
 const PRESTART_TTL_SECONDS = 30;

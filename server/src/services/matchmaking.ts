@@ -1,4 +1,5 @@
 import { Namespace } from 'socket.io';
+import { env } from '../config/env';
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
 import {
@@ -60,7 +61,7 @@ export async function createMatch(
     redis.get(`socket:mm:${player2.userId}`),
   ]);
 
-  const matchData = { gameId, duration: 120 }; // TODO: restore to 600 after testing
+  const matchData = { gameId, duration: env.GAME_DURATION_SECONDS };
 
   const p1Profile = publicProfile(p1User);
   const p2Profile = publicProfile(p2User);
