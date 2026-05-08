@@ -1,0 +1,10 @@
+.git
+node_modules
+*/node_modules
+mobile/
+docs/
+todolist/
+scripts/
+*.md
+.env*
+server/dist
