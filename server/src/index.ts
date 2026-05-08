@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { Server } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
 import { env } from './config/env';
 import { corsOptions, socketCorsOptions } from './config/cors';
 import { redis, verifyRedisConnection } from './config/redis';
@@ -148,6 +149,10 @@ process.on('unhandledRejection', (reason) => {
 
 async function startServer(): Promise<void> {
   await verifyRedisConnection();
+
+  const pubClient = redis.duplicate();
+  const subClient = redis.duplicate();
+  io.adapter(createAdapter(pubClient, subClient));
 
   registerMatchmakingHandlers(matchmakingNs);
   registerGameHandlers(gameNs);
