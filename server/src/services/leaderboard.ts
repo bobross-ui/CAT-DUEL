@@ -168,26 +168,55 @@ export async function getGlobalLeaderboard(currentUserId: string): Promise<Leade
 }
 
 export async function getAroundMeLeaderboard(userId: string): Promise<LeaderboardResponse> {
-  const userRank = await getUserGlobalRank(userId);
+  const [userRank, currentUser] = await Promise.all([
+    getUserGlobalRank(userId),
+    prisma.user.findUnique({ where: { id: userId }, select: { eloRating: true, createdAt: true } }),
+  ]);
 
-  if (userRank == null) {
+  if (userRank == null || !currentUser) {
     const response = await getGlobalLeaderboard(userId);
     return { ...response, entries: response.entries.slice(0, 10) };
   }
 
-  const startRank = Math.max(1, userRank - 5);
-  const skip = startRank - 1;
+  const baseWhere = { gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null };
+  const userSelect = {
+    id: true, displayName: true, avatarUrl: true, deletedAt: true,
+    eloRating: true, rankTier: true, gamesPlayed: true, winRate: true,
+  };
 
-  const rows = await prisma.user.findMany({
-    where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null },
-    orderBy: [{ eloRating: 'desc' }, { createdAt: 'asc' }],
-    skip,
-    take: 10,
-    select: {
-      id: true, displayName: true, avatarUrl: true, deletedAt: true,
-      eloRating: true, rankTier: true, gamesPlayed: true, winRate: true,
-    },
-  });
+  const [above, atOrBelow, totalRanked] = await Promise.all([
+    // 5 closest users ranked above: highest ELO of this group comes last (ASC), so take:5 gives the nearest 5
+    prisma.user.findMany({
+      where: {
+        ...baseWhere,
+        OR: [
+          { eloRating: { gt: currentUser.eloRating } },
+          { AND: [{ eloRating: currentUser.eloRating }, { createdAt: { lt: currentUser.createdAt } }] },
+        ],
+      },
+      orderBy: [{ eloRating: 'asc' }, { createdAt: 'desc' }],
+      take: 5,
+      select: userSelect,
+    }),
+    // current user + up to 4 below, in leaderboard order
+    prisma.user.findMany({
+      where: {
+        ...baseWhere,
+        OR: [
+          { eloRating: { lt: currentUser.eloRating } },
+          { AND: [{ eloRating: currentUser.eloRating }, { createdAt: { gte: currentUser.createdAt } }] },
+        ],
+      },
+      orderBy: [{ eloRating: 'desc' }, { createdAt: 'asc' }],
+      take: 5,
+      select: userSelect,
+    }),
+    prisma.user.count({ where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null } }),
+  ]);
+
+  // above is ordered closest-first (ASC elo); reverse to get top-to-bottom order
+  const rows = [...above.reverse(), ...atOrBelow];
+  const startRank = userRank - above.length;
 
   const entries = rows.map((u, i) => ({
     rank: startRank + i,
@@ -201,7 +230,6 @@ export async function getAroundMeLeaderboard(userId: string): Promise<Leaderboar
     isCurrentUser: u.id === userId,
   }));
 
-  const totalRanked = await prisma.user.count({ where: { gamesPlayed: { gte: MIN_GAMES_TO_RANK }, deletedAt: null } });
   return { entries, currentUserRank: userRank, totalRanked };
 }
 
