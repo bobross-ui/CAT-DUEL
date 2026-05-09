@@ -58,8 +58,8 @@ model User {
   matchesAsPlayer2 Match[]        @relation("MatchPlayer2")
   matchAnswers    MatchAnswer[]
 
-  @@index([eloRating(sort: Desc)])
-  @@index([rankTier, eloRating(sort: Desc)])
+  @@index([deletedAt, gamesPlayed, eloRating(sort: Desc)])
+  @@index([deletedAt, rankTier, gamesPlayed, eloRating(sort: Desc)])
   @@map("users")
 }
 
