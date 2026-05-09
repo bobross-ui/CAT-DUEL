@@ -1,5 +1,6 @@
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
+import { logger } from '../lib/logger';
 
 const BUFFER_KEY = 'question_served_buffer';
 const FLUSH_INTERVAL_MS = 60_000;
@@ -57,7 +58,7 @@ let flushTimer: ReturnType<typeof setInterval> | null = null;
 export function startQuestionServeCountFlush(): void {
   flushTimer = setInterval(() => {
     flushQuestionServeCounts().catch((err) =>
-      console.error('[questionServeBuffer] flush failed:', err),
+      logger.error({ err }, 'questionServeBuffer: flush failed'),
     );
   }, FLUSH_INTERVAL_MS);
 }

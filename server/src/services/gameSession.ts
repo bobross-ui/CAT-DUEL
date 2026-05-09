@@ -9,6 +9,7 @@ import { invalidateUserById } from './userCache';
 import { gradeAnswer } from './answerGrading';
 import { enforceSocketEventLimit } from './socketRateLimit';
 import { getPoolIds, getQuestionsContent, contentKey, CONTENT_TTL } from './questionPool';
+import { logger } from '../lib/logger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -459,7 +460,7 @@ async function schedulePreStartTimeout(
   const delay = Math.max(joinDeadlineAt - Date.now(), 0);
   const timer = setTimeout(() => {
     cancelPreStartGame(gameId, gameNs, 'join_timeout').catch((err) =>
-      console.error(`Pre-start timeout error [${gameId}]:`, err),
+      logger.error({ err, gameId }, 'Pre-start timeout error'),
     );
   }, delay);
   preStartTimers.set(gameId, timer);
@@ -729,7 +730,7 @@ function startGameTimer(
       clearInterval(interval);
       activeTimers.delete(gameId);
       endGame(gameId, gameNs).catch((err) =>
-        console.error(`Timer endGame error [${gameId}]:`, err),
+        logger.error({ err, gameId }, 'Timer endGame error'),
       );
     }
   }, 1000);
@@ -874,7 +875,7 @@ export async function endGame(
   ]);
 
   if (!p1 || !p2) {
-    console.error(`[endGame] user not found for game ${gameId}`);
+    logger.error({ gameId }, 'endGame: user not found');
     return;
   }
 
@@ -949,7 +950,7 @@ export async function endGame(
     eloResult,
     { player1: p1, player2: p2 },
   ).catch((err) =>
-    console.error(`persistMatch error [${gameId}]:`, err),
+    logger.error({ err, gameId }, 'persistMatch error'),
   );
 }
 
@@ -1059,7 +1060,7 @@ async function persistMatch(
 
       return;
     } catch (err) {
-      console.error(`[persistMatch] attempt ${attempt}/${MAX_RETRIES} failed:`, err);
+      logger.error({ err, gameId: state.gameId, attempt, maxRetries: MAX_RETRIES }, 'persistMatch attempt failed');
       if (attempt === MAX_RETRIES) {
         await redis.lpush(
           'match_persist_failed',
@@ -1127,7 +1128,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
   gameNs.on('connection', (socket) => {
     const user = socket.data.user;
     void redis.set(socketKey(user.id), socket.id, 'EX', 1200).catch((err) =>
-      console.error(`Socket bind error [${user.id}]:`, err),
+      logger.error({ err, userId: user.id }, 'Socket bind error'),
     );
 
     socket.on('game:join', async ({ gameId }: { gameId: string }) => {
@@ -1261,7 +1262,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
             gameNs,
           );
         } catch (err) {
-          console.error(`Answer handling error [${gameId}]:`, err);
+          logger.error({ err, gameId }, 'Answer handling error');
         }
       },
     );
@@ -1276,7 +1277,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
         state.player1Id === user.id ? state.player2Id : state.player1Id;
 
       await endGame(gameId, gameNs, { forcedWinnerId: opponentId }).catch((err) =>
-        console.error(`Forfeit endGame error [${gameId}]:`, err),
+        logger.error({ err, gameId }, 'Forfeit endGame error'),
       );
     });
 
@@ -1336,7 +1337,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
           current.player1Id === user.id ? current.player2Id : current.player1Id;
 
         await endGame(gameId, gameNs, { forcedWinnerId: currentOpponentId }).catch((err) =>
-          console.error(`Auto-forfeit endGame error [${gameId}]:`, err),
+          logger.error({ err, gameId }, 'Auto-forfeit endGame error'),
         );
       }, ACTIVE_FORFEIT_GRACE_SECONDS * 1000);
 
@@ -1453,7 +1454,7 @@ export async function recoverActiveGames(gameNs: Namespace): Promise<void> {
         startGameTimer(gameId, remainingSeconds, gameNs);
       }
     } catch (err) {
-      console.error(`[recoverActiveGames] failed for game ${gameId}:`, err);
+      logger.error({ err, gameId }, 'recoverActiveGames: game recovery failed');
     }
   }
 }

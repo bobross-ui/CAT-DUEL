@@ -3,6 +3,7 @@ import { prisma } from '../models/prisma';
 import type { User } from '../generated/prisma/client';
 import { RankTier } from './elo';
 import { publicDisplayName } from './displayName';
+import { logger } from '../lib/logger';
 
 const MIN_GAMES_TO_RANK = 5;
 const GLOBAL_CACHE_KEY = 'leaderboard:global:v2:top100';
@@ -45,7 +46,7 @@ export async function getUserGlobalRank(userId: string): Promise<number | null> 
     const cached = await redis.get(cacheKey);
     if (cached) return JSON.parse(cached) as number | null;
   } catch (err) {
-    console.error('[leaderboard] global rank cache read failed:', err);
+    logger.error({ err }, 'leaderboard: global rank cache read failed');
   }
 
   const user = await prisma.user.findUnique({
@@ -57,7 +58,7 @@ export async function getUserGlobalRank(userId: string): Promise<number | null> 
     try {
       await redis.set(cacheKey, JSON.stringify(null), 'EX', USER_GLOBAL_RANK_CACHE_TTL);
     } catch (err) {
-      console.error('[leaderboard] global rank cache write failed:', err);
+      logger.error({ err }, 'leaderboard: global rank cache write failed');
     }
     return null;
   }
@@ -82,7 +83,7 @@ export async function getUserGlobalRank(userId: string): Promise<number | null> 
   try {
     await redis.set(cacheKey, JSON.stringify(rank), 'EX', USER_GLOBAL_RANK_CACHE_TTL);
   } catch (err) {
-    console.error('[leaderboard] global rank cache write failed:', err);
+    logger.error({ err }, 'leaderboard: global rank cache write failed');
   }
 
   return rank;
@@ -92,7 +93,7 @@ export async function invalidateUserGlobalRank(userId: string): Promise<void> {
   try {
     await redis.del(userGlobalRankCacheKey(userId));
   } catch (err) {
-    console.error('[leaderboard] global rank cache invalidate failed:', err);
+    logger.error({ err }, 'leaderboard: global rank cache invalidate failed');
   }
 }
 
@@ -104,7 +105,7 @@ export async function invalidateLeaderboardCaches(userId: string): Promise<void>
       ...RANK_TIERS.map((tier) => `leaderboard:tier:${tier}:v2:top100`),
     );
   } catch (err) {
-    console.error('[leaderboard] cache invalidate failed:', err);
+    logger.error({ err }, 'leaderboard: cache invalidate failed');
   }
 }
 

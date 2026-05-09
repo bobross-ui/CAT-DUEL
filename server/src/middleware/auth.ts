@@ -35,7 +35,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       }
 
       void touchStreak(user.id).catch((error) => {
-        console.error('[authMiddleware] touchStreak failed:', error);
+        req.log.error({ err: error }, 'authMiddleware: touchStreak failed');
       });
 
       next();

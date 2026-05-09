@@ -117,7 +117,7 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
       const cached = await redis.get(eloCacheKey);
       if (cached) eloStats = JSON.parse(cached);
     } catch (err) {
-      console.error('[games/stats] elo cache read failed:', err);
+      req.log.error({ err }, 'games/stats: elo cache read failed');
     }
 
     if (!eloStats) {
@@ -155,7 +155,7 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
       try {
         await redis.set(eloCacheKey, JSON.stringify(eloStats), 'EX', 300);
       } catch (err) {
-        console.error('[games/stats] elo cache write failed:', err);
+        req.log.error({ err }, 'games/stats: elo cache write failed');
       }
     }
 

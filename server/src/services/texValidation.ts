@@ -16,8 +16,10 @@ export function validateTexValue(value: string, row: number, field: string): Tex
   const warnings: TexValidationWarning[] = [];
 
   for (const segment of extractTexSegments(value)) {
+    // eslint-disable-next-line no-console
     const originalWarn = console.warn;
     try {
+      // eslint-disable-next-line no-console
       console.warn = () => undefined;
       katex.renderToString(segment, {
         displayMode: false,
@@ -31,6 +33,7 @@ export function validateTexValue(value: string, row: number, field: string): Tex
         message: error instanceof Error ? error.message : 'Invalid TeX',
       });
     } finally {
+      // eslint-disable-next-line no-console
       console.warn = originalWarn;
     }
   }

@@ -1,6 +1,7 @@
 import type { User } from '../generated/prisma/client';
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
+import { logger } from '../lib/logger';
 
 const USER_CACHE_TTL_SECONDS = 300;
 
@@ -35,7 +36,7 @@ export async function getCachedUserByFirebaseUid(firebaseUid: string): Promise<U
     const cached = await redis.get(key);
     if (cached) return reviveUser(cached);
   } catch (err) {
-    console.error('[userCache] get failed:', err);
+    logger.error({ err }, 'userCache: get failed');
   }
 
   const user = await prisma.user.findUnique({ where: { firebaseUid } });
@@ -44,7 +45,7 @@ export async function getCachedUserByFirebaseUid(firebaseUid: string): Promise<U
   try {
     await redis.set(key, JSON.stringify(user), 'EX', USER_CACHE_TTL_SECONDS);
   } catch (err) {
-    console.error('[userCache] set failed:', err);
+    logger.error({ err }, 'userCache: set failed');
   }
 
   return user;
@@ -54,7 +55,7 @@ export async function cacheUser(user: User): Promise<void> {
   try {
     await redis.set(userCacheKey(user.firebaseUid), JSON.stringify(user), 'EX', USER_CACHE_TTL_SECONDS);
   } catch (err) {
-    console.error('[userCache] set failed:', err);
+    logger.error({ err }, 'userCache: set failed');
   }
 }
 
@@ -62,7 +63,7 @@ export async function invalidateUserByFirebaseUid(firebaseUid: string): Promise<
   try {
     await redis.del(userCacheKey(firebaseUid));
   } catch (err) {
-    console.error('[userCache] invalidate failed:', err);
+    logger.error({ err }, 'userCache: invalidate failed');
   }
 }
 

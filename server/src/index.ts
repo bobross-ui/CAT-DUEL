@@ -1,8 +1,11 @@
 import { createServer } from 'http';
+import { randomUUID } from 'crypto';
 import type { Socket as NetSocket } from 'net';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import pinoHttp from 'pino-http';
+import { logger, requestContext } from './lib/logger';
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { env } from './config/env';
@@ -78,6 +81,13 @@ app.use(helmet({
     : false,
 }));
 app.use(cors(corsOptions));
+app.use(pinoHttp({
+  logger,
+  genReqId: (req) => (req.headers['x-request-id'] as string) ?? randomUUID(),
+}));
+app.use((req, _res, next) => {
+  requestContext.run({ requestId: String(req.id), log: req.log }, next);
+});
 app.use(unauthenticatedGlobalRateLimit);
 app.use(express.json({ limit: '32kb' }));
 
@@ -97,7 +107,7 @@ async function shutdown(exitCode = 0): Promise<void> {
   shuttingDown = true;
 
   const hardExit = setTimeout(() => {
-    console.error('Graceful shutdown timed out after 30s, forcing exit');
+    logger.error('Graceful shutdown timed out after 30s, forcing exit');
     process.exit(1);
   }, 30_000);
   hardExit.unref();
@@ -128,10 +138,10 @@ async function shutdown(exitCode = 0): Promise<void> {
     await redis.quit();
 
     clearTimeout(hardExit);
-    console.log('Graceful shutdown complete');
+    logger.info('Graceful shutdown complete');
     process.exit(exitCode);
   } catch (err) {
-    console.error('Error during shutdown:', err);
+    logger.error({ err }, 'Error during shutdown');
     process.exit(1);
   }
 }
@@ -140,12 +150,12 @@ process.on('SIGTERM', () => shutdown());
 process.on('SIGINT', () => shutdown());
 
 process.on('uncaughtException', (err) => {
-  console.error({ err, type: 'uncaughtException' }, 'Uncaught exception — shutting down');
+  logger.error({ err, type: 'uncaughtException' }, 'Uncaught exception — shutting down');
   shutdown(1);
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error({ reason, type: 'unhandledRejection' }, 'Unhandled rejection — shutting down');
+  logger.error({ reason, type: 'unhandledRejection' }, 'Unhandled rejection — shutting down');
   shutdown(1);
 });
 
@@ -167,11 +177,11 @@ async function startServer(): Promise<void> {
   }
 
   httpServer.listen(env.PORT, () => {
-    console.log(`Server running on port ${env.PORT} (${env.NODE_ENV})`);
+    logger.info(`Server running on port ${env.PORT} (${env.NODE_ENV})`);
   });
 }
 
 startServer().catch((err) => {
-  console.error('Server startup failed:', err);
+  logger.error({ err }, 'Server startup failed');
   process.exit(1);
 });

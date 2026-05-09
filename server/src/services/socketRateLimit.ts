@@ -1,6 +1,7 @@
 import { Socket } from 'socket.io';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import { redis } from '../config/redis';
+import { logger } from '../lib/logger';
 
 const MAX_CONCURRENT_SOCKETS = 3;
 const SOCKET_CONNECTION_TTL_SECONDS = 20 * 60;
@@ -58,7 +59,7 @@ export async function registerSocketConnection(userId: string, socket: Socket): 
 
   socket.on('disconnect', () => {
     void socketConnectionLimiter.reward(userId).catch((err) =>
-      console.error(`[socketRateLimit] connection cleanup failed [${userId}]:`, err),
+      logger.error({ err, userId }, 'socketRateLimit: connection cleanup failed'),
     );
   });
 

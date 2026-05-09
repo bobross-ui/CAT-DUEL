@@ -1,5 +1,6 @@
 import Redis, { RedisOptions } from 'ioredis';
 import { env } from './env';
+import { logger } from '../lib/logger';
 
 export function buildRedisOptions(): RedisOptions {
   const useTls = env.REDIS_TLS || env.REDIS_URL.startsWith('rediss://');
@@ -19,5 +20,5 @@ export async function verifyRedisConnection(): Promise<void> {
 }
 
 redis.on('error', (err) => {
-  console.error('Redis error:', err);
+  logger.error({ err }, 'Redis error');
 });

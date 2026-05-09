@@ -1,5 +1,6 @@
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
+import { logger } from '../lib/logger';
 
 const POOL_TTL = 10 * 60;       // 10 minutes
 export const CONTENT_TTL = 24 * 60 * 60; // 24 hours
@@ -108,11 +109,11 @@ let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startQuestionPoolRefresh(): void {
   warmQuestionPool().catch((err) =>
-    console.error('[questionPool] initial warm failed:', err),
+    logger.error({ err }, 'questionPool: initial warm failed'),
   );
   refreshInterval = setInterval(
     () => warmQuestionPool().catch((err) =>
-      console.error('[questionPool] refresh failed:', err),
+      logger.error({ err }, 'questionPool: refresh failed'),
     ),
     5 * 60 * 1000,
   );

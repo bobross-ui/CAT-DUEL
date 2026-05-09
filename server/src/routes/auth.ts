@@ -57,7 +57,7 @@ router.post('/bootstrap', validate(bootstrapSchema), async (req, res, next) => {
         }
 
         await admin.auth().deleteUser(decoded.uid).catch((deleteError) => {
-          console.error('[auth/bootstrap] failed to clean up Firebase user after bootstrap conflict:', deleteError);
+          req.log.error({ err: deleteError }, 'auth/bootstrap: failed to clean up Firebase user after bootstrap conflict');
         });
         res.status(409).json({
           success: false,
