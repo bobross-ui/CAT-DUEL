@@ -15,6 +15,7 @@ import { registerMatchmakingHandlers } from './services/matchmaking';
 import { startMatchmakingLoop, stopMatchmakingLoop } from './services/matchmakingLoop';
 import { registerGameHandlers, recoverActiveGames } from './services/gameSession';
 import { startQuestionServeCountFlush, stopQuestionServeCountFlush, flushQuestionServeCounts } from './services/questionServeBuffer';
+import { startQuestionPoolRefresh, stopQuestionPoolRefresh } from './services/questionPool';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
 import usersRouter from './routes/users';
@@ -117,6 +118,7 @@ async function shutdown(exitCode = 0): Promise<void> {
     // 3. Stop background loops
     stopMatchmakingLoop();
     stopQuestionServeCountFlush();
+    stopQuestionPoolRefresh();
 
     // 4. Final flush so buffered serve counts land in Postgres
     await flushQuestionServeCounts();
@@ -161,6 +163,7 @@ async function startServer(): Promise<void> {
     await recoverActiveGames(gameNs);
     startMatchmakingLoop(matchmakingNs, gameNs);
     startQuestionServeCountFlush();
+    startQuestionPoolRefresh();
   }
 
   httpServer.listen(env.PORT, () => {

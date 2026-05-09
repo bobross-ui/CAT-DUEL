@@ -8,6 +8,7 @@ import { bufferQuestionServes } from './questionServeBuffer';
 import { invalidateUserById } from './userCache';
 import { gradeAnswer } from './answerGrading';
 import { enforceSocketEventLimit } from './socketRateLimit';
+import { getPoolIds, getQuestionsContent, contentKey, CONTENT_TTL } from './questionPool';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -525,11 +526,54 @@ async function selectQuestionsForMatch(
   else if (avgElo < 1600) { minDiff = 3; maxDiff = 4; }
   else                    { minDiff = 4; maxDiff = 5; }
 
+  // Pool path: get IDs from Redis sorted sets, fetch content from cache
+  const candidates: { id: string; category: string }[] = [];
+  for (const cat of SECTION_ORDER) {
+    const ids = await getPoolIds(cat, minDiff, maxDiff);
+    for (const id of ids) candidates.push({ id, category: cat });
+  }
+
+  if (candidates.length >= QUESTION_COUNT) {
+    const selected = balanceByCategory(candidates, QUESTION_COUNT);
+    const contentMap = await getQuestionsContent(selected.map((s) => s.id));
+
+    const questionIds: string[] = [];
+    const clientQuestions: Record<string, ClientQuestion> = {};
+    const answerKeys: Record<string, AnswerKey> = {};
+    const passages: Record<string, ClientPassage> = {};
+
+    for (const { id } of selected) {
+      const q = contentMap.get(id);
+      if (!q) continue;
+      questionIds.push(id);
+      clientQuestions[id] = {
+        id: q.id,
+        category: q.category as ClientQuestion['category'],
+        questionType: q.questionType as ClientQuestion['questionType'],
+        subTopic: q.subTopic,
+        subType: q.subType,
+        difficulty: q.difficulty,
+        text: q.text,
+        options: q.options,
+        passageId: q.passageId,
+      };
+      answerKeys[id] = {
+        questionType: q.questionType as AnswerKey['questionType'],
+        correctAnswer: q.correctAnswer,
+        correctAnswerText: q.correctAnswerText,
+      };
+      if (q.passage) passages[q.passage.id] = q.passage;
+    }
+
+    if (questionIds.length >= QUESTION_COUNT) {
+      return { questionIds, questions: clientQuestions, answerKeys, passages };
+    }
+  }
+
+  // Fallback: pool missing or too sparse — query DB directly (capped at 200)
   const questionRows = await prisma.question.findMany({
-    where: {
-      isVerified: true,
-      difficulty: { gte: minDiff, lte: maxDiff },
-    },
+    where: { isVerified: true, difficulty: { gte: minDiff, lte: maxDiff } },
+    take: 200,
     select: {
       id: true,
       category: true,
@@ -548,15 +592,18 @@ async function selectQuestionsForMatch(
 
   const balanced = balanceByCategory(questionRows, QUESTION_COUNT);
 
-  const questionIds = balanced.map((q) => q.id);
+  const questionIds: string[] = [];
   const clientQuestions: Record<string, ClientQuestion> = {};
   const answerKeys: Record<string, AnswerKey> = {};
   const passages: Record<string, ClientPassage> = {};
+  const pipeline = redis.pipeline();
+
   for (const q of balanced) {
+    questionIds.push(q.id);
     clientQuestions[q.id] = {
       id: q.id,
-      category: q.category,
-      questionType: q.questionType,
+      category: q.category as ClientQuestion['category'],
+      questionType: q.questionType as ClientQuestion['questionType'],
       subTopic: q.subTopic,
       subType: q.subType,
       difficulty: q.difficulty,
@@ -565,15 +612,20 @@ async function selectQuestionsForMatch(
       passageId: q.passageId,
     };
     answerKeys[q.id] = {
-      questionType: q.questionType,
+      questionType: q.questionType as AnswerKey['questionType'],
       correctAnswer: q.correctAnswer,
       correctAnswerText: q.correctAnswerText,
     };
-    if (q.passage) {
-      passages[q.passage.id] = q.passage;
-    }
+    if (q.passage) passages[q.passage.id] = q.passage;
+    pipeline.set(
+      contentKey(q.id),
+      JSON.stringify({ ...q, passage: q.passage ?? null }),
+      'EX',
+      CONTENT_TTL,
+    );
   }
 
+  await pipeline.exec();
   return { questionIds, questions: clientQuestions, answerKeys, passages };
 }
 
