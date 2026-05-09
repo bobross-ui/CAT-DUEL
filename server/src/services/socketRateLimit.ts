@@ -70,7 +70,7 @@ export async function enforceSocketEventLimit(
   eventName: SocketLimitedEvent,
   userId: string,
 ): Promise<boolean> {
-  const key = `${socket.nsp.name}:${eventName}:${userId}:${socket.id}`;
+  const key = `${socket.nsp.name}:${eventName}:${userId}`;
 
   try {
     await socketEventLimiters[eventName].consume(key);
