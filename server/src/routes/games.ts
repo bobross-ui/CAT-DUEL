@@ -25,21 +25,30 @@ router.get('/history', authMiddleware, async (req, res, next) => {
     const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
     const skip = (page - 1) * limit;
 
-    const [matches, total] = await Promise.all([
+    const playerSelect = { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } };
+    // Fetch enough rows from each side to cover the worst case: all rows in the
+    // target window could come from a single side.
+    const fetchLimit = skip + limit;
+    const [asP1, asP2, totalAsP1, totalAsP2] = await Promise.all([
       prisma.match.findMany({
-        where: { OR: [{ player1Id: userId }, { player2Id: userId }] },
+        where: { player1Id: userId },
         orderBy: { finishedAt: 'desc' },
-        skip,
-        take: limit,
-        include: {
-          player1: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } },
-          player2: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } },
-        },
+        take: fetchLimit,
+        include: { player1: playerSelect, player2: playerSelect },
       }),
-      prisma.match.count({
-        where: { OR: [{ player1Id: userId }, { player2Id: userId }] },
+      prisma.match.findMany({
+        where: { player2Id: userId },
+        orderBy: { finishedAt: 'desc' },
+        take: fetchLimit,
+        include: { player1: playerSelect, player2: playerSelect },
       }),
+      prisma.match.count({ where: { player1Id: userId } }),
+      prisma.match.count({ where: { player2Id: userId } }),
     ]);
+
+    const total = totalAsP1 + totalAsP2;
+    const merged = [...asP1, ...asP2].sort((a, b) => b.finishedAt.getTime() - a.finishedAt.getTime());
+    const matches = merged.slice(skip, skip + limit);
 
     const entries = matches.map((m) => {
       const isPlayer1 = m.player1Id === userId;
