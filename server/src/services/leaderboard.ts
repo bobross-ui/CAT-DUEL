@@ -263,7 +263,13 @@ export async function getTierLeaderboard(tier: RankTier, user: User): Promise<Le
   return { entries: withFlag, currentUserRank, totalRanked };
 }
 
+const TIER_COUNTS_CACHE_KEY = 'leaderboard:tier_counts';
+const TIER_COUNTS_CACHE_TTL = 60; // seconds
+
 async function getTierCounts(): Promise<Record<RankTier, number>> {
+  const cached = await redis.get(TIER_COUNTS_CACHE_KEY);
+  if (cached) return JSON.parse(cached) as Record<RankTier, number>;
+
   const counts = Object.fromEntries(RANK_TIERS.map((tier) => [tier, 0])) as Record<RankTier, number>;
   const rows = await prisma.user.groupBy({
     by: ['rankTier'],
@@ -275,5 +281,6 @@ async function getTierCounts(): Promise<Record<RankTier, number>> {
     counts[row.rankTier as RankTier] = row._count._all;
   }
 
+  await redis.set(TIER_COUNTS_CACHE_KEY, JSON.stringify(counts), 'EX', TIER_COUNTS_CACHE_TTL);
   return counts;
 }
