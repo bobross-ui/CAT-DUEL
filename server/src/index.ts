@@ -72,7 +72,6 @@ app.use((_, res, next) => {
 
 app.use(helmet({
   contentSecurityPolicy: {
-    useDefaults: false,
     directives: {
       defaultSrc: ["'none'"],
       frameAncestors: ["'none'"],
