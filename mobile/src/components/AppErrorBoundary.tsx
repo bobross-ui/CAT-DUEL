@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import AppText from './Text';
@@ -15,6 +16,7 @@ export default class AppErrorBoundary extends React.Component<React.PropsWithChi
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
+    Sentry.captureException(error, { contexts: { react: { componentStack: info.componentStack } } });
     track('app_error', {
       message: error.message,
       componentStackPresent: Boolean(info.componentStack),

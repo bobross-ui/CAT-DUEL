@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
@@ -31,9 +32,15 @@ import ThemedToast from './src/components/ThemedToast';
 import { init as initAnalytics } from './src/services/analytics';
 import { queryClient } from './src/queries/client';
 
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  environment: __DEV__ ? 'development' : 'production',
+  debug: __DEV__,
+});
+
 SplashScreen.preventAutoHideAsync();
 
-export default function App() {
+function App() {
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
   const [navigationReady, setNavigationReady] = useState(false);
   const [fontsLoaded] = useFonts({
@@ -85,3 +92,5 @@ export default function App() {
     </AppErrorBoundary>
   );
 }
+
+export default Sentry.wrap(App);
