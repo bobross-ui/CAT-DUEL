@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Prisma } from '../generated/prisma/client';
 import admin from '../config/firebase';
+import { Sentry } from '../lib/sentry';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
@@ -57,6 +58,7 @@ router.post('/bootstrap', validate(bootstrapSchema), async (req, res, next) => {
         }
 
         await admin.auth().deleteUser(decoded.uid).catch((deleteError) => {
+          Sentry.captureException(deleteError, { extra: { firebaseUid: decoded.uid } });
           req.log.error({ err: deleteError }, 'auth/bootstrap: failed to clean up Firebase user after bootstrap conflict');
         });
         res.status(409).json({
