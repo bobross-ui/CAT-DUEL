@@ -173,23 +173,21 @@ router.post('/:id/answer', practiceAnswerRateLimit, validate(answerSchema), asyn
   const { selectedAnswer, typedAnswer, timeTakenMs } = req.body;
   const isCorrect = gradeAnswer(question, { selectedAnswer, typedAnswer });
 
-  await prisma.practiceAnswer.create({
-    data: {
-      userId: req.user.id,
-      questionId: question.id,
-      selectedAnswer: selectedAnswer ?? null,
-      typedAnswer: typedAnswer ?? null,
-      isCorrect,
-      timeTakenMs,
-    },
-  });
-
-  if (isCorrect) {
-    await prisma.question.update({
-      where: { id: question.id },
-      data: { timesCorrect: { increment: 1 } },
-    });
-  }
+  await prisma.$transaction([
+    prisma.practiceAnswer.create({
+      data: {
+        userId: req.user.id,
+        questionId: question.id,
+        selectedAnswer: selectedAnswer ?? null,
+        typedAnswer: typedAnswer ?? null,
+        isCorrect,
+        timeTakenMs,
+      },
+    }),
+    ...(isCorrect
+      ? [prisma.question.update({ where: { id: question.id }, data: { timesCorrect: { increment: 1 } } })]
+      : []),
+  ]);
 
   res.json({
     success: true,
