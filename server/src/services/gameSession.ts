@@ -706,6 +706,7 @@ async function startCountdown(
       firstQuestion: firstQuestion ? withPassage(firstQuestion, current.passages) : null,
       questionNumber: 1,
     });
+    logger.info({ event: 'game:start', gameId, player1Id: current.player1Id, player2Id: current.player2Id, totalQuestions: current.questionIds.length, durationSeconds: current.durationSeconds }, 'Game started');
 
     startGameTimer(gameId, current.durationSeconds, gameNs);
   }, COUNTDOWN_SECONDS * 1000);
@@ -776,6 +777,7 @@ async function handleAnswer(
   if (!expectedAnswer) return;
 
   const isCorrect = gradeAnswer(expectedAnswer, { selectedAnswer, typedAnswer });
+  logger.info({ event: 'game:answer', gameId, userId, questionId, questionNumber: playerProgress + 1, isCorrect }, 'Answer submitted');
 
   const servedAtRaw = await redis.get(servedAtKey(gameId, userId, questionId));
   const timeTakenMs = servedAtRaw ? Date.now() - parseInt(servedAtRaw, 10) : 0;
@@ -940,6 +942,8 @@ export async function endGame(
   for (const s of sockets) {
     s.emit('game:finished', { ...results, currentUserId: s.data.user.id });
   }
+
+  logger.info({ event: 'game:end', gameId, winnerId, isDraw: winnerId === null, isForfeit, player1Id: state.player1Id, player2Id: state.player2Id, player1Score: state.player1Score, player2Score: state.player2Score, player1EloDelta: eloResult.player1.delta, player2EloDelta: eloResult.player2.delta }, 'Game ended');
 
   // Clean up active game markers
   await redis.del(

@@ -13,6 +13,7 @@ import {
 import { calculateMatchElo } from './elo';
 import { enforceSocketEventLimit } from './socketRateLimit';
 import { withSentry } from '../lib/sentry';
+import { logger } from '../lib/logger';
 
 export type QueuePlayer = GamePlayer;
 
@@ -109,6 +110,7 @@ export async function createMatch(
       ratingImpact: p2RatingImpact,
     });
   }
+  logger.info({ event: 'mm:match', gameId, player1Id: player1.userId, player2Id: player2.userId, player1Elo: p1User.eloRating, player2Elo: p2User.eloRating }, 'Match created');
 }
 
 export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
@@ -139,6 +141,7 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
 
       const queueSize = await redis.zcard('matchmaking_queue');
       socket.emit('queue:joined', { position: queueSize });
+      logger.info({ event: 'mm:join', userId: user.id, eloRating: user.eloRating, queuePosition: queueSize }, 'Player joined matchmaking queue');
     }));
 
     socket.on('queue:leave', withSentry(async () => {
