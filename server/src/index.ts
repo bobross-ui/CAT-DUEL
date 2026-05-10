@@ -30,6 +30,7 @@ import leaderboardRouter from './routes/leaderboard';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
+app.set('trust proxy', env.TRUST_PROXY);
 const httpServer = createServer(app);
 
 // --- Socket.io ---
