@@ -3,4 +3,10 @@ module.exports = {
   rules: {
     'no-console': 'error',
   },
+  overrides: [
+    {
+      files: ['scripts/**/*.ts', 'prisma/**/*.ts'],
+      rules: { 'no-console': 'off' },
+    },
+  ],
 };

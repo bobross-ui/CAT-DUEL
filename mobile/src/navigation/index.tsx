@@ -36,7 +36,6 @@ import PublicProfileScreen from '../screens/PublicProfileScreen';
 import TabBar from '../components/TabBar';
 import { identify, reset as resetAnalytics, track } from '../services/analytics';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { queryKeys } from '../queries/keys';
 import { parseAppLink } from './linking';
 
 export interface ClientPassage {
