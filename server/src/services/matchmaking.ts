@@ -12,6 +12,7 @@ import {
 } from './gameSession';
 import { calculateMatchElo } from './elo';
 import { enforceSocketEventLimit } from './socketRateLimit';
+import { withSentry } from '../lib/sentry';
 
 export type QueuePlayer = GamePlayer;
 
@@ -114,7 +115,7 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
   matchmakingNs.on('connection', (socket) => {
     const user = socket.data.user;
 
-    socket.on('queue:join', async () => {
+    socket.on('queue:join', withSentry(async () => {
       if (!(await enforceSocketEventLimit(socket, 'queue:join', user.id))) return;
 
       const alreadyInQueue = await redis.zscore('matchmaking_queue', user.id);
@@ -138,19 +139,19 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
 
       const queueSize = await redis.zcard('matchmaking_queue');
       socket.emit('queue:joined', { position: queueSize });
-    });
+    }));
 
-    socket.on('queue:leave', async () => {
+    socket.on('queue:leave', withSentry(async () => {
       if (!(await enforceSocketEventLimit(socket, 'queue:leave', user.id))) return;
 
       await redis.zrem('matchmaking_queue', user.id);
       await redis.del(`queue_joined:${user.id}`, `socket:mm:${user.id}`);
       socket.emit('queue:left');
-    });
+    }));
 
-    socket.on('disconnect', async () => {
+    socket.on('disconnect', withSentry(async () => {
       await redis.zrem('matchmaking_queue', user.id);
       await redis.del(`queue_joined:${user.id}`, `socket:mm:${user.id}`);
-    });
+    }));
   });
 }

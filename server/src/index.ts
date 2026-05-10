@@ -1,3 +1,4 @@
+import { Sentry, setupExpressErrorHandler } from './lib/sentry';
 import { createServer } from 'http';
 import { randomUUID } from 'crypto';
 import type { Socket as NetSocket } from 'net';
@@ -99,6 +100,7 @@ app.use('/api/questions', questionsRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/leaderboard', leaderboardRouter);
 
+setupExpressErrorHandler(app);
 app.use(errorHandler);
 
 // --- Graceful shutdown ---
@@ -139,9 +141,11 @@ async function shutdown(exitCode = 0): Promise<void> {
 
     clearTimeout(hardExit);
     logger.info('Graceful shutdown complete');
+    await Sentry.flush(2000);
     process.exit(exitCode);
   } catch (err) {
     logger.error({ err }, 'Error during shutdown');
+    await Sentry.flush(2000);
     process.exit(1);
   }
 }
@@ -150,11 +154,13 @@ process.on('SIGTERM', () => shutdown());
 process.on('SIGINT', () => shutdown());
 
 process.on('uncaughtException', (err) => {
+  Sentry.captureException(err, { extra: { type: 'uncaughtException' } });
   logger.error({ err, type: 'uncaughtException' }, 'Uncaught exception — shutting down');
   shutdown(1);
 });
 
 process.on('unhandledRejection', (reason) => {
+  Sentry.captureException(reason, { extra: { type: 'unhandledRejection' } });
   logger.error({ reason, type: 'unhandledRejection' }, 'Unhandled rejection — shutting down');
   shutdown(1);
 });
@@ -181,7 +187,9 @@ async function startServer(): Promise<void> {
   });
 }
 
-startServer().catch((err) => {
+startServer().catch(async (err) => {
+  Sentry.captureException(err, { extra: { type: 'startupFailure' } });
   logger.error({ err }, 'Server startup failed');
+  await Sentry.flush(2000);
   process.exit(1);
 });

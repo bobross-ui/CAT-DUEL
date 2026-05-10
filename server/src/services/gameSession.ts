@@ -10,6 +10,7 @@ import { gradeAnswer } from './answerGrading';
 import { enforceSocketEventLimit } from './socketRateLimit';
 import { getPoolIds, getQuestionsContent, contentKey, CONTENT_TTL } from './questionPool';
 import { logger } from '../lib/logger';
+import { Sentry, withSentry } from '../lib/sentry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -459,9 +460,10 @@ async function schedulePreStartTimeout(
   clearPreStartTimer(gameId);
   const delay = Math.max(joinDeadlineAt - Date.now(), 0);
   const timer = setTimeout(() => {
-    cancelPreStartGame(gameId, gameNs, 'join_timeout').catch((err) =>
-      logger.error({ err, gameId }, 'Pre-start timeout error'),
-    );
+    cancelPreStartGame(gameId, gameNs, 'join_timeout').catch((err) => {
+      Sentry.captureException(err, { extra: { gameId } });
+      logger.error({ err, gameId }, 'Pre-start timeout error');
+    });
   }, delay);
   preStartTimers.set(gameId, timer);
 }
@@ -729,9 +731,11 @@ function startGameTimer(
     if (remaining <= 0) {
       clearInterval(interval);
       activeTimers.delete(gameId);
-      endGame(gameId, gameNs).catch((err) =>
-        logger.error({ err, gameId }, 'Timer endGame error'),
-      );
+      endGame(gameId, gameNs).catch((err) => {
+        Sentry.captureException(err, { extra: { gameId } });
+        logger.error({ err, gameId }, 'Timer endGame error');
+        gameNs.to(gameId).emit('game:error', { code: 'END_GAME_FAILED', message: 'Game failed to end' });
+      });
     }
   }, 1000);
 
@@ -949,9 +953,11 @@ export async function endGame(
     isForfeit,
     eloResult,
     { player1: p1, player2: p2 },
-  ).catch((err) =>
-    logger.error({ err, gameId }, 'persistMatch error'),
-  );
+  ).catch((err) => {
+    Sentry.captureException(err, { extra: { gameId } });
+    logger.error({ err, gameId }, 'persistMatch error');
+    gameNs.in(gameId).emit('game:error', { code: 'PERSIST_FAILED', message: 'Match result could not be saved' });
+  });
 }
 
 async function persistMatch(
@@ -1131,7 +1137,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
       logger.error({ err, userId: user.id }, 'Socket bind error'),
     );
 
-    socket.on('game:join', async ({ gameId }: { gameId: string }) => {
+    socket.on('game:join', withSentry(async ({ gameId }: { gameId: string }) => {
       if (!(await enforceSocketEventLimit(socket, 'game:join', user.id))) return;
 
       const state = await getGameState(gameId);
@@ -1234,7 +1240,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
           }
         }
       }
-    });
+    }));
 
     socket.on(
       'answer:submit',
@@ -1262,12 +1268,13 @@ export function registerGameHandlers(gameNs: Namespace): void {
             gameNs,
           );
         } catch (err) {
+          Sentry.captureException(err, { extra: { gameId, userId: user.id } });
           logger.error({ err, gameId }, 'Answer handling error');
         }
       },
     );
 
-    socket.on('game:forfeit', async ({ gameId }: { gameId: string }) => {
+    socket.on('game:forfeit', withSentry(async ({ gameId }: { gameId: string }) => {
       const state = await getGameState(gameId);
       if (!state || state.status !== 'ACTIVE') return;
 
@@ -1276,19 +1283,21 @@ export function registerGameHandlers(gameNs: Namespace): void {
       const opponentId =
         state.player1Id === user.id ? state.player2Id : state.player1Id;
 
-      await endGame(gameId, gameNs, { forcedWinnerId: opponentId }).catch((err) =>
-        logger.error({ err, gameId }, 'Forfeit endGame error'),
-      );
-    });
+      await endGame(gameId, gameNs, { forcedWinnerId: opponentId }).catch((err) => {
+        Sentry.captureException(err, { extra: { gameId, userId: user.id } });
+        logger.error({ err, gameId }, 'Forfeit endGame error');
+        gameNs.to(gameId).emit('game:error', { code: 'END_GAME_FAILED', message: 'Game failed to end' });
+      });
+    }));
 
-    socket.on('game:cancel_prestart', async ({ gameId }: { gameId: string }) => {
+    socket.on('game:cancel_prestart', withSentry(async ({ gameId }: { gameId: string }) => {
       const state = await getGameState(gameId);
       if (!state || !isPreStartStatus(state.status) || !isParticipant(state, user.id)) return;
 
       await cancelPreStartGame(gameId, gameNs, 'opponent_left', user.id);
-    });
+    }));
 
-    socket.on('disconnect', async () => {
+    socket.on('disconnect', withSentry(async () => {
       const currentSocketId = await redis.get(socketKey(user.id));
       if (currentSocketId === socket.id) {
         await redis.del(socketKey(user.id));
@@ -1336,13 +1345,15 @@ export function registerGameHandlers(gameNs: Namespace): void {
         const currentOpponentId =
           current.player1Id === user.id ? current.player2Id : current.player1Id;
 
-        await endGame(gameId, gameNs, { forcedWinnerId: currentOpponentId }).catch((err) =>
-          logger.error({ err, gameId }, 'Auto-forfeit endGame error'),
-        );
+        await endGame(gameId, gameNs, { forcedWinnerId: currentOpponentId }).catch((err) => {
+          Sentry.captureException(err, { extra: { gameId } });
+          logger.error({ err, gameId }, 'Auto-forfeit endGame error');
+          gameNs.to(gameId).emit('game:error', { code: 'END_GAME_FAILED', message: 'Game failed to end' });
+        });
       }, ACTIVE_FORFEIT_GRACE_SECONDS * 1000);
 
       forfeitTimers.set(user.id, timer);
-    });
+    }));
   });
 }
 
@@ -1454,6 +1465,7 @@ export async function recoverActiveGames(gameNs: Namespace): Promise<void> {
         startGameTimer(gameId, remainingSeconds, gameNs);
       }
     } catch (err) {
+      Sentry.captureException(err, { extra: { gameId } });
       logger.error({ err, gameId }, 'recoverActiveGames: game recovery failed');
     }
   }

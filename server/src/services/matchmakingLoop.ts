@@ -2,6 +2,7 @@ import { Namespace } from 'socket.io';
 import { redis } from '../config/redis';
 import { createMatch, QueuePlayer } from './matchmaking';
 import { logger } from '../lib/logger';
+import { Sentry } from '../lib/sentry';
 
 const INITIAL_RANGE = 150;
 const EXPANDED_RANGE = 300;
@@ -134,9 +135,10 @@ let matchmakingTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startMatchmakingLoop(matchmakingNs: Namespace, gameNs: Namespace): void {
   matchmakingTimer = setInterval(() => {
-    runMatchmaking(matchmakingNs, gameNs).catch((err) =>
-      logger.error({ err }, 'Matchmaking loop error'),
-    );
+    runMatchmaking(matchmakingNs, gameNs).catch((err) => {
+      Sentry.captureException(err);
+      logger.error({ err }, 'Matchmaking loop error');
+    });
   }, 2000);
 }
 
