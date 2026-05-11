@@ -8,7 +8,7 @@ import { Prisma } from '../generated/prisma/client';
 import { authMiddleware } from '../middleware/auth';
 import { adminOnly } from '../middleware/admin';
 import { validate } from '../middleware/validate';
-import { invalidateUserById } from '../services/userCache';
+import { invalidateUserById, blockFirebaseUid } from '../services/userCache';
 import { importQuestionsFromJsonl, JsonlImportResult } from '../services/questionImport';
 import { importPassagesFromJsonl, PassageImportResult } from '../services/passageImport';
 import { resetExtractedQuestions } from '../services/extractedQuestionReset';
@@ -110,7 +110,7 @@ export async function revokeUserTokens(req: Request, res: Response) {
   }
 
   await firebaseAdmin.auth().revokeRefreshTokens(user.firebaseUid);
-  await invalidateUserById(user.id);
+  await Promise.all([invalidateUserById(user.id), blockFirebaseUid(user.firebaseUid)]);
 
   res.json({ success: true, data: { revoked: true } });
 }

@@ -6,7 +6,7 @@ import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
 import { displayNameSchema } from '../services/displayName';
-import { cacheUser, getCachedUserByFirebaseUid } from '../services/userCache';
+import { cacheUser, getCachedUserByFirebaseUid, isFirebaseUidBlocked } from '../services/userCache';
 import { startOfUtcDay } from '../services/streak';
 import { z } from 'zod';
 
@@ -25,9 +25,14 @@ router.post('/bootstrap', validate(bootstrapSchema), async (req, res, next) => {
 
   try {
     const token = authHeader.split(' ')[1];
-    const decoded = await admin.auth().verifyIdToken(token, true).catch(() => null);
+    const decoded = await admin.auth().verifyIdToken(token).catch(() => null);
     if (!decoded) {
       res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
+      return;
+    }
+
+    if (await isFirebaseUidBlocked(decoded.uid)) {
+      res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Token revoked' } });
       return;
     }
 

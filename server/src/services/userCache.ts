@@ -75,3 +75,22 @@ export async function invalidateUserById(userId: string): Promise<void> {
 
   if (user) await invalidateUserByFirebaseUid(user.firebaseUid);
 }
+
+const REVOKED_KEY = 'revoked:firebase_uids';
+
+export async function blockFirebaseUid(firebaseUid: string): Promise<void> {
+  try {
+    await redis.sadd(REVOKED_KEY, firebaseUid);
+  } catch (err) {
+    logger.error({ err }, 'userCache: blockFirebaseUid failed');
+  }
+}
+
+export async function isFirebaseUidBlocked(firebaseUid: string): Promise<boolean> {
+  try {
+    return (await redis.sismember(REVOKED_KEY, firebaseUid)) === 1;
+  } catch (err) {
+    logger.error({ err }, 'userCache: isFirebaseUidBlocked failed');
+    return false;
+  }
+}

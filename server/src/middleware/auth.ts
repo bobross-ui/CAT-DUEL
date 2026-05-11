@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import admin from '../config/firebase';
 import { touchStreak } from '../services/streak';
-import { getCachedUserByFirebaseUid } from '../services/userCache';
+import { getCachedUserByFirebaseUid, isFirebaseUidBlocked } from '../services/userCache';
 import { authenticatedGlobalRateLimit } from './rateLimit';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -14,9 +14,14 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = await admin.auth().verifyIdToken(token, true).catch(() => null);
+    const decoded = await admin.auth().verifyIdToken(token).catch(() => null);
     if (!decoded) {
       res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
+      return;
+    }
+
+    if (await isFirebaseUidBlocked(decoded.uid)) {
+      res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Token revoked' } });
       return;
     }
 

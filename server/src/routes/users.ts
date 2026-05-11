@@ -9,7 +9,7 @@ import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
 import { displayNameSchema, publicDisplayName } from '../services/displayName';
 import { invalidateLeaderboardCaches } from '../services/leaderboard';
-import { invalidateUserByFirebaseUid, invalidateUserById } from '../services/userCache';
+import { invalidateUserByFirebaseUid, invalidateUserById, blockFirebaseUid } from '../services/userCache';
 
 const router = Router();
 const RECENT_AUTH_SECONDS = 5 * 60;
@@ -103,8 +103,11 @@ router.delete('/me', authMiddleware, deleteAccountRateLimit, async (req, res, ne
       });
     });
 
-    await invalidateUserByFirebaseUid(req.user.firebaseUid);
-    await invalidateLeaderboardCaches(req.user.id);
+    await Promise.all([
+      invalidateUserByFirebaseUid(req.user.firebaseUid),
+      blockFirebaseUid(req.user.firebaseUid),
+      invalidateLeaderboardCaches(req.user.id),
+    ]);
     await admin.auth().deleteUser(req.user.firebaseUid);
 
     res.json({ success: true });
