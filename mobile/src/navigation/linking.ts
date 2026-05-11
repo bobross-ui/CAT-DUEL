@@ -16,6 +16,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
   prefixes: [APP_WEB_URL, Linking.createURL('/')],
   config: {
     screens: {
+      // Backward-compat deep-link redirectors (these redirect via handleDeepLink)
       DeepLinkedProfile: 'profile/:userId',
       DeepLinkedMatch: 'match/:matchId',
       DeepLinkedLeaderboard: {
@@ -24,6 +25,27 @@ export const linking: LinkingOptions<RootStackParamList> = {
           tier: (tier: string) => tier.toUpperCase(),
         },
       },
+      // Main tabs
+      MainTabs: {
+        screens: {
+          Home: '',
+          Play: 'play',
+          Ranks: 'ranks',
+          Me: 'me',
+        },
+      },
+      // Game flow
+      Matchmaking: 'matchmaking',
+      Duel: 'duel/:gameId',
+      DuelResults: 'results/:gameId',
+      // Practice
+      PracticeHome: 'practice',
+      // Match history & profiles
+      MatchHistory: 'matches',
+      MatchDetail: 'matches/:matchId',
+      PublicProfile: 'users/:userId',
+      // Settings
+      Settings: 'settings',
     },
   },
 };

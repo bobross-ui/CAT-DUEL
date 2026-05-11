@@ -147,8 +147,8 @@ export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Matchmaking: { notice?: string } | undefined;
   Found: { gameId: string; opponent: OpponentInfo; ratingImpact: { win: number; loss: number; draw?: number } | null };
-  Duel: { gameId: string; opponent: OpponentInfo; initialState: InitialGameState };
-  DuelResults: { results: GameFinishedPayload; userId: string; opponent: OpponentInfo };
+  Duel: { gameId: string; opponent?: OpponentInfo; initialState?: InitialGameState };
+  DuelResults: { gameId: string; results?: GameFinishedPayload; userId?: string; opponent?: OpponentInfo };
   PracticeHome: undefined;
   Question: { categories: string[]; difficulty?: number };
   PracticeSummary: {

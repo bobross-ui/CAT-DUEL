@@ -140,6 +140,8 @@ model Match {
   player2Score      Int      @map("player2_score")
   player1EloChange  Int      @default(0) @map("player1_elo_change")
   player2EloChange  Int      @default(0) @map("player2_elo_change")
+  player1EloAfter   Int      @default(0) @map("player1_elo_after")
+  player2EloAfter   Int      @default(0) @map("player2_elo_after")
   player1Answered   Int      @map("player1_answered")
   player2Answered   Int      @map("player2_answered")
   totalQuestions    Int      @map("total_questions")

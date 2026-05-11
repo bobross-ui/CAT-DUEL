@@ -97,7 +97,9 @@ function AnswerValue({ label, value, correct }: { label: string; value: string; 
 }
 
 export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
-  const { results, userId, opponent } = route.params;
+  const results = route.params.results!;
+  const userId = route.params.userId!;
+  const opponent = route.params.opponent!;
   const { theme } = useTheme();
   const { user } = useCurrentProfile();
   const [expandedId, setExpandedId] = useState<string | null>(null);

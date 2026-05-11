@@ -1019,6 +1019,8 @@ async function persistMatch(
             player2Score: state.player2Score,
             player1EloChange: eloResult.player1.delta,
             player2EloChange: eloResult.player2.delta,
+            player1EloAfter: eloResult.player1.newRating,
+            player2EloAfter: eloResult.player2.newRating,
             player1Answered: state.player1Progress,
             player2Answered: state.player2Progress,
             totalQuestions: state.questionIds.length,

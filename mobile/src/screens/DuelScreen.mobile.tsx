@@ -92,7 +92,9 @@ function BlinkingDot({ color, animate }: { color: string; animate: boolean }) {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function DuelScreen({ route, navigation }: Props) {
-  const { gameId, opponent, initialState } = route.params;
+  const { gameId } = route.params;
+  const opponent = route.params.opponent!;
+  const initialState = route.params.initialState!;
   const { user } = useAuth();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
@@ -224,12 +226,12 @@ export default function DuelScreen({ route, navigation }: Props) {
         yourScore: number;
         opponentScore: number;
         timeRemaining: number;
-        currentQuestion: ClientQuestion;
+        currentQuestion: ClientQuestion | undefined;
         questionNumber: number;
         totalQuestions: number;
         opponentProgress: OpponentProgress | null;
       }) => {
-        if (!mounted) return;
+        if (!mounted || !currentQuestion) return;
         questionStartTime.current = Date.now();
         questionOpacity.setValue(1);
         setDs(prev => ({
@@ -267,7 +269,7 @@ export default function DuelScreen({ route, navigation }: Props) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.games.all() });
         void queryClient.invalidateQueries({ queryKey: queryKeys.leaderboard.all() });
         socket.disconnect();
-        navigation.replace('DuelResults', { results, userId: results.currentUserId, opponent });
+        navigation.replace('DuelResults', { gameId, results, userId: results.currentUserId, opponent });
       });
 
       socket.on('game:error', ({ message }: { message: string }) => {
@@ -323,6 +325,8 @@ export default function DuelScreen({ route, navigation }: Props) {
       ]);
     }
   }
+
+  if (!ds.currentQuestion) return null;
 
   const isTimerCritical = ds.timeRemaining <= 60;
   const progressPct     = ds.totalQuestions > 0 ? (ds.questionNumber - 1) / ds.totalQuestions : 0;

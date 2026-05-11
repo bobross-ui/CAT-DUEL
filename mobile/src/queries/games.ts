@@ -76,10 +76,15 @@ export interface MatchDetailData {
   player2Score: number;
   player1EloChange: number;
   player2EloChange: number;
+  player1EloAfter: number;
+  player2EloAfter: number;
+  player1Answered: number;
+  player2Answered: number;
+  totalQuestions: number;
   durationSeconds: number;
   finishedAt: string;
-  player1: { id: string; displayName: string | null };
-  player2: { id: string; displayName: string | null };
+  player1: { id: string; displayName: string | null; avatarUrl: string | null; eloRating: number };
+  player2: { id: string; displayName: string | null; avatarUrl: string | null; eloRating: number };
   answers: AnswerDetail[];
 }
 

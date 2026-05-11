@@ -86,7 +86,9 @@ function AnswerValue({ label, value, correct }: { label: string; value: string; 
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function DuelResultsScreen({ route, navigation }: Props) {
-  const { results, userId, opponent } = route.params;
+  const results = route.params.results!;
+  const userId = route.params.userId!;
+  const opponent = route.params.opponent!;
   const { theme } = useTheme();
   const { reduceMotionEnabled } = useAppPreferences();
   const insets = useSafeAreaInsets();
