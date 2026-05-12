@@ -119,7 +119,7 @@ export type PendingMatchPayload = {
   opponent: GamePlayerProfile;
   ratingImpact: RatingImpact;
 };
-type MatchPersistUserStats = { gamesPlayed: number; wins: number; draws: number };
+type MatchPersistUserStats = { gamesPlayed: number; wins: number; draws: number; peakElo: number };
 
 function buildOpponentProgress(answered: number, totalQuestions: number) {
   if (answered <= 0) return null;
@@ -912,11 +912,11 @@ export async function endGame(
   const [p1, p2] = await Promise.all([
     prisma.user.findUnique({
       where: { id: state.player1Id },
-      select: { eloRating: true, gamesPlayed: true, wins: true, draws: true },
+      select: { eloRating: true, gamesPlayed: true, wins: true, draws: true, peakElo: true },
     }),
     prisma.user.findUnique({
       where: { id: state.player2Id },
-      select: { eloRating: true, gamesPlayed: true, wins: true, draws: true },
+      select: { eloRating: true, gamesPlayed: true, wins: true, draws: true, peakElo: true },
     }),
   ]);
 
@@ -1083,6 +1083,7 @@ async function persistMatch(
           where: { id: state.player1Id },
           data: {
             eloRating: eloResult.player1.newRating,
+            peakElo: Math.max(userStats.player1.peakElo, eloResult.player1.newRating),
             rankTier: getRankTier(eloResult.player1.newRating),
             gamesPlayed: { increment: 1 },
             wins: player1Wins,
@@ -1094,6 +1095,7 @@ async function persistMatch(
           where: { id: state.player2Id },
           data: {
             eloRating: eloResult.player2.newRating,
+            peakElo: Math.max(userStats.player2.peakElo, eloResult.player2.newRating),
             rankTier: getRankTier(eloResult.player2.newRating),
             gamesPlayed: { increment: 1 },
             wins: player2Wins,

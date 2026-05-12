@@ -12,6 +12,7 @@ async function main() {
       email: 'test@catduel.com',
       displayName: 'Test User',
       eloRating: 1200,
+      peakElo: 1200,
       rankTier: 'SILVER',
     },
   });
@@ -101,6 +102,7 @@ async function main() {
         email: `dummy${u.n}@catduel.com`,
         displayName: u.displayName,
         eloRating: u.elo,
+        peakElo: u.elo,
         rankTier: u.tier as 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND',
         gamesPlayed: 10, // above the 5-game threshold to appear on leaderboard
       },

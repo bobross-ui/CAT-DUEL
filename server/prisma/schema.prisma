@@ -40,6 +40,7 @@ model User {
   avatarUrl             String?   @map("avatar_url")
   role                  String    @default("user")
   eloRating             Int       @default(1200) @map("elo_rating")
+  peakElo               Int       @default(1200) @map("peak_elo")
   rankTier              RankTier  @default(SILVER) @map("rank_tier")
   gamesPlayed           Int       @default(0) @map("games_played")
   wins                  Int       @default(0)
