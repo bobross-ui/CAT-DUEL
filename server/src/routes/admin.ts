@@ -12,6 +12,7 @@ import { invalidateUserById, blockFirebaseUid } from '../services/userCache';
 import { importQuestionsFromJsonl, JsonlImportResult } from '../services/questionImport';
 import { importPassagesFromJsonl, PassageImportResult } from '../services/passageImport';
 import { resetExtractedQuestions } from '../services/extractedQuestionReset';
+import { removeQuestionFromPool, syncQuestionPoolEntry } from '../services/questionPool';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 20 } });
@@ -132,6 +133,7 @@ router.post('/questions', validate(createQuestionSchema), async (req: Request, r
   const question = await prisma.question.create({
     data: { ...normalizeQuestionData(req.body), source: 'MANUAL' },
   });
+  await syncQuestionPoolEntry(question);
   res.status(201).json({ success: true, data: question });
 });
 
@@ -235,6 +237,7 @@ router.patch('/questions/:id', async (req: Request, res: Response) => {
     where: { id: req.params.id },
     data: normalizeQuestionData(merged.data),
   });
+  await syncQuestionPoolEntry(updated);
   res.json({ success: true, data: updated });
 });
 
@@ -248,6 +251,7 @@ router.delete('/questions/:id', async (req: Request, res: Response) => {
   }
 
   await prisma.question.delete({ where: { id: req.params.id } });
+  await removeQuestionFromPool(question);
   res.json({ success: true, data: { deleted: true } });
 });
 
@@ -270,6 +274,7 @@ router.patch('/questions/:id/verify', async (req: Request, res: Response) => {
     where: { id: req.params.id },
     data: { isVerified: parsed.data.isVerified },
   });
+  await syncQuestionPoolEntry(updated);
   res.json({ success: true, data: updated });
 });
 
