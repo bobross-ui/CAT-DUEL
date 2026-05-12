@@ -63,6 +63,13 @@ model User {
   @@map("users")
 }
 
+model RevokedFirebaseUid {
+  firebaseUid String   @id @map("firebase_uid")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("revoked_firebase_uids")
+}
+
 model Passage {
   id         String         @id @default(uuid())
   externalId String?        @map("external_id")

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import firebaseAdmin from '../config/firebase';
 import { prisma } from '../models/prisma';
 import { Prisma } from '../generated/prisma/client';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, requireFirebaseRevocationCheck } from '../middleware/auth';
 import { adminOnly } from '../middleware/admin';
 import { validate } from '../middleware/validate';
 import { invalidateUserById, blockFirebaseUid } from '../services/userCache';
@@ -18,8 +18,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 const uploadBulk = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 100 } });
 const jsonlUploadFields = ['file', 'files', 'files[]'] as const;
 
-// All admin routes require auth + admin role
-router.use(authMiddleware, adminOnly);
+// All admin routes require auth, admin role, and Firebase revocation enforcement.
+router.use(authMiddleware, adminOnly, requireFirebaseRevocationCheck);
 
 // ── Zod schemas ────────────────────────────────────────────────────────────
 

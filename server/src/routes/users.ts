@@ -3,13 +3,18 @@ import { z } from 'zod';
 import { Prisma } from '../generated/prisma/client';
 import admin from '../config/firebase';
 import { redis } from '../config/redis';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, requireFirebaseRevocationCheck } from '../middleware/auth';
 import { deleteAccountRateLimit, updateProfileRateLimit } from '../middleware/rateLimit';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
 import { displayNameSchema, publicDisplayName } from '../services/displayName';
 import { invalidateLeaderboardCaches } from '../services/leaderboard';
-import { invalidateUserByFirebaseUid, invalidateUserById, blockFirebaseUid } from '../services/userCache';
+import {
+  cacheFirebaseUidBlock,
+  invalidateUserByFirebaseUid,
+  invalidateUserById,
+  persistFirebaseUidBlock,
+} from '../services/userCache';
 
 const router = Router();
 const RECENT_AUTH_SECONDS = 5 * 60;
@@ -66,7 +71,7 @@ router.patch('/me', authMiddleware, updateProfileRateLimit, validate(updateProfi
   }
 });
 
-router.delete('/me', authMiddleware, deleteAccountRateLimit, async (req, res, next) => {
+router.delete('/me', authMiddleware, deleteAccountRateLimit, requireFirebaseRevocationCheck, async (req, res, next) => {
   try {
     const authAgeSeconds = Math.floor(Date.now() / 1000) - req.firebaseToken.auth_time;
     if (authAgeSeconds > RECENT_AUTH_SECONDS) {
@@ -90,6 +95,7 @@ router.delete('/me', authMiddleware, deleteAccountRateLimit, async (req, res, ne
     }
 
     await prisma.$transaction(async (tx) => {
+      await persistFirebaseUidBlock(req.user.firebaseUid, tx);
       await tx.practiceAnswer.deleteMany({ where: { userId: req.user.id } });
       await tx.user.update({
         where: { id: req.user.id },
@@ -105,7 +111,7 @@ router.delete('/me', authMiddleware, deleteAccountRateLimit, async (req, res, ne
 
     await Promise.all([
       invalidateUserByFirebaseUid(req.user.firebaseUid),
-      blockFirebaseUid(req.user.firebaseUid),
+      cacheFirebaseUidBlock(req.user.firebaseUid),
       invalidateLeaderboardCaches(req.user.id),
     ]);
     await admin.auth().deleteUser(req.user.firebaseUid);
