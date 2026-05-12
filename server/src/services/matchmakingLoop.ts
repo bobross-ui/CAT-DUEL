@@ -1,6 +1,7 @@
-import { Namespace } from 'socket.io';
+import type { Namespace } from 'socket.io';
 import { redis } from '../config/redis';
-import { createMatch, QueuePlayer } from './matchmaking';
+import { createMatch } from './matchmaking';
+import type { QueuePlayer } from './matchmaking';
 import { logger } from '../lib/logger';
 import { Sentry } from '../lib/sentry';
 
@@ -9,6 +10,11 @@ const EXPANDED_RANGE = 300;
 const EXPAND_AFTER_MS = 30_000;
 const TIMEOUT_MS = 60_000;
 const CLAIM_TTL_SECONDS = 30;
+const LOOP_INTERVAL_MS = 2_000;
+const DUE_BATCH_SIZE = 100;
+const CANDIDATE_SEARCH_LIMIT = 50;
+const QUEUE_KEY = 'matchmaking_queue';
+const QUEUE_DUE_KEY = 'matchmaking_queue_due';
 
 function claimKey(userId: string): string {
   return `matchmaking:claim:${userId}`;
@@ -27,12 +33,14 @@ async function claimPlayers(player1: QueuePlayer, player2: QueuePlayer): Promise
     redis.call("set", KEYS[1], ARGV[3], "EX", ARGV[4])
     redis.call("set", KEYS[2], ARGV[3], "EX", ARGV[4])
     redis.call("zrem", KEYS[3], ARGV[1], ARGV[2])
+    redis.call("zrem", KEYS[4], ARGV[1], ARGV[2])
     return 1
     `,
-    3,
+    4,
     claimKey(player1.userId),
     claimKey(player2.userId),
-    'matchmaking_queue',
+    QUEUE_KEY,
+    QUEUE_DUE_KEY,
     player1.userId,
     player2.userId,
     token,
@@ -64,71 +72,137 @@ async function releasePlayerClaims(
   );
 }
 
-function parseQueueEntries(raw: string[]): QueuePlayer[] {
+async function removeQueuedPlayer(userId: string): Promise<void> {
+  await redis.zrem(QUEUE_KEY, userId);
+  await redis.zrem(QUEUE_DUE_KEY, userId);
+  await redis.del(
+    `queue_joined:${userId}`,
+    `socket:mm:${userId}`,
+  );
+}
+
+function parseQueueEntries(raw: string[], player: QueuePlayer, matched: Set<string>): QueuePlayer[] {
   const players: QueuePlayer[] = [];
   for (let i = 0; i < raw.length; i += 2) {
-    players.push({ userId: raw[i], elo: parseInt(raw[i + 1], 10) });
+    const userId = raw[i];
+    const elo = parseInt(raw[i + 1], 10);
+    if (
+      userId === player.userId ||
+      matched.has(userId) ||
+      Number.isNaN(elo)
+    ) {
+      continue;
+    }
+    players.push({ userId, elo });
   }
   return players;
 }
 
-async function runMatchmaking(matchmakingNs: Namespace, gameNs: Namespace): Promise<void> {
-  const raw = await redis.zrangebyscore(
-      'matchmaking_queue',
-      '-inf',
-      '+inf',
+function nextAttemptAt(joinedAt: number, now: number): number {
+  const expandAt = joinedAt + EXPAND_AFTER_MS + 1;
+  const timeoutAt = joinedAt + TIMEOUT_MS + 1;
+
+  if (now < expandAt) return expandAt;
+  return Math.min(now + LOOP_INTERVAL_MS, timeoutAt);
+}
+
+async function findCandidates(
+  player: QueuePlayer,
+  range: number,
+  matched: Set<string>,
+): Promise<QueuePlayer[]> {
+  const [lowerRaw, upperRaw] = await Promise.all([
+    redis.zrevrangebyscore(
+      QUEUE_KEY,
+      player.elo,
+      player.elo - range,
       'WITHSCORES',
-    );
-    if (raw.length === 0) return;
+      'LIMIT',
+      0,
+      CANDIDATE_SEARCH_LIMIT,
+    ),
+    redis.zrangebyscore(
+      QUEUE_KEY,
+      player.elo,
+      player.elo + range,
+      'WITHSCORES',
+      'LIMIT',
+      0,
+      CANDIDATE_SEARCH_LIMIT,
+    ),
+  ]);
 
-    const players = parseQueueEntries(raw);
-    const matched = new Set<string>();
+  const candidatesById = new Map<string, QueuePlayer>();
+  for (const candidate of [
+    ...parseQueueEntries(lowerRaw, player, matched),
+    ...parseQueueEntries(upperRaw, player, matched),
+  ]) {
+    candidatesById.set(candidate.userId, candidate);
+  }
 
-    for (const player of players) {
-      if (matched.has(player.userId)) continue;
+  return Array.from(candidatesById.values()).sort(
+    (a, b) => Math.abs(a.elo - player.elo) - Math.abs(b.elo - player.elo),
+  );
+}
 
-      const joinedAt = await redis.get(`queue_joined:${player.userId}`);
-      const waitTime = joinedAt ? Date.now() - parseInt(joinedAt, 10) : 0;
-      const range = waitTime > EXPAND_AFTER_MS ? EXPANDED_RANGE : INITIAL_RANGE;
+export async function runMatchmaking(matchmakingNs: Namespace, gameNs: Namespace): Promise<void> {
+  const now = Date.now();
+  const dueUserIds = await redis.zrangebyscore(
+    QUEUE_DUE_KEY,
+    '-inf',
+    now,
+    'LIMIT',
+    0,
+    DUE_BATCH_SIZE,
+  );
+  if (dueUserIds.length === 0) return;
 
-      const candidates = players.filter(
-        (p) =>
-          p.userId !== player.userId &&
-          !matched.has(p.userId) &&
-          Math.abs(p.elo - player.elo) <= range,
-      );
+  const matched = new Set<string>();
 
-      if (candidates.length > 0) {
-        candidates.sort(
-          (a, b) => Math.abs(a.elo - player.elo) - Math.abs(b.elo - player.elo),
-        );
-        const opponent = candidates[0];
+  for (const userId of dueUserIds) {
+    if (matched.has(userId)) continue;
 
-        matched.add(player.userId);
-        matched.add(opponent.userId);
-
-        const claimToken = await claimPlayers(player, opponent);
-        if (!claimToken) continue;
-
-        try {
-          await createMatch(matchmakingNs, gameNs, player, opponent);
-        } finally {
-          await releasePlayerClaims(player, opponent, claimToken);
-        }
-      } else if (waitTime > TIMEOUT_MS) {
-        const socketId = await redis.get(`socket:mm:${player.userId}`);
-        if (socketId) {
-          matchmakingNs
-            .to(socketId)
-            .emit('queue:timeout', { message: 'No match found, try again later' });
-        }
-        await redis.zrem('matchmaking_queue', player.userId);
-        await redis.del(
-          `queue_joined:${player.userId}`,
-          `socket:mm:${player.userId}`,
-        );
-      }
+    const [eloScore, joinedAtValue] = await Promise.all([
+      redis.zscore(QUEUE_KEY, userId),
+      redis.get(`queue_joined:${userId}`),
+    ]);
+    const elo = eloScore ? parseInt(eloScore, 10) : NaN;
+    const joinedAt = joinedAtValue ? parseInt(joinedAtValue, 10) : NaN;
+    if (Number.isNaN(elo) || Number.isNaN(joinedAt)) {
+      await removeQueuedPlayer(userId);
+      continue;
     }
+
+    const player = { userId, elo };
+    const waitTime = now - joinedAt;
+    const range = waitTime > EXPAND_AFTER_MS ? EXPANDED_RANGE : INITIAL_RANGE;
+    const candidates = await findCandidates(player, range, matched);
+
+    if (candidates.length > 0) {
+      const opponent = candidates[0];
+
+      const claimToken = await claimPlayers(player, opponent);
+      if (!claimToken) continue;
+      matched.add(player.userId);
+      matched.add(opponent.userId);
+
+      try {
+        await createMatch(matchmakingNs, gameNs, player, opponent);
+      } finally {
+        await releasePlayerClaims(player, opponent, claimToken);
+      }
+    } else if (waitTime > TIMEOUT_MS) {
+      const socketId = await redis.get(`socket:mm:${player.userId}`);
+      if (socketId) {
+        matchmakingNs
+          .to(socketId)
+          .emit('queue:timeout', { message: 'No match found, try again later' });
+      }
+      await removeQueuedPlayer(player.userId);
+    } else {
+      await redis.zadd(QUEUE_DUE_KEY, nextAttemptAt(joinedAt, now), player.userId);
+    }
+  }
 }
 
 let matchmakingTimer: ReturnType<typeof setInterval> | null = null;
@@ -139,7 +213,7 @@ export function startMatchmakingLoop(matchmakingNs: Namespace, gameNs: Namespace
       Sentry.captureException(err);
       logger.error({ err }, 'Matchmaking loop error');
     });
-  }, 2000);
+  }, LOOP_INTERVAL_MS);
 }
 
 export function stopMatchmakingLoop(): void {

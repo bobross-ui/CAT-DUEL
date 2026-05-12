@@ -17,6 +17,9 @@ import { logger } from '../lib/logger';
 
 export type QueuePlayer = GamePlayer;
 
+const QUEUE_KEY = 'matchmaking_queue';
+const QUEUE_DUE_KEY = 'matchmaking_queue_due';
+
 function publicProfile(user: {
   id: string;
   displayName: string | null;
@@ -39,7 +42,8 @@ export async function createMatch(
 ): Promise<void> {
   const gameId = crypto.randomUUID();
 
-  await redis.zrem('matchmaking_queue', player1.userId, player2.userId);
+  await redis.zrem(QUEUE_KEY, player1.userId, player2.userId);
+  await redis.zrem(QUEUE_DUE_KEY, player1.userId, player2.userId);
   await redis.del(
     `queue_joined:${player1.userId}`,
     `queue_joined:${player2.userId}`,
@@ -120,7 +124,7 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
     socket.on('queue:join', withSentry(async () => {
       if (!(await enforceSocketEventLimit(socket, 'queue:join', user.id))) return;
 
-      const alreadyInQueue = await redis.zscore('matchmaking_queue', user.id);
+      const alreadyInQueue = await redis.zscore(QUEUE_KEY, user.id);
       if (alreadyInQueue) return;
 
       const activeGame = await getActiveGameForUser(user.id);
@@ -135,11 +139,13 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
         return;
       }
 
-      await redis.zadd('matchmaking_queue', user.eloRating, user.id);
-      await redis.set(`queue_joined:${user.id}`, Date.now(), 'EX', 120);
+      const joinedAt = Date.now();
+      await redis.zadd(QUEUE_KEY, user.eloRating, user.id);
+      await redis.zadd(QUEUE_DUE_KEY, joinedAt, user.id);
+      await redis.set(`queue_joined:${user.id}`, joinedAt, 'EX', 120);
       await redis.set(`socket:mm:${user.id}`, socket.id, 'EX', 120);
 
-      const queueSize = await redis.zcard('matchmaking_queue');
+      const queueSize = await redis.zcard(QUEUE_KEY);
       socket.emit('queue:joined', { position: queueSize });
       logger.info({ event: 'mm:join', userId: user.id, eloRating: user.eloRating, queuePosition: queueSize }, 'Player joined matchmaking queue');
     }));
@@ -147,13 +153,15 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
     socket.on('queue:leave', withSentry(async () => {
       if (!(await enforceSocketEventLimit(socket, 'queue:leave', user.id))) return;
 
-      await redis.zrem('matchmaking_queue', user.id);
+      await redis.zrem(QUEUE_KEY, user.id);
+      await redis.zrem(QUEUE_DUE_KEY, user.id);
       await redis.del(`queue_joined:${user.id}`, `socket:mm:${user.id}`);
       socket.emit('queue:left');
     }));
 
     socket.on('disconnect', withSentry(async () => {
-      await redis.zrem('matchmaking_queue', user.id);
+      await redis.zrem(QUEUE_KEY, user.id);
+      await redis.zrem(QUEUE_DUE_KEY, user.id);
       await redis.del(`queue_joined:${user.id}`, `socket:mm:${user.id}`);
     }));
   });
