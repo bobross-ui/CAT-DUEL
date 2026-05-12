@@ -2,12 +2,12 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { getActiveGameForUser } from '../services/gameSession';
 import { prisma } from '../models/prisma';
-import { redis } from '../config/redis';
 import { publicDisplayName } from '../services/displayName';
 
 const router = Router();
 const MAX_MATCH_HISTORY_LIMIT = 50;
 const DEFAULT_MATCH_HISTORY_LIMIT = 20;
+const RATING_HISTORY_LIMIT = 30;
 
 type MatchHistoryCursor = {
   finishedAt: Date;
@@ -161,64 +161,45 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { eloRating: true, gamesPlayed: true, rankTier: true, wins: true, winRate: true, draws: true },
+      select: {
+        eloRating: true,
+        peakElo: true,
+        gamesPlayed: true,
+        rankTier: true,
+        wins: true,
+        winRate: true,
+        draws: true,
+      },
     });
 
     if (!user) {
       return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
     }
 
-    const eloCacheKey = `stats:elo:${userId}:${user.gamesPlayed}`;
-    let eloStats: {
-      peakElo: number;
-      eloHistory: { finishedAt: Date | string; elo: number }[];
-    } | null = null;
+    const userMatchWhere = { OR: [{ player1Id: userId }, { player2Id: userId }] };
+    const ratingSnapshotSelect = {
+      id: true,
+      player1Id: true,
+      player1EloAfter: true,
+      player2EloAfter: true,
+      finishedAt: true,
+    } as const;
 
-    try {
-      const cached = await redis.get(eloCacheKey);
-      if (cached) eloStats = JSON.parse(cached);
-    } catch (err) {
-      req.log.error({ err }, 'games/stats: elo cache read failed');
-    }
+    const ratingMatches = await prisma.match.findMany({
+      where: userMatchWhere,
+      select: ratingSnapshotSelect,
+      orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }],
+      take: RATING_HISTORY_LIMIT,
+    });
 
-    if (!eloStats) {
-      const matches = await prisma.match.findMany({
-        where: { OR: [{ player1Id: userId }, { player2Id: userId }] },
-        select: {
-          player1Id: true,
-          player1EloChange: true,
-          player2EloChange: true,
-          finishedAt: true,
-        },
-        orderBy: { finishedAt: 'asc' },
-      });
-
-      const deltas = matches.map((m) =>
-        m.player1Id === userId ? m.player1EloChange : m.player2EloChange,
-      );
-      const totalDelta = deltas.reduce((a, b) => a + b, 0);
-      let runningElo = user.eloRating - totalDelta;
-
-      const eloHistory: { finishedAt: Date; elo: number }[] = [];
-
-      for (let i = 0; i < matches.length; i++) {
-        runningElo += deltas[i];
-        eloHistory.push({ finishedAt: matches[i].finishedAt, elo: runningElo });
-      }
-
-      eloStats = {
-        peakElo: eloHistory.length
-          ? Math.max(...eloHistory.map((h) => h.elo), user.eloRating)
-          : user.eloRating,
-        eloHistory,
-      };
-
-      try {
-        await redis.set(eloCacheKey, JSON.stringify(eloStats), 'EX', 300);
-      } catch (err) {
-        req.log.error({ err }, 'games/stats: elo cache write failed');
-      }
-    }
+    const eloHistory = ratingMatches
+      .slice()
+      .reverse()
+      .map((m) => ({
+        finishedAt: m.finishedAt,
+        elo: m.player1Id === userId ? m.player1EloAfter : m.player2EloAfter,
+      }))
+      .filter((point) => point.elo > 0);
 
     const losses = Math.max(0, user.gamesPlayed - user.wins - user.draws);
 
@@ -232,8 +213,8 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
         losses,
         draws: user.draws,
         winRate: user.winRate,
-        peakElo: eloStats.peakElo,
-        eloHistory: eloStats.eloHistory,
+        peakElo: user.peakElo,
+        eloHistory,
       },
     });
   } catch (err) {

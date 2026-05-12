@@ -33,6 +33,7 @@ jest.mock('../../models/prisma', () => ({
 }));
 
 const findMany = prisma.match.findMany as jest.Mock;
+const findUnique = prisma.user.findUnique as jest.Mock;
 
 function cursorFor(match: { finishedAt: Date; id: string }) {
   return Buffer.from(JSON.stringify({
@@ -99,9 +100,36 @@ async function getHistory(query = '') {
   }
 }
 
+async function getStats() {
+  const app = express();
+  app.use(express.json());
+  app.use('/games', gamesRouter);
+
+  const server = app.listen(0);
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+
+  try {
+    const address = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/games/stats`);
+
+    return {
+      status: response.status,
+      body: await response.json() as any,
+    };
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+}
+
 describe('GET /games/history', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('uses bounded cursor pagination instead of page-sized over-fetching', async () => {
@@ -170,5 +198,125 @@ describe('GET /games/history', () => {
       error: { code: 'VALIDATION_ERROR' },
     });
     expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /games/stats', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('returns peak Elo from the user row and only reads the latest 30 rating snapshots', async () => {
+    findUnique.mockResolvedValueOnce({
+      eloRating: 1250,
+      peakElo: 1340,
+      gamesPlayed: 42,
+      rankTier: 'SILVER',
+      wins: 20,
+      winRate: 20 / 42,
+      draws: 2,
+    });
+    findMany.mockResolvedValueOnce([
+      {
+        id: 'match-2',
+        player1Id: 'opponent-2',
+        player1EloAfter: 1195,
+        player2EloAfter: 1250,
+        finishedAt: new Date('2026-05-12T10:00:00.000Z'),
+      },
+      {
+        id: 'match-1',
+        player1Id: 'user-1',
+        player1EloAfter: 1238,
+        player2EloAfter: 1210,
+        finishedAt: new Date('2026-05-11T10:00:00.000Z'),
+      },
+    ]);
+
+    const response = await getStats();
+
+    expect(response.status).toBe(200);
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      select: {
+        eloRating: true,
+        peakElo: true,
+        gamesPlayed: true,
+        rankTier: true,
+        wins: true,
+        winRate: true,
+        draws: true,
+      },
+    });
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { OR: [{ player1Id: 'user-1' }, { player2Id: 'user-1' }] },
+      select: {
+        id: true,
+        player1Id: true,
+        player1EloAfter: true,
+        player2EloAfter: true,
+        finishedAt: true,
+      },
+      orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }],
+      take: 30,
+    });
+    expect(response.body.data).toMatchObject({
+      currentElo: 1250,
+      peakElo: 1340,
+      gamesPlayed: 42,
+      wins: 20,
+      losses: 20,
+      draws: 2,
+    });
+    expect(response.body.data.eloHistory).toEqual([
+      { finishedAt: '2026-05-11T10:00:00.000Z', elo: 1238 },
+      { finishedAt: '2026-05-12T10:00:00.000Z', elo: 1250 },
+    ]);
+  });
+
+  it('includes old snapshots when they are among the latest 30 matches', async () => {
+    findUnique.mockResolvedValueOnce({
+      eloRating: 1210,
+      peakElo: 1275,
+      gamesPlayed: 8,
+      rankTier: 'SILVER',
+      wins: 4,
+      winRate: 0.5,
+      draws: 0,
+    });
+    findMany.mockResolvedValueOnce([
+      {
+        id: 'old-match',
+        player1Id: 'opponent-1',
+        player1EloAfter: 1190,
+        player2EloAfter: 1210,
+        finishedAt: new Date('2025-12-01T10:00:00.000Z'),
+      },
+    ]);
+
+    const response = await getStats();
+
+    expect(response.status).toBe(200);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { OR: [{ player1Id: 'user-1' }, { player2Id: 'user-1' }] },
+      select: {
+        id: true,
+        player1Id: true,
+        player1EloAfter: true,
+        player2EloAfter: true,
+        finishedAt: true,
+      },
+      orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }],
+      take: 30,
+    });
+    expect(response.body.data.eloHistory).toEqual([
+      { finishedAt: '2025-12-01T10:00:00.000Z', elo: 1210 },
+    ]);
   });
 });
