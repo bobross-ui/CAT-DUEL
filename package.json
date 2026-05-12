@@ -14,6 +14,11 @@
     "format": "prettier --write .",
     "test": "npm test --workspace=server"
   },
+  "overrides": {
+    "postcss": "8.5.14",
+    "retry-request": "8.0.2",
+    "teeny-request": "10.1.2"
+  },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
