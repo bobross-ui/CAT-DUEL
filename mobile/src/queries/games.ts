@@ -24,10 +24,10 @@ export interface MatchHistoryEntry {
 export interface MatchHistoryData {
   entries: MatchHistoryEntry[];
   pagination: {
-    page: number;
+    cursor: string | null;
     limit: number;
-    total: number;
-    totalPages: number;
+    nextCursor: string | null;
+    hasMore: boolean;
   };
 }
 
@@ -92,8 +92,8 @@ type UseGamesOptions = {
   enabled?: boolean;
 };
 
-export async function fetchGamesHistory(page: number, limit: number) {
-  const res = await api.get('/games/history', { params: { page, limit } });
+export async function fetchGamesHistory(limit: number, cursor: string | null = null) {
+  const res = await api.get('/games/history', { params: { cursor, limit } });
   return res.data.data as MatchHistoryData;
 }
 
@@ -112,10 +112,10 @@ async function getGamesActive() {
   return res.data.data as ActiveGamePayload | { gameId: null };
 }
 
-export function useGamesHistory(page: number, limit: number, options: UseGamesOptions = {}) {
+export function useGamesHistory(limit: number, cursor: string | null = null, options: UseGamesOptions = {}) {
   return useQuery({
-    queryKey: queryKeys.games.history(page, limit),
-    queryFn: () => fetchGamesHistory(page, limit),
+    queryKey: queryKeys.games.history(limit, cursor),
+    queryFn: () => fetchGamesHistory(limit, cursor),
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
   });

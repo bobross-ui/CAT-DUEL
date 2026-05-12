@@ -65,7 +65,7 @@ export default function HomeScreenDesktop({ navigation }: Props) {
   const { theme, mode } = useTheme();
   const { user, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
   const statsQuery = useGamesStats();
-  const historyQuery = useGamesHistory(1, 5);
+  const historyQuery = useGamesHistory(5);
   const leaderboardQuery = useLeaderboardGlobal();
   const pulse = useRef(new Animated.Value(1)).current;
 

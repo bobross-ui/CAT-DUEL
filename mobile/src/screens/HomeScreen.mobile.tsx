@@ -42,7 +42,7 @@ export default function HomeScreen({ navigation }: Props) {
   const { theme, mode } = useTheme();
   const { playHaptic } = useAppPreferences();
   const { user: profile, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
-  const historyQuery = useGamesHistory(1, 20);
+  const historyQuery = useGamesHistory(20);
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {

@@ -6,6 +6,56 @@ import { redis } from '../config/redis';
 import { publicDisplayName } from '../services/displayName';
 
 const router = Router();
+const MAX_MATCH_HISTORY_LIMIT = 50;
+const DEFAULT_MATCH_HISTORY_LIMIT = 20;
+
+type MatchHistoryCursor = {
+  finishedAt: Date;
+  id: string;
+};
+
+function firstQueryValue(value: unknown): string | undefined {
+  if (Array.isArray(value)) return firstQueryValue(value[0]);
+  return typeof value === 'string' ? value : undefined;
+}
+
+function parseMatchHistoryLimit(value: unknown): number {
+  const raw = firstQueryValue(value);
+  const parsed = raw ? Number.parseInt(raw, 10) : DEFAULT_MATCH_HISTORY_LIMIT;
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_MATCH_HISTORY_LIMIT;
+  return Math.min(MAX_MATCH_HISTORY_LIMIT, parsed);
+}
+
+function encodeMatchHistoryCursor(match: { finishedAt: Date; id: string }): string {
+  return Buffer.from(JSON.stringify({
+    finishedAt: match.finishedAt.toISOString(),
+    id: match.id,
+  })).toString('base64url');
+}
+
+function decodeMatchHistoryCursor(value: unknown): MatchHistoryCursor | null {
+  const raw = firstQueryValue(value);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+      finishedAt?: unknown;
+      id?: unknown;
+    };
+    if (typeof parsed.finishedAt !== 'string' || typeof parsed.id !== 'string' || parsed.id.length === 0) {
+      throw new Error('Invalid match history cursor shape');
+    }
+
+    const finishedAt = new Date(parsed.finishedAt);
+    if (Number.isNaN(finishedAt.getTime())) {
+      throw new Error('Invalid match history cursor date');
+    }
+
+    return { finishedAt, id: parsed.id };
+  } catch {
+    throw new Error('INVALID_HISTORY_CURSOR');
+  }
+}
 
 // GET /api/games/active
 router.get('/active', authMiddleware, async (req, res, next) => {
@@ -17,38 +67,44 @@ router.get('/active', authMiddleware, async (req, res, next) => {
   }
 });
 
-// GET /api/games/history?page=1&limit=20
+// GET /api/games/history?limit=20&cursor=...
 router.get('/history', authMiddleware, async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
-    const skip = (page - 1) * limit;
+    const limit = parseMatchHistoryLimit(req.query.limit);
+    let cursor: MatchHistoryCursor | null;
+    try {
+      cursor = decodeMatchHistoryCursor(req.query.cursor);
+    } catch {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid match history cursor' },
+      });
+    }
 
     const playerSelect = { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } };
-    // Fetch enough rows from each side to cover the worst case: all rows in the
-    // target window could come from a single side.
-    const fetchLimit = skip + limit;
-    const [asP1, asP2, totalAsP1, totalAsP2] = await Promise.all([
-      prisma.match.findMany({
-        where: { player1Id: userId },
-        orderBy: { finishedAt: 'desc' },
-        take: fetchLimit,
-        include: { player1: playerSelect, player2: playerSelect },
-      }),
-      prisma.match.findMany({
-        where: { player2Id: userId },
-        orderBy: { finishedAt: 'desc' },
-        take: fetchLimit,
-        include: { player1: playerSelect, player2: playerSelect },
-      }),
-      prisma.match.count({ where: { player1Id: userId } }),
-      prisma.match.count({ where: { player2Id: userId } }),
-    ]);
+    const userMatchWhere = { OR: [{ player1Id: userId }, { player2Id: userId }] };
+    const cursorWhere = cursor
+      ? {
+          OR: [
+            { finishedAt: { lt: cursor.finishedAt } },
+            { finishedAt: cursor.finishedAt, id: { lt: cursor.id } },
+          ],
+        }
+      : undefined;
 
-    const total = totalAsP1 + totalAsP2;
-    const merged = [...asP1, ...asP2].sort((a, b) => b.finishedAt.getTime() - a.finishedAt.getTime());
-    const matches = merged.slice(skip, skip + limit);
+    const fetchedMatches = await prisma.match.findMany({
+      where: cursorWhere ? { AND: [userMatchWhere, cursorWhere] } : userMatchWhere,
+      orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: { player1: playerSelect, player2: playerSelect },
+    });
+
+    const hasMore = fetchedMatches.length > limit;
+    const matches = fetchedMatches.slice(0, limit);
+    const nextCursor = hasMore && matches.length > 0
+      ? encodeMatchHistoryCursor(matches[matches.length - 1])
+      : null;
 
     const entries = matches.map((m) => {
       const isPlayer1 = m.player1Id === userId;
@@ -85,7 +141,12 @@ router.get('/history', authMiddleware, async (req, res, next) => {
       success: true,
       data: {
         entries,
-        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+        pagination: {
+          cursor: firstQueryValue(req.query.cursor) ?? null,
+          limit,
+          nextCursor,
+          hasMore,
+        },
       },
     });
   } catch (err) {

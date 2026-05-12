@@ -161,8 +161,8 @@ model Match {
   player2 User         @relation("MatchPlayer2", fields: [player2Id], references: [id])
   answers MatchAnswer[]
 
-  @@index([player1Id, finishedAt(sort: Desc)])
-  @@index([player2Id, finishedAt(sort: Desc)])
+  @@index([player1Id, finishedAt(sort: Desc), id(sort: Desc)])
+  @@index([player2Id, finishedAt(sort: Desc), id(sort: Desc)])
   @@map("matches")
 }
 

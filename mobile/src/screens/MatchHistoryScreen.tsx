@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
@@ -37,30 +39,30 @@ export default function MatchHistoryScreen({ navigation }: Props) {
   const queryClient = useQueryClient();
   const [entries, setEntries] = useState<MatchHistoryEntry[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const historyQuery = useGamesHistory(page, 20);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const historyQuery = useGamesHistory(20, cursor);
 
   useEffect(() => {
-    if (!historyQuery.data || historyQuery.data.pagination.page !== page) return;
+    if (!historyQuery.data || historyQuery.data.pagination.cursor !== cursor) return;
 
-    setTotalPages(historyQuery.data.pagination.totalPages);
+    setNextCursor(historyQuery.data.pagination.nextCursor);
     setEntries((prev) => (
-      page === 1 ? historyQuery.data.entries : [...prev, ...historyQuery.data.entries]
+      cursor == null ? historyQuery.data.entries : [...prev, ...historyQuery.data.entries]
     ));
-  }, [historyQuery.data, page]);
+  }, [historyQuery.data, cursor]);
 
   const onRefresh = useCallback(async () => {
     void playHaptic('pull_refresh');
     setRefreshing(true);
     try {
       const data = await queryClient.fetchQuery({
-        queryKey: queryKeys.games.history(1, 20),
-        queryFn: () => fetchGamesHistory(1, 20),
+        queryKey: queryKeys.games.history(20),
+        queryFn: () => fetchGamesHistory(20),
         staleTime: 0,
       });
-      setPage(1);
-      setTotalPages(data.pagination.totalPages);
+      setCursor(null);
+      setNextCursor(data.pagination.nextCursor);
       setEntries(data.entries);
     } finally {
       setRefreshing(false);
@@ -68,12 +70,20 @@ export default function MatchHistoryScreen({ navigation }: Props) {
   }, [playHaptic, queryClient]);
 
   const loadMore = useCallback(async () => {
-    if (historyQuery.isFetching || page >= totalPages) return;
-    setPage((current) => current + 1);
-  }, [historyQuery.isFetching, page, totalPages]);
+    if (historyQuery.isFetching || !nextCursor) return;
+    setCursor(nextCursor);
+  }, [historyQuery.isFetching, nextCursor]);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    if (distanceFromBottom <= 240) {
+      void loadMore();
+    }
+  }, [loadMore]);
 
   const retry = useCallback(() => {
-    setPage(1);
+    setCursor(null);
     void historyQuery.refetch();
   }, [historyQuery]);
 
@@ -172,8 +182,10 @@ export default function MatchHistoryScreen({ navigation }: Props) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
+          onScroll={handleScroll}
+          scrollEventThrottle={120}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          ListFooterComponent={historyQuery.isFetching && page > 1
+          ListFooterComponent={historyQuery.isFetching && cursor != null
             ? <ActivityIndicator style={styles.footerLoader} color={theme.ink3} />
             : null}
           ListEmptyComponent={

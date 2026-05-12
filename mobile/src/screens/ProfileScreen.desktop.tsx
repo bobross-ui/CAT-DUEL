@@ -131,7 +131,7 @@ export default function ProfileScreenDesktop({ navigation }: Props) {
   const { theme, mode } = useTheme();
   const { user, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
   const statsQuery = useGamesStats();
-  const historyQuery = useGamesHistory(1, 3);
+  const historyQuery = useGamesHistory(3);
   const updateMe = useUpdateMe();
   const [editVisible, setEditVisible] = useState(false);
   const [editName, setEditName] = useState('');
