@@ -1,15 +1,30 @@
-import { findNextPracticeQuestion } from '../questions';
+import express from 'express';
+import type { AddressInfo } from 'net';
+import questionsRouter, { findNextPracticeQuestion } from '../questions';
 import { prisma } from '../../models/prisma';
 
 jest.mock('../../middleware/auth', () => ({
-  authMiddleware: jest.fn((_req, _res, next) => next()),
+  authMiddleware: jest.fn((req, _res, next) => {
+    req.user = { id: 'user-1' };
+    next();
+  }),
+}));
+
+jest.mock('../../middleware/rateLimit', () => ({
+  practiceAnswerRateLimit: jest.fn((_req, _res, next) => next()),
 }));
 
 jest.mock('../../models/prisma', () => ({
   prisma: {
     question: {
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
     },
+    practiceAnswer: {
+      create: jest.fn(),
+    },
+    $transaction: jest.fn(),
   },
 }));
 
@@ -18,6 +33,35 @@ jest.mock('../../services/questionServeBuffer', () => ({
 }));
 
 const findFirst = prisma.question.findFirst as jest.Mock;
+const findUnique = prisma.question.findUnique as jest.Mock;
+const transaction = prisma.$transaction as jest.Mock;
+
+async function postAnswer(questionId: string, payload: unknown) {
+  const app = express();
+  app.use(express.json());
+  app.use('/questions', questionsRouter);
+
+  const server = app.listen(0);
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+
+  try {
+    const address = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/questions/${questionId}/answer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    return {
+      status: response.status,
+      body: await response.json(),
+    };
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+}
 
 describe('findNextPracticeQuestion', () => {
   beforeEach(() => {
@@ -105,5 +149,51 @@ describe('findNextPracticeQuestion', () => {
         practiceAnswers: expect.anything(),
       }),
     }));
+  });
+});
+
+describe('POST /questions/:id/answer validation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('rejects oversized typed answers before looking up or persisting the answer', async () => {
+    const response = await postAnswer('00000000-0000-4000-8000-000000000002', {
+      typedAnswer: 'x'.repeat(129),
+      timeTakenMs: 1000,
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      success: false,
+      error: { code: 'VALIDATION_ERROR' },
+    });
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects answer shapes that do not match the stored question type', async () => {
+    findUnique.mockResolvedValueOnce({
+      id: '00000000-0000-4000-8000-000000000002',
+      questionType: 'TITA',
+      correctAnswer: null,
+      correctAnswerText: '42',
+      explanation: 'Because 42.',
+    });
+
+    const response = await postAnswer('00000000-0000-4000-8000-000000000002', {
+      selectedAnswer: 2,
+      timeTakenMs: 1000,
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Answer shape does not match question type',
+      },
+    });
+    expect(transaction).not.toHaveBeenCalled();
   });
 });

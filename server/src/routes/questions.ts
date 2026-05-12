@@ -6,6 +6,11 @@ import { practiceAnswerRateLimit } from '../middleware/rateLimit';
 import { validate } from '../middleware/validate';
 import { bufferQuestionServes } from '../services/questionServeBuffer';
 import { gradeAnswer } from '../services/answerGrading';
+import {
+  addAnswerModeIssue,
+  answerPayloadShape,
+  isAnswerForQuestionType,
+} from '../services/answerValidation';
 import type { Prisma, QuestionCategory } from '../generated/prisma/client';
 
 const router = Router();
@@ -156,12 +161,9 @@ async function findPracticeQuestionInCategories(
 // ── POST /api/questions/:id/answer ─────────────────────────────────────────
 
 const answerSchema = z.object({
-  selectedAnswer: z.number().int().min(0).max(3).optional(),
-  typedAnswer: z.string().min(1).optional(),
+  ...answerPayloadShape,
   timeTakenMs: z.number().int().min(0),
-}).refine((answer) => answer.selectedAnswer !== undefined || answer.typedAnswer !== undefined, {
-  message: 'selectedAnswer or typedAnswer is required',
-});
+}).strict().superRefine(addAnswerModeIssue);
 
 router.post('/:id/answer', practiceAnswerRateLimit, validate(answerSchema), async (req: Request, res: Response) => {
   const question = await prisma.question.findUnique({ where: { id: req.params.id } });
@@ -171,6 +173,14 @@ router.post('/:id/answer', practiceAnswerRateLimit, validate(answerSchema), asyn
   }
 
   const { selectedAnswer, typedAnswer, timeTakenMs } = req.body;
+  if (!isAnswerForQuestionType(question.questionType, { selectedAnswer, typedAnswer })) {
+    res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'Answer shape does not match question type' },
+    });
+    return;
+  }
+
   const isCorrect = gradeAnswer(question, { selectedAnswer, typedAnswer });
 
   await prisma.$transaction([

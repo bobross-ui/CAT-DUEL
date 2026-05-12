@@ -1,4 +1,5 @@
 import { Namespace, Socket } from 'socket.io';
+import type { ZodSchema } from 'zod';
 import { env } from '../config/env';
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
@@ -7,7 +8,12 @@ import { invalidateUserGlobalRank } from './leaderboard';
 import { bufferQuestionServes } from './questionServeBuffer';
 import { invalidateUserById } from './userCache';
 import { gradeAnswer } from './answerGrading';
+import { isAnswerForQuestionType } from './answerValidation';
 import { enforceSocketEventLimit } from './socketRateLimit';
+import {
+  socketAnswerSubmitPayloadSchema,
+  socketGameIdPayloadSchema,
+} from './socketPayloadSchemas';
 import { getPoolIds, getQuestionsContent, contentKey, CONTENT_TTL } from './questionPool';
 import { logger } from '../lib/logger';
 import { Sentry, withSentry } from '../lib/sentry';
@@ -190,6 +196,32 @@ const activeTimers = new Map<string, NodeJS.Timeout>();
 const forfeitTimers = new Map<string, NodeJS.Timeout>(); // keyed by userId
 const preStartTimers = new Map<string, NodeJS.Timeout>();
 const countdownTimers = new Map<string, NodeJS.Timeout>();
+
+function parseSocketPayload<T>(
+  socket: Socket,
+  eventName: string,
+  schema: ZodSchema<T>,
+  payload: unknown,
+): T | null {
+  const result = schema.safeParse(payload);
+  if (result.success) return result.data;
+
+  const issues = result.error.issues.slice(0, 3).map((issue) => ({
+    code: issue.code,
+    path: issue.path.join('.'),
+    message: issue.message,
+  }));
+  logger.warn(
+    { event: eventName, userId: socket.data.user?.id, issues },
+    'Invalid socket payload',
+  );
+  socket.emit('game:error', {
+    code: 'VALIDATION_ERROR',
+    message: result.error.issues[0]?.message ?? 'Invalid socket payload',
+  });
+
+  return null;
+}
 
 // ─── Redis helpers ─────────────────────────────────────────────────────────────
 
@@ -776,6 +808,14 @@ async function handleAnswer(
   const expectedAnswer = state.answerKeys[questionId];
   if (!expectedAnswer) return;
 
+  if (!isAnswerForQuestionType(expectedAnswer.questionType, { selectedAnswer, typedAnswer })) {
+    logger.warn(
+      { event: 'game:answer_invalid_mode', gameId, userId, questionId, questionType: expectedAnswer.questionType },
+      'Rejected answer with invalid mode for question type',
+    );
+    return;
+  }
+
   const isCorrect = gradeAnswer(expectedAnswer, { selectedAnswer, typedAnswer });
   logger.info({ event: 'game:answer', gameId, userId, questionId, questionNumber: playerProgress + 1, isCorrect }, 'Answer submitted');
 
@@ -1143,8 +1183,12 @@ export function registerGameHandlers(gameNs: Namespace): void {
       logger.error({ err, userId: user.id }, 'Socket bind error'),
     );
 
-    socket.on('game:join', withSentry(async ({ gameId }: { gameId: string }) => {
+    socket.on('game:join', withSentry(async (payload: unknown) => {
       if (!(await enforceSocketEventLimit(socket, 'game:join', user.id))) return;
+
+      const parsedPayload = parseSocketPayload(socket, 'game:join', socketGameIdPayloadSchema, payload);
+      if (!parsedPayload) return;
+      const { gameId } = parsedPayload;
 
       const state = await getGameState(gameId);
       if (!state) return socket.emit('game:error', { message: 'Game not found' });
@@ -1250,27 +1294,22 @@ export function registerGameHandlers(gameNs: Namespace): void {
 
     socket.on(
       'answer:submit',
-      async ({
-        gameId,
-        questionId,
-        selectedAnswer,
-        typedAnswer,
-      }: {
-        gameId: string;
-        questionId: string;
-        selectedAnswer?: number;
-        typedAnswer?: string;
-      }) => {
+      async (payload: unknown) => {
+        let gameId: string | undefined;
         try {
           if (!(await enforceSocketEventLimit(socket, 'answer:submit', user.id))) return;
+
+          const parsedPayload = parseSocketPayload(socket, 'answer:submit', socketAnswerSubmitPayloadSchema, payload);
+          if (!parsedPayload) return;
+          gameId = parsedPayload.gameId;
 
           await handleAnswer(
             socket,
             user.id,
-            gameId,
-            questionId,
-            selectedAnswer ?? null,
-            typedAnswer ?? null,
+            parsedPayload.gameId,
+            parsedPayload.questionId,
+            parsedPayload.selectedAnswer ?? null,
+            parsedPayload.typedAnswer ?? null,
             gameNs,
           );
         } catch (err) {
@@ -1280,7 +1319,11 @@ export function registerGameHandlers(gameNs: Namespace): void {
       },
     );
 
-    socket.on('game:forfeit', withSentry(async ({ gameId }: { gameId: string }) => {
+    socket.on('game:forfeit', withSentry(async (payload: unknown) => {
+      const parsedPayload = parseSocketPayload(socket, 'game:forfeit', socketGameIdPayloadSchema, payload);
+      if (!parsedPayload) return;
+      const { gameId } = parsedPayload;
+
       const state = await getGameState(gameId);
       if (!state || state.status !== 'ACTIVE') return;
 
@@ -1296,7 +1339,11 @@ export function registerGameHandlers(gameNs: Namespace): void {
       });
     }));
 
-    socket.on('game:cancel_prestart', withSentry(async ({ gameId }: { gameId: string }) => {
+    socket.on('game:cancel_prestart', withSentry(async (payload: unknown) => {
+      const parsedPayload = parseSocketPayload(socket, 'game:cancel_prestart', socketGameIdPayloadSchema, payload);
+      if (!parsedPayload) return;
+      const { gameId } = parsedPayload;
+
       const state = await getGameState(gameId);
       if (!state || !isPreStartStatus(state.status) || !isParticipant(state, user.id)) return;
 

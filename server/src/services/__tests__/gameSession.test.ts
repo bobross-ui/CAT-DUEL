@@ -1,3 +1,29 @@
+jest.mock('../../config/redis', () => ({
+  redis: {
+    del: jest.fn(),
+    get: jest.fn(),
+    hgetall: jest.fn(),
+    hmget: jest.fn(),
+    multi: jest.fn(() => ({
+      del: jest.fn().mockReturnThis(),
+      exec: jest.fn(),
+      expire: jest.fn().mockReturnThis(),
+      hset: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+    })),
+    pipeline: jest.fn(() => ({
+      exec: jest.fn(),
+      set: jest.fn().mockReturnThis(),
+    })),
+    set: jest.fn(),
+    type: jest.fn(),
+  },
+}));
+
+jest.mock('../socketRateLimit', () => ({
+  enforceSocketEventLimit: jest.fn(),
+}));
+
 import { isAnswerLate } from '../gameSession';
 
 describe('isAnswerLate', () => {
