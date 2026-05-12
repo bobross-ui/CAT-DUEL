@@ -14,7 +14,6 @@ import Button from '../components/Button';
 import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
-import { useAuth } from '../context/AuthContext';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { useTheme } from '../theme/ThemeProvider';
 import { fetchGamesHistory, type MatchHistoryEntry, useGamesHistory } from '../queries/games';
@@ -37,7 +36,6 @@ function formatMatchTime(iso: string): string {
 export default function MatchHistoryScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const { playHaptic } = useAppPreferences();
-  const { user: authUser } = useAuth();
   const queryClient = useQueryClient();
   const [entries, setEntries] = useState<MatchHistoryEntry[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,7 +57,7 @@ export default function MatchHistoryScreen({ navigation }: Props) {
     setRefreshing(true);
     try {
       const data = await queryClient.fetchQuery({
-        queryKey: queryKeys.games.history(authUser?.uid ?? null, 20),
+        queryKey: queryKeys.games.history(20),
         queryFn: () => fetchGamesHistory(20),
         staleTime: 0,
       });
@@ -69,7 +67,7 @@ export default function MatchHistoryScreen({ navigation }: Props) {
     } finally {
       setRefreshing(false);
     }
-  }, [authUser?.uid, playHaptic, queryClient]);
+  }, [playHaptic, queryClient]);
 
   const loadMore = useCallback(async () => {
     if (historyQuery.isFetching || !nextCursor) return;
