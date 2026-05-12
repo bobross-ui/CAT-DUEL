@@ -54,7 +54,7 @@ export function useUpdateMe() {
   return useMutation({
     mutationFn: updateMe,
     onSuccess: (profile) => {
-      queryClient.setQueryData(queryKeys.me(), profile);
+      queryClient.setQueriesData({ queryKey: queryKeys.me() }, profile);
       void queryClient.invalidateQueries({ queryKey: queryKeys.me() });
     },
   });
@@ -66,7 +66,7 @@ export function useCompleteOnboarding() {
   return useMutation({
     mutationFn: completeOnboarding,
     onSuccess: (profile) => {
-      queryClient.setQueryData(queryKeys.me(), profile);
+      queryClient.setQueriesData({ queryKey: queryKeys.me() }, profile);
       void queryClient.invalidateQueries({ queryKey: queryKeys.me() });
     },
   });

@@ -132,7 +132,7 @@ export default function FoundScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
 
   const { user: profile } = useCurrentProfile();
-  const { data: stats } = useGamesStats();
+  const { data: stats } = useGamesStats(profile?.id);
   const [preStartStatus, setPreStartStatus] = useState<PreStartStatus>('waiting_for_opponent');
   const [countdown, setCountdown] = useState<number | null>(null);
   const [initialState, setInitialState] = useState<InitialGameState | null>(null);

@@ -48,15 +48,9 @@ function formatDelta(delta: number) {
   return `${delta}`;
 }
 
-function recent90Days(history: MatchStats['eloHistory']) {
-  const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
-  return history.filter((item) => new Date(item.finishedAt).getTime() >= cutoff);
-}
-
 function RatingChart({ history }: { history: MatchStats['eloHistory'] }) {
   const { theme } = useTheme();
-  const points = useMemo(() => recent90Days(history), [history]);
-  const chartPoints = points.length > 0 ? points : history.slice(-1);
+  const chartPoints = useMemo(() => history, [history]);
   const values = chartPoints.map((point) => point.elo);
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 0;
@@ -71,10 +65,10 @@ function RatingChart({ history }: { history: MatchStats['eloHistory'] }) {
     : '';
   const startLabel = chartPoints[0]?.finishedAt
     ? new Date(chartPoints[0].finishedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-    : 'start';
+    : '';
   const endLabel = chartPoints[chartPoints.length - 1]?.finishedAt
     ? new Date(chartPoints[chartPoints.length - 1].finishedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-    : 'today';
+    : '';
 
   return (
     <View>
@@ -130,7 +124,7 @@ function RatingChart({ history }: { history: MatchStats['eloHistory'] }) {
 export default function ProfileScreenDesktop({ navigation }: Props) {
   const { theme, mode } = useTheme();
   const { user, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
-  const statsQuery = useGamesStats();
+  const statsQuery = useGamesStats(user?.id);
   const historyQuery = useGamesHistory(3);
   const updateMe = useUpdateMe();
   const [editVisible, setEditVisible] = useState(false);
@@ -348,7 +342,7 @@ export default function ProfileScreenDesktop({ navigation }: Props) {
           <View style={styles.rightCol}>
             <Card style={styles.chartCard}>
               <View style={styles.cardHeader}>
-                <EyebrowLabel>Rating · 90 days</EyebrowLabel>
+                <EyebrowLabel>Rating · last 30</EyebrowLabel>
                 <Text.Mono preset="mono" color={theme.ink3}>peak {stats?.peakElo ?? rating}</Text.Mono>
               </View>
               <RatingChart history={stats?.eloHistory ?? []} />

@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { ActiveGamePayload } from '../navigation';
+import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { queryKeys } from './keys';
 
@@ -113,19 +114,21 @@ async function getGamesActive() {
 }
 
 export function useGamesHistory(limit: number, cursor: string | null = null, options: UseGamesOptions = {}) {
+  const { user: authUser } = useAuth();
+
   return useQuery({
-    queryKey: queryKeys.games.history(limit, cursor),
+    queryKey: queryKeys.games.history(authUser?.uid ?? null, limit, cursor),
     queryFn: () => fetchGamesHistory(limit, cursor),
     placeholderData: keepPreviousData,
-    enabled: options.enabled ?? true,
+    enabled: Boolean(authUser) && (options.enabled ?? true),
   });
 }
 
-export function useGamesStats(options: UseGamesOptions = {}) {
+export function useGamesStats(userId: string | null | undefined, options: UseGamesOptions = {}) {
   return useQuery({
-    queryKey: queryKeys.games.stats(),
+    queryKey: queryKeys.games.stats(userId ?? null),
     queryFn: getGamesStats,
-    enabled: options.enabled ?? true,
+    enabled: Boolean(userId) && (options.enabled ?? true),
   });
 }
 
@@ -138,9 +141,11 @@ export function useGamesDetail(gameId: string, options: UseGamesOptions = {}) {
 }
 
 export function useGamesActive(options: UseGamesOptions = {}) {
+  const { user: authUser } = useAuth();
+
   return useQuery({
-    queryKey: queryKeys.games.active(),
+    queryKey: queryKeys.games.active(authUser?.uid ?? null),
     queryFn: getGamesActive,
-    enabled: options.enabled ?? true,
+    enabled: Boolean(authUser) && (options.enabled ?? true),
   });
 }

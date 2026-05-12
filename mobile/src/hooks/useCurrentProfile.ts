@@ -30,7 +30,7 @@ async function fetchCurrentProfile() {
 export function useCurrentProfile() {
   const { user: authUser } = useAuth();
   const query = useQuery({
-    queryKey: queryKeys.me(),
+    queryKey: queryKeys.me(authUser?.uid ?? null),
     queryFn: fetchCurrentProfile,
     enabled: Boolean(authUser),
   });

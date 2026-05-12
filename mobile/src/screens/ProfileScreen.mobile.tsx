@@ -36,7 +36,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const { playHaptic } = useAppPreferences();
   const { user: currentProfile, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
-  const statsQuery = useGamesStats();
+  const statsQuery = useGamesStats(currentProfile?.id);
   const updateMe = useUpdateMe();
   const [refreshing, setRefreshing] = useState(false);
   const [debugTaps, setDebugTaps] = useState(0);

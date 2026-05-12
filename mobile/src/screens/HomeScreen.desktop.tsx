@@ -64,7 +64,7 @@ function isToday(value: string) {
 export default function HomeScreenDesktop({ navigation }: Props) {
   const { theme, mode } = useTheme();
   const { user, loading: profileLoading, error: profileError, refresh } = useCurrentProfile();
-  const statsQuery = useGamesStats();
+  const statsQuery = useGamesStats(user?.id);
   const historyQuery = useGamesHistory(5);
   const leaderboardQuery = useLeaderboardGlobal();
   const pulse = useRef(new Animated.Value(1)).current;
