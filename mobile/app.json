@@ -21,7 +21,7 @@
     "ios": {
       "supportsTablet": true,
       "associatedDomains": [
-        "applinks:catduel.app"
+        "applinks:exam-duel.com"
       ]
     },
     "android": {
@@ -38,17 +38,17 @@
           "data": [
             {
               "scheme": "https",
-              "host": "catduel.app",
+              "host": "exam-duel.com",
               "pathPrefix": "/profile"
             },
             {
               "scheme": "https",
-              "host": "catduel.app",
+              "host": "exam-duel.com",
               "pathPrefix": "/match"
             },
             {
               "scheme": "https",
-              "host": "catduel.app",
+              "host": "exam-duel.com",
               "pathPrefix": "/leaderboard"
             }
           ],

@@ -2,7 +2,7 @@ import * as Linking from 'expo-linking';
 import type { LinkingOptions } from '@react-navigation/native';
 import type { RootStackParamList } from '.';
 
-const DEFAULT_APP_URL = 'https://catduel.app';
+const DEFAULT_APP_URL = 'https://exam-duel.com';
 
 function trimTrailingSlash(url: string) {
   return url.replace(/\/+$/, '');

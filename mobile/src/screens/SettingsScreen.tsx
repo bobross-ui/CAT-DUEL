@@ -234,9 +234,9 @@ export default function SettingsScreen({ navigation }: Props) {
 
           <Section title="About">
             <SettingsRow label="Version" value={`${appVersion} · ${buildNumber}`} />
-            <SettingsRow label="Privacy Policy" value="catduel.app" onPress={() => openUrl('https://catduel.app/privacy')} />
-            <SettingsRow label="Terms" value="catduel.app" onPress={() => openUrl('https://catduel.app/terms')} />
-            <SettingsRow label="Contact" value="support" onPress={() => Linking.openURL('mailto:support@catduel.app')} />
+            <SettingsRow label="Privacy Policy" value="exam-duel.com" onPress={() => openUrl('https://exam-duel.com/privacy')} />
+            <SettingsRow label="Terms" value="exam-duel.com" onPress={() => openUrl('https://exam-duel.com/terms')} />
+            <SettingsRow label="Contact" value="support" onPress={() => Linking.openURL('mailto:support@exam-duel.com')} />
           </Section>
 
           <View style={styles.actions}>
