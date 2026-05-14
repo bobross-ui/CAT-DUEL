@@ -3,6 +3,10 @@ import { PrismaClient } from '../src/generated/prisma/client'
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PROD_SEED !== 'true') {
+    throw new Error('refusing to seed in production (set ALLOW_PROD_SEED=true to override)');
+  }
+
   // Seed test user
   const user = await prisma.user.upsert({
     where: { email: 'test@catduel.com' },
