@@ -30,7 +30,6 @@ import DuelScreen from '../screens/DuelScreen';
 import DuelResultsScreen from '../screens/DuelResultsScreen';
 import MatchHistoryScreen from '../screens/MatchHistoryScreen';
 import MatchDetailScreen from '../screens/MatchDetailScreen';
-import DebugScreen from '../screens/DebugScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PublicProfileScreen from '../screens/PublicProfileScreen';
 import TabBar from '../components/TabBar';
@@ -164,7 +163,6 @@ export type RootStackParamList = {
   MatchHistory: undefined;
   MatchDetail: { matchId: string; opponentName?: string | null };
   PublicProfile: { userId: string };
-  Debug: undefined;
   Settings: undefined;
 };
 
@@ -435,7 +433,6 @@ export default function RootNavigator({
           <Stack.Screen name="MatchHistory" component={MatchHistoryScreen} />
           <Stack.Screen name="MatchDetail" component={MatchDetailScreen} />
           <Stack.Screen name="PublicProfile" component={PublicProfileScreen} />
-          <Stack.Screen name="Debug" component={DebugScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </>
       ) : firebaseUser ? (

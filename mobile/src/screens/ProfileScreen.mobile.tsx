@@ -39,7 +39,6 @@ export default function ProfileScreen({ navigation }: Props) {
   const statsQuery = useGamesStats();
   const updateMe = useUpdateMe();
   const [refreshing, setRefreshing] = useState(false);
-  const [debugTaps, setDebugTaps] = useState(0);
 
   const [editVisible, setEditVisible] = useState(false);
   const [editName, setEditName] = useState('');
@@ -146,11 +145,6 @@ export default function ProfileScreen({ navigation }: Props) {
           {/* ── Hero ── */}
           <TouchableOpacity
             activeOpacity={1}
-            onPress={() => {
-              const next = debugTaps + 1;
-              setDebugTaps(next);
-              if (next >= 5) { setDebugTaps(0); navigation.navigate('Debug'); }
-            }}
             accessibilityRole="imagebutton"
             accessibilityLabel="Profile avatar"
           >
