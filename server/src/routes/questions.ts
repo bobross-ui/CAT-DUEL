@@ -125,7 +125,7 @@ async function findPracticeQuestionInCategories(
         text: true,
         options: true,
         passageId: true,
-        passage: { select: { id: true, text: true } },
+        passage: { select: { id: true, text: true, images: true } },
         // correctAnswer and explanation are intentionally excluded
       },
       orderBy: { createdAt: 'asc' },
@@ -147,7 +147,7 @@ async function findPracticeQuestionInCategories(
         text: true,
         options: true,
         passageId: true,
-        passage: { select: { id: true, text: true } },
+        passage: { select: { id: true, text: true, images: true } },
         // correctAnswer and explanation are intentionally excluded
       },
       orderBy: { createdAt: 'asc' },
@@ -206,6 +206,7 @@ router.post('/:id/answer', practiceAnswerRateLimit, validate(answerSchema), asyn
         correctAnswer: question.correctAnswer,
         correctAnswerText: question.correctAnswerText,
         explanation: question.explanation,
+        explanationImages: question.explanationImages,
         timeTakenMs,
       },
   });

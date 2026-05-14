@@ -52,6 +52,7 @@ interface ResultsAnswerDetail {
     correctAnswer: number | null;
     correctAnswerText: string | null;
     explanation: string;
+    explanationImages: string[];
   };
 }
 
@@ -70,6 +71,7 @@ export interface GamePlayerProfile {
 interface ClientPassage {
   id: string;
   text: string;
+  images: string[];
 }
 
 interface ClientQuestion {
@@ -148,6 +150,7 @@ async function buildResultsAnswers(state: GameState): Promise<ResultsAnswerDetai
       correctAnswer: true,
       correctAnswerText: true,
       explanation: true,
+      explanationImages: true,
     },
   });
   const questionById = new Map(questions.map((question) => [question.id, question]));
@@ -621,7 +624,7 @@ async function selectQuestionsForMatch(
       correctAnswer: true,
       correctAnswerText: true,
       passageId: true,
-      passage: { select: { id: true, text: true } },
+      passage: { select: { id: true, text: true, images: true } },
     },
   });
 

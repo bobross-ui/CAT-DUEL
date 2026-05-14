@@ -75,6 +75,7 @@ model Passage {
   id         String         @id @default(uuid())
   externalId String?        @map("external_id")
   text       String
+  images     String[]       @default([])
   source     QuestionSource @default(MANUAL)
   sourcePdf  String?        @map("source_pdf")
   isVerified Boolean        @default(false) @map("is_verified")
@@ -99,6 +100,7 @@ model Question {
   correctAnswer          Int?             @map("correct_answer")
   correctAnswerText      String?          @map("correct_answer_text")
   explanation            String
+  explanationImages      String[]         @default([]) @map("explanation_images")
   source                 QuestionSource   @default(MANUAL)
   sourcePdf              String?          @map("source_pdf")
   externalQuestionNumber Int?             @map("external_question_number")

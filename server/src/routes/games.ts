@@ -244,6 +244,8 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
                 correctAnswer: true,
                 correctAnswerText: true,
                 explanation: true,
+                explanationImages: true,
+                passage: { select: { id: true, text: true, images: true } },
               },
             },
           },

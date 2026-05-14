@@ -2,6 +2,7 @@ import { Sentry, setupExpressErrorHandler } from './lib/sentry';
 import { createServer } from 'http';
 import { randomUUID } from 'crypto';
 import type { Socket as NetSocket } from 'net';
+import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -74,6 +75,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'none'"],
+      imgSrc: ["'self'"],
       frameAncestors: ["'none'"],
     },
   },
@@ -89,6 +91,10 @@ app.use(pinoHttp({
 app.use((req, _res, next) => {
   requestContext.run({ requestId: String(req.id), log: req.log }, next);
 });
+app.use('/images', (_req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(path.join(__dirname, '..', 'public', 'images')));
 app.use(unauthenticatedGlobalRateLimit);
 app.use(express.json({ limit: '32kb' }));
 

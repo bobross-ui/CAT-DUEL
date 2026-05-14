@@ -4,6 +4,7 @@ import { prisma } from '../models/prisma';
 const importRowSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(10),
+  images: z.array(z.string()).default([]),
   source_pdf: z.string().min(1),
 });
 
@@ -56,6 +57,7 @@ export async function importPassagesFromJsonl(content: string): Promise<PassageI
       data: {
         externalId: row.id,
         text: row.text,
+        images: row.images,
         sourcePdf: row.source_pdf,
         source: 'EXTRACTED',
       },

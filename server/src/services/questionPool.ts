@@ -21,7 +21,7 @@ export interface CachedQuestion {
   correctAnswer: number | null;
   correctAnswerText: string | null;
   passageId: string | null;
-  passage: { id: string; text: string } | null;
+  passage: { id: string; text: string; images: string[] } | null;
 }
 
 interface QuestionPoolEntry {
@@ -136,7 +136,7 @@ export async function getQuestionsContent(
         correctAnswer: true,
         correctAnswerText: true,
         passageId: true,
-        passage: { select: { id: true, text: true } },
+        passage: { select: { id: true, text: true, images: true } },
       },
     });
 
