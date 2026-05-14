@@ -50,3 +50,7 @@ PRACTICE_SESSION_PLAN.md
 # ── Claude Code ───────────────────────────────────────────────────────────────
 .claude/
 CLAUDE.md
+
+# ── Question datasets (large, not for repo) ───────────────────────────────────
+dilr/
+cat_2025_slot3_dilr/

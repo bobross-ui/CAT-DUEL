@@ -41,6 +41,7 @@ import { parseAppLink } from './linking';
 export interface ClientPassage {
   id: string;
   text: string;
+  images: string[];
 }
 
 export interface ClientQuestion {
@@ -100,6 +101,7 @@ type AnswerDetail = {
     correctAnswer: number | null;
     correctAnswerText: string | null;
     explanation: string;
+    explanationImages: string[];
   };
 };
 

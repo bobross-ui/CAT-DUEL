@@ -10,7 +10,7 @@ export interface Question {
   text: string;
   options: string[] | null;
   passageId: string | null;
-  passage: { id: string; text: string } | null;
+  passage: { id: string; text: string; images: string[] } | null;
 }
 
 export interface AnswerResult {
@@ -18,6 +18,7 @@ export interface AnswerResult {
   correctAnswer: number | null;
   correctAnswerText: string | null;
   explanation: string;
+  explanationImages: string[];
   timeTakenMs: number;
 }
 

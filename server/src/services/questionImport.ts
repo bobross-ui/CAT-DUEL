@@ -14,7 +14,7 @@ const importRowSchema = z.object({
   options: z.array(z.string().min(1)).length(4).nullable(),
   correct_answer: z.string().min(1),
   sub_topic: z.string().min(1).nullable().optional(),
-  explanation: z.string().min(10),
+  explanation: z.string(),
   explanation_images: z.array(z.string()).default([]),
   source_pdf: z.string().min(1),
   passage_id: z.string().nullable().optional(),

@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps 
 import {
   Alert,
   Animated,
+  Image,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { imageUri } from '../services/imageUri';
 import { useQueryClient } from '@tanstack/react-query';
 import { Socket } from 'socket.io-client';
 import { Feather } from '@expo/vector-icons';
@@ -576,6 +578,14 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
               <MathText preset="question" color={theme.ink2} style={styles.passageText} selectable={false}>
                 {ds.currentQuestion.passage ? ds.currentQuestion.passage.text : ds.currentQuestion.text}
               </MathText>
+              {ds.currentQuestion.passage?.images.map((path) => (
+                <Image
+                  key={path}
+                  source={{ uri: imageUri(path) }}
+                  resizeMode="contain"
+                  style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                />
+              ))}
             </ScrollView>
           </View>
 

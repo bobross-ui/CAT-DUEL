@@ -62,6 +62,8 @@ export interface AnswerDetail {
     correctAnswer: number | null;
     correctAnswerText: string | null;
     explanation: string;
+    explanationImages: string[];
+    passage: { id: string; text: string; images: string[] } | null;
   };
 }
 

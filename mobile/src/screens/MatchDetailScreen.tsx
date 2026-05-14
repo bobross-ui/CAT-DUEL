@@ -1,7 +1,8 @@
 import {
   View, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, Image,
 } from 'react-native';
+import { imageUri } from '../services/imageUri';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import AppText from '../components/Text';
@@ -159,6 +160,14 @@ export default function MatchDetailScreen({ route, navigation }: Props) {
               )}
               <AppText.Mono preset="eyebrow" color={theme.ink3} style={styles.explanationLabel}>Explanation</AppText.Mono>
               <MathText preset="body" color={theme.ink2} style={styles.explanationText}>{a.question.explanation}</MathText>
+              {a.question.explanationImages.map((path) => (
+                <Image
+                  key={path}
+                  source={{ uri: imageUri(path) }}
+                  resizeMode="contain"
+                  style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                />
+              ))}
             </View>
           ))}
         </View>

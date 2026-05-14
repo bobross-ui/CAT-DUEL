@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { imageUri } from '../services/imageUri';
 import DesktopFrame from '../components/web/DesktopFrame';
 import EyebrowLabel from '../components/web/EyebrowLabel';
 import Text from '../components/Text';
@@ -325,6 +327,14 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
               >
                 {question?.passage ? question.passage.text : question?.text}
               </MathText>
+              {question?.passage?.images.map((path) => (
+                <Image
+                  key={path}
+                  source={{ uri: imageUri(path) }}
+                  resizeMode="contain"
+                  style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                />
+              ))}
             </ScrollView>
           </View>
 
@@ -440,6 +450,14 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
                   <MathText preset="body" color={theme.ink2} style={styles.explanationText}>
                     {result.explanation}
                   </MathText>
+                  {result.explanationImages.map((path) => (
+                    <Image
+                      key={path}
+                      source={{ uri: imageUri(path) }}
+                      resizeMode="contain"
+                      style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                    />
+                  ))}
                 </View>
               )}
             </ScrollView>

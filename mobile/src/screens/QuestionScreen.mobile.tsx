@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, Image,
 } from 'react-native';
+import { imageUri } from '../services/imageUri';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import { questionService, Question, AnswerResult } from '../services/questions';
@@ -222,6 +223,14 @@ export default function QuestionScreen({ navigation, route }: Props) {
             <MathText preset="body" color={theme.ink2} style={styles.passageBodyText}>
               {question.passage.text}
             </MathText>
+            {question.passage.images.map((path) => (
+              <Image
+                key={path}
+                source={{ uri: imageUri(path) }}
+                resizeMode="contain"
+                style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+              />
+            ))}
           </View>
         )}
 
@@ -294,6 +303,14 @@ export default function QuestionScreen({ navigation, route }: Props) {
             <MathText preset="body" color={theme.ink2} style={styles.explanationText}>
               {result.explanation}
             </MathText>
+            {result.explanationImages.map((path) => (
+              <Image
+                key={path}
+                source={{ uri: imageUri(path) }}
+                resizeMode="contain"
+                style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+              />
+            ))}
           </View>
         )}
       </ScrollView>

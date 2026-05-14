@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ComponentProps } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { imageUri } from '../services/imageUri';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
@@ -40,6 +41,7 @@ interface AnswerDetail {
     correctAnswer: number | null;
     correctAnswerText: string | null;
     explanation: string;
+    explanationImages: string[];
   };
 }
 
@@ -355,6 +357,14 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
                           <MathText preset="body" color={theme.ink2}>
                             {row.question.explanation}
                           </MathText>
+                          {row.question.explanationImages.map((path) => (
+                            <Image
+                              key={path}
+                              source={{ uri: imageUri(path) }}
+                              resizeMode="contain"
+                              style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                            />
+                          ))}
                         </View>
                       </View>
                     ) : null}

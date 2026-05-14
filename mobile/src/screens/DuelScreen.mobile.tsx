@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Pressable, StyleSheet,
-  ScrollView, Alert, BackHandler, Animated, Platform,
+  ScrollView, Alert, BackHandler, Animated, Platform, Image,
 } from 'react-native';
+import { imageUri } from '../services/imageUri';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
@@ -431,6 +432,14 @@ export default function DuelScreen({ route, navigation }: Props) {
               <MathText preset="body" color={theme.ink2} style={styles.passageBodyText}>
                 {ds.currentQuestion.passage.text}
               </MathText>
+              {ds.currentQuestion.passage.images.map((path) => (
+                <Image
+                  key={path}
+                  source={{ uri: imageUri(path) }}
+                  resizeMode="contain"
+                  style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                />
+              ))}
             </View>
           )}
 

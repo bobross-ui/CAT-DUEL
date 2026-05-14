@@ -6,7 +6,9 @@ import {
   Pressable,
   Animated,
   Easing,
+  Image,
 } from 'react-native';
+import { imageUri } from '../services/imageUri';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -43,6 +45,7 @@ interface AnswerDetail {
     correctAnswer: number | null;
     correctAnswerText: string | null;
     explanation: string;
+    explanationImages: string[];
   };
 }
 
@@ -368,6 +371,14 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
                       <MathText preset="body" color={theme.ink2}>
                         {q.question.explanation}
                       </MathText>
+                      {q.question.explanationImages.map((path) => (
+                        <Image
+                          key={path}
+                          source={{ uri: imageUri(path) }}
+                          resizeMode="contain"
+                          style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                        />
+                      ))}
                     </View>
                   )}
                 </Pressable>
