@@ -136,7 +136,6 @@ function PlayerCard({
   elo,
   matches,
   winRate,
-  streak,
   variant,
   found,
 }: {
@@ -145,7 +144,6 @@ function PlayerCard({
   elo: number | null | undefined;
   matches?: number;
   winRate?: number;
-  streak?: number;
   variant: 'you' | 'opponent';
   found?: boolean;
 }) {
@@ -182,7 +180,6 @@ function PlayerCard({
       <View style={[styles.statRow, { borderTopColor: theme.line }]}>
         <SmallStat label="matches" value={matches != null ? String(matches) : '--'} />
         <SmallStat label="win" value={winPct} />
-        <SmallStat label="streak" value={streak != null ? String(streak) : '--'} />
       </View>
     </View>
   );
@@ -516,7 +513,6 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
           elo={user?.eloRating}
           matches={user?.gamesPlayed}
           winRate={user?.winRate}
-          streak={user?.currentStreak}
           variant="you"
         />
 
@@ -557,6 +553,8 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
             label="opponent"
             name={opponent.displayName}
             elo={opponent.eloRating}
+            matches={opponent.gamesPlayed}
+            winRate={opponent.winRate}
             variant="opponent"
             found
           />

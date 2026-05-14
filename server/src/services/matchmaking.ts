@@ -25,12 +25,16 @@ function publicProfile(user: {
   displayName: string | null;
   avatarUrl: string | null;
   eloRating: number;
+  gamesPlayed: number;
+  winRate: number;
 }): GamePlayerProfile {
   return {
     userId: user.id,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
     eloRating: user.eloRating,
+    gamesPlayed: user.gamesPlayed,
+    winRate: user.winRate,
   };
 }
 
@@ -52,11 +56,11 @@ export async function createMatch(
   const [p1User, p2User] = await Promise.all([
     prisma.user.findUnique({
       where: { id: player1.userId },
-      select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true },
+      select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true, winRate: true },
     }),
     prisma.user.findUnique({
       where: { id: player2.userId },
-      select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true },
+      select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true, winRate: true },
     }),
   ]);
 

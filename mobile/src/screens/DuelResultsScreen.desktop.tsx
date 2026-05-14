@@ -393,7 +393,7 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
                         <View style={[styles.barFill, { width: `${yourPct * 100}%`, backgroundColor: theme.accent }]} />
                         <View style={[
                           styles.opponentMarker,
-                          { left: `${theirPct * 100}%`, backgroundColor: theme.ink3 },
+                          { left: `${theirPct * 100}%`, backgroundColor: theme.coral },
                         ]} />
                       </View>
                     </View>

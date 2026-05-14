@@ -159,7 +159,7 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
           gameId, opponent, ratingImpact,
         }: {
           gameId: string;
-          opponent: { userId: string; displayName: string | null; avatarUrl: string | null; eloRating: number };
+          opponent: { userId: string; displayName: string | null; avatarUrl: string | null; eloRating: number; gamesPlayed?: number; winRate?: number };
           ratingImpact?: { win: number; loss: number; draw?: number };
         }) => {
           if (!mounted) return;

@@ -66,6 +66,8 @@ export interface GamePlayerProfile {
   displayName: string | null;
   avatarUrl: string | null;
   eloRating: number;
+  gamesPlayed: number;
+  winRate: number;
 }
 
 interface ClientPassage {

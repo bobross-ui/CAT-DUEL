@@ -69,6 +69,8 @@ export type OpponentInfo = {
   displayName: string | null;
   avatarUrl: string | null;
   eloRating: number;
+  gamesPlayed?: number;
+  winRate?: number;
 };
 
 type PlayerResult = {
