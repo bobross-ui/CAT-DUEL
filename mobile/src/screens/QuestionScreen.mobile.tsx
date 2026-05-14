@@ -3,6 +3,7 @@ import {
   View, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Image,
 } from 'react-native';
+import AutoImage from '../components/AutoImage';
 import { imageUri } from '../services/imageUri';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
@@ -224,11 +225,10 @@ export default function QuestionScreen({ navigation, route }: Props) {
               {question.passage.text}
             </MathText>
             {question.passage.images.map((path) => (
-              <Image
+              <AutoImage
                 key={path}
-                source={{ uri: imageUri(path) }}
-                resizeMode="contain"
-                style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                uri={imageUri(path)}
+                style={{ marginTop: 12, borderRadius: 8 }}
               />
             ))}
           </View>
@@ -304,11 +304,10 @@ export default function QuestionScreen({ navigation, route }: Props) {
               {result.explanation}
             </MathText>
             {result.explanationImages.map((path) => (
-              <Image
+              <AutoImage
                 key={path}
-                source={{ uri: imageUri(path) }}
-                resizeMode="contain"
-                style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                uri={imageUri(path)}
+                style={{ marginTop: 12, borderRadius: 8 }}
               />
             ))}
           </View>

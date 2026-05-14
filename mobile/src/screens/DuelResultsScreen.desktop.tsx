@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type ComponentProps } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { imageUri } from '../services/imageUri';
+import AutoImage from '../components/AutoImage';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
@@ -358,11 +359,10 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
                             {row.question.explanation}
                           </MathText>
                           {row.question.explanationImages.map((path) => (
-                            <Image
+                            <AutoImage
                               key={path}
-                              source={{ uri: imageUri(path) }}
-                              resizeMode="contain"
-                              style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                              uri={imageUri(path)}
+                              style={{ marginTop: 12, borderRadius: 8 }}
                             />
                           ))}
                         </View>

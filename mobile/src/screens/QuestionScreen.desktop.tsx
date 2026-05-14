@@ -8,6 +8,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import AutoImage from '../components/AutoImage';
 import { imageUri } from '../services/imageUri';
 import DesktopFrame from '../components/web/DesktopFrame';
 import EyebrowLabel from '../components/web/EyebrowLabel';
@@ -328,11 +329,10 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
                 {question?.passage ? question.passage.text : question?.text}
               </MathText>
               {question?.passage?.images.map((path) => (
-                <Image
+                <AutoImage
                   key={path}
-                  source={{ uri: imageUri(path) }}
-                  resizeMode="contain"
-                  style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                  uri={imageUri(path)}
+                  style={{ marginTop: 12, borderRadius: 8 }}
                 />
               ))}
             </ScrollView>
@@ -451,11 +451,10 @@ export default function QuestionScreenDesktop({ navigation, route }: Props) {
                     {result.explanation}
                   </MathText>
                   {result.explanationImages.map((path) => (
-                    <Image
+                    <AutoImage
                       key={path}
-                      source={{ uri: imageUri(path) }}
-                      resizeMode="contain"
-                      style={{ width: '100%', height: 220, marginTop: 12, borderRadius: 8 }}
+                      uri={imageUri(path)}
+                      style={{ marginTop: 12, borderRadius: 8 }}
                     />
                   ))}
                 </View>
