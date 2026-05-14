@@ -187,6 +187,7 @@ async function buildResultsAnswers(state: GameState): Promise<ResultsAnswerDetai
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const QUESTION_COUNT = 20;
+const QUESTION_POOL_SAMPLE_PER_CATEGORY = 40;
 const GAME_DURATION_SECONDS = env.GAME_DURATION_SECONDS;
 const COUNTDOWN_SECONDS = 3;
 const PRESTART_TIMEOUT_MS = 10_000;
@@ -569,7 +570,7 @@ async function selectQuestionsForMatch(
   // Pool path: get IDs from Redis sorted sets, fetch content from cache
   const candidates: { id: string; category: string }[] = [];
   for (const cat of SECTION_ORDER) {
-    const ids = await getPoolIds(cat, minDiff, maxDiff);
+    const ids = await getPoolIds(cat, minDiff, maxDiff, QUESTION_POOL_SAMPLE_PER_CATEGORY);
     for (const id of ids) candidates.push({ id, category: cat });
   }
 

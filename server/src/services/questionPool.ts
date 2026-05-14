@@ -98,8 +98,22 @@ export async function getPoolIds(
   category: string,
   minDiff: number,
   maxDiff: number,
+  limit?: number,
 ): Promise<string[]> {
-  return redis.zrangebyscore(poolKey(category), minDiff, maxDiff);
+  if (limit === undefined) {
+    return redis.zrangebyscore(poolKey(category), minDiff, maxDiff);
+  }
+
+  if (limit <= 0) return [];
+
+  const key = poolKey(category);
+  const count = await redis.zcount(key, minDiff, maxDiff);
+  if (count <= limit) {
+    return redis.zrangebyscore(key, minDiff, maxDiff);
+  }
+
+  const offset = Math.floor(Math.random() * (count - limit + 1));
+  return redis.zrangebyscore(key, minDiff, maxDiff, 'LIMIT', offset, limit);
 }
 
 export async function getQuestionsContent(

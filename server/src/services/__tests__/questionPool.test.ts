@@ -3,6 +3,7 @@ jest.mock('../../config/redis', () => ({
     del: jest.fn(),
     mget: jest.fn(),
     pipeline: jest.fn(),
+    zcount: jest.fn(),
     zrangebyscore: jest.fn(),
   },
 }));
@@ -24,6 +25,7 @@ jest.mock('../../lib/logger', () => ({
 import { redis } from '../../config/redis';
 import { prisma } from '../../models/prisma';
 import {
+  getPoolIds,
   getQuestionsContent,
   removeQuestionFromPool,
   syncQuestionPoolEntry,
@@ -46,6 +48,8 @@ const mockedRedis = redis as unknown as {
   del: jest.Mock;
   mget: jest.Mock;
   pipeline: jest.Mock;
+  zcount: jest.Mock;
+  zrangebyscore: jest.Mock;
 };
 const findMany = prisma.question.findMany as jest.Mock;
 
@@ -55,6 +59,8 @@ describe('questionPool', () => {
     mockedRedis.del.mockResolvedValue(1);
     mockedRedis.mget.mockResolvedValue([]);
     mockedRedis.pipeline.mockReturnValue(createPipeline());
+    mockedRedis.zcount.mockResolvedValue(0);
+    mockedRedis.zrangebyscore.mockResolvedValue([]);
     findMany.mockResolvedValue([]);
   });
 
@@ -141,6 +147,49 @@ describe('questionPool', () => {
       expect(pipeline.del).toHaveBeenCalledWith('qcontent:question-1');
       expect(pipeline.zrem).toHaveBeenCalledWith('qpool:QUANT', 'question-1');
       expect(pipeline.exec).toHaveBeenCalled();
+    });
+  });
+
+  describe('getPoolIds', () => {
+    it('keeps the existing unbounded range query when no limit is provided', async () => {
+      mockedRedis.zrangebyscore.mockResolvedValueOnce(['question-1']);
+
+      const ids = await getPoolIds('QUANT', 2, 3);
+
+      expect(ids).toEqual(['question-1']);
+      expect(mockedRedis.zcount).not.toHaveBeenCalled();
+      expect(mockedRedis.zrangebyscore).toHaveBeenCalledWith('qpool:QUANT', 2, 3);
+    });
+
+    it('returns all matching IDs when the pool fits within the requested limit', async () => {
+      mockedRedis.zcount.mockResolvedValueOnce(2);
+      mockedRedis.zrangebyscore.mockResolvedValueOnce(['question-1', 'question-2']);
+
+      const ids = await getPoolIds('VARC', 2, 3, 40);
+
+      expect(ids).toEqual(['question-1', 'question-2']);
+      expect(mockedRedis.zcount).toHaveBeenCalledWith('qpool:VARC', 2, 3);
+      expect(mockedRedis.zrangebyscore).toHaveBeenCalledWith('qpool:VARC', 2, 3);
+    });
+
+    it('samples a bounded range when the pool is larger than the requested limit', async () => {
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
+      mockedRedis.zcount.mockResolvedValueOnce(100);
+      mockedRedis.zrangebyscore.mockResolvedValueOnce(['question-30']);
+
+      const ids = await getPoolIds('DILR', 2, 3, 40);
+
+      expect(ids).toEqual(['question-30']);
+      expect(mockedRedis.zcount).toHaveBeenCalledWith('qpool:DILR', 2, 3);
+      expect(mockedRedis.zrangebyscore).toHaveBeenCalledWith(
+        'qpool:DILR',
+        2,
+        3,
+        'LIMIT',
+        30,
+        40,
+      );
+      randomSpy.mockRestore();
     });
   });
 
