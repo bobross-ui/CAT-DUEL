@@ -18,6 +18,7 @@ export async function socketAuthMiddleware(
     const accepted = await registerSocketConnection(user.id, socket);
     if (!accepted) return next(new Error('TOO_MANY_CONNECTIONS'));
     socket.data.user = user;
+    socket.data.emailVerified = decoded.email_verified === true;
     next();
   } catch {
     next(new Error('INVALID_TOKEN'));

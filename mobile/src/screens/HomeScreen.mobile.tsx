@@ -10,6 +10,7 @@ import { MainTabParamList, RootStackParamList } from '../navigation';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import EmailVerificationBanner from '../components/EmailVerificationBanner';
 import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import AppText from '../components/Text';
 import ScreenTransitionView from '../components/ScreenTransitionView';
@@ -130,6 +131,8 @@ export default function HomeScreen({ navigation }: Props) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
         }
       >
+        <EmailVerificationBanner />
+
         {/* ── Header ── */}
         <View style={styles.header}>
         <View style={styles.headerLeft}>

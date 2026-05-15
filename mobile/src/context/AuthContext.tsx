@@ -4,6 +4,8 @@ import {
   createUserWithEmailAndPassword,
   getRedirectResult,
   onAuthStateChanged,
+  reload,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signInWithCredential,
   signInWithPopup,
@@ -32,6 +34,8 @@ interface AuthContextValue {
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  resendEmailVerification: () => Promise<void>;
+  reloadUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -48,6 +52,7 @@ interface PendingBootstrap {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [, setUserVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const authStateSeq = useRef(0);
   const pendingBootstrap = useRef<PendingBootstrap | null>(null);
@@ -121,7 +126,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error;
     });
     await updateProfile(newUser, { displayName });
+    await sendEmailVerification(newUser).catch((error) => {
+      console.warn('Failed to send verification email', error);
+    });
     await bootstrapPromise;
+  };
+
+  const resendEmailVerification = async () => {
+    if (!auth.currentUser) throw new Error('Not signed in');
+    await sendEmailVerification(auth.currentUser);
+  };
+
+  const reloadUser = async () => {
+    if (!auth.currentUser) return;
+    await reload(auth.currentUser);
+    await auth.currentUser.getIdToken(true);
+    setUserVersion((v) => v + 1);
   };
 
   const signInWithGoogle = async () => {
@@ -146,7 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, bootstrapUser, registerWithEmail, signInWithEmail, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, bootstrapUser, registerWithEmail, signInWithEmail, signInWithGoogle, signOut, resendEmailVerification, reloadUser }}>
       {children}
     </AuthContext.Provider>
   );

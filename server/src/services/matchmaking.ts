@@ -128,6 +128,12 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
     socket.on('queue:join', withSentry(async () => {
       if (!(await enforceSocketEventLimit(socket, 'queue:join', user.id))) return;
 
+      if (!socket.data.emailVerified) {
+        socket.emit('queue:error', { message: 'Verify your email to play ranked duels. Check your inbox (and spam folder) for the verification link.' });
+        socket.disconnect(true);
+        return;
+      }
+
       const alreadyInQueue = await redis.zscore(QUEUE_KEY, user.id);
       if (alreadyInQueue) return;
 

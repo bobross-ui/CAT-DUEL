@@ -7,6 +7,7 @@ import EyebrowLabel from '../components/web/EyebrowLabel';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import EmailVerificationBanner from '../components/EmailVerificationBanner';
 import { SkeletonBlock, SkeletonCard } from '../components/Skeleton';
 import Text from '../components/Text';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
@@ -224,6 +225,7 @@ export default function HomeScreenDesktop({ navigation }: Props) {
   return (
     <DesktopFrame activeRoute="Home" rightRail={rightRail}>
       <PageContainer style={styles.page}>
+        <EmailVerificationBanner />
         <View style={styles.headerRow}>
           <View style={styles.headerCopy}>
             <View style={styles.greetingLine}>
