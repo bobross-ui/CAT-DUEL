@@ -35,22 +35,23 @@ function RippleRing({
       return;
     }
 
-    let loop: Animated.CompositeAnimation | null = null;
-    const timer = setTimeout(() => {
-      loop = Animated.loop(
-        Animated.timing(anim, {
-          toValue: 1,
-          duration: 2400,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.ease),
-        }),
-      );
-      loop.start();
-    }, delay);
+    let current: Animated.CompositeAnimation | null = null;
+    const runOnce = () => {
+      anim.setValue(0);
+      current = Animated.timing(anim, {
+        toValue: 1,
+        duration: 2400,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.ease),
+      });
+      current.start(({ finished }) => {
+        if (finished) runOnce();
+      });
+    };
+    const timer = setTimeout(runOnce, delay);
     return () => {
       clearTimeout(timer);
-      loop?.stop();
-      anim.stopAnimation(() => anim.setValue(0));
+      current?.stop();
     };
   }, [animate, anim, delay]);
 
