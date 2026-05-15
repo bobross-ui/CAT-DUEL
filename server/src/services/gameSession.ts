@@ -1426,6 +1426,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
         socket.emit('game:sync', {
           yourScore: isPlayer1User ? state.player1Score : state.player2Score,
           opponentScore: isPlayer1User ? state.player2Score : state.player1Score,
+          opponent: isPlayer1User ? state.player2Profile : state.player1Profile,
           timeRemaining: Math.max(0, state.durationSeconds - elapsed),
           currentQuestion: currentQuestion ? withPassage(currentQuestion, state.passages) : null,
           questionNumber: Math.min(playerProgress + 1, state.questionIds.length),

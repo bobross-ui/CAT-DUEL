@@ -27,7 +27,7 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning';
-import type { ClientQuestion, GameFinishedPayload } from '../navigation';
+import type { ClientQuestion, GameFinishedPayload, OpponentInfo } from '../navigation';
 import { getTier } from '../constants';
 import { getGameSocket, releaseGameSocket } from '../services/socket';
 import { track } from '../services/analytics';
@@ -105,7 +105,7 @@ function BlinkingDot({ color, animate }: { color: string; animate: boolean }) {
 
 export default function DuelScreenDesktop({ route, navigation }: Props) {
   const { gameId } = route.params;
-  const opponent = route.params.opponent!;
+  const initialOpponent = route.params.opponent!;
   const initialState = route.params.initialState!;
   const { user: authUser } = useAuth();
   const { user: profile } = useCurrentProfile();
@@ -122,6 +122,8 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   });
   const [opponentDisconnectNotice, setOpponentDisconnectNotice] = useState<string | null>(null);
   const [duelActive, setDuelActive] = useState(true);
+  const [opponent, setOpponent] = useState<OpponentInfo>(initialOpponent);
+  const opponentRef = useRef(initialOpponent);
   const socketRef = useRef<Socket | null>(null);
   const questionStartTime = useRef(Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -156,6 +158,11 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
       Animated.timing(anim, { toValue: 1, duration: 90, useNativeDriver: true }),
     ]).start();
   }, [reduceMotionEnabled]);
+
+  const applyOpponent = useCallback((nextOpponent: OpponentInfo) => {
+    opponentRef.current = nextOpponent;
+    setOpponent(nextOpponent);
+  }, []);
 
   const handleQuit = useCallback(() => {
     const doQuit = () => socketRef.current?.emit('game:forfeit', { gameId });
@@ -331,6 +338,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
       socket.on('game:sync', ({
         yourScore,
         opponentScore,
+        opponent: syncedOpponent,
         timeRemaining,
         currentQuestion,
         questionNumber,
@@ -339,6 +347,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
       }: {
         yourScore: number;
         opponentScore: number;
+        opponent?: OpponentInfo;
         timeRemaining: number;
         currentQuestion: ClientQuestion | undefined;
         questionNumber: number;
@@ -346,6 +355,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
         opponentProgress: OpponentProgress | null;
       }) => {
         if (!mounted || !currentQuestion) return;
+        if (syncedOpponent) applyOpponent(syncedOpponent);
         questionStartTime.current = Date.now();
         questionOpacity.setValue(1);
         setDs(prev => ({
@@ -387,7 +397,12 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.games.all() });
         void queryClient.invalidateQueries({ queryKey: queryKeys.leaderboard.all() });
         socket.disconnect();
-        navigation.replace('DuelResults', { gameId, results, userId: results.currentUserId, opponent });
+        navigation.replace('DuelResults', {
+          gameId,
+          results,
+          userId: results.currentUserId,
+          opponent: opponentRef.current,
+        });
       });
 
       socket.on('game:error', ({ message }: { message: string }) => {
@@ -407,8 +422,8 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
     };
   }, [
     gameId,
+    applyOpponent,
     navigation,
-    opponent,
     playHaptic,
     pulseScore,
     queryClient,

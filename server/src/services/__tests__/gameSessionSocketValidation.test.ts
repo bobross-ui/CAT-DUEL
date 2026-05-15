@@ -67,6 +67,8 @@ function activeGameState(overrides: Record<string, unknown> = {}) {
     status: 'ACTIVE',
     player1Id: 'user-1',
     player2Id: 'user-2',
+    player1IsBot: false,
+    player2IsBot: false,
     player1Profile: { userId: 'user-1', displayName: null, avatarUrl: null, eloRating: 1200, gamesPlayed: 0, winRate: 0 },
     player2Profile: { userId: 'user-2', displayName: null, avatarUrl: null, eloRating: 1200, gamesPlayed: 0, winRate: 0 },
     player1RatingImpact: { win: 10, loss: -10 },
@@ -173,6 +175,29 @@ describe('game socket payload validation', () => {
       code: 'VALIDATION_ERROR',
     }));
     expect(redis.type).not.toHaveBeenCalled();
+  });
+
+  it('includes the opponent profile when syncing an active game', async () => {
+    const botProfile = {
+      userId: 'user-2',
+      displayName: 'Atharv Khurana',
+      avatarUrl: null,
+      eloRating: 1210,
+      gamesPlayed: 30,
+      winRate: 0.53,
+    };
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState({
+      player2IsBot: true,
+      player2Profile: botProfile,
+    })));
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('game:join')?.({ gameId });
+
+    expect(socket.emit).toHaveBeenCalledWith('game:sync', expect.objectContaining({
+      opponent: botProfile,
+    }));
   });
 
   it('rejects answers that pass transport schema but do not match the server-side question type', async () => {

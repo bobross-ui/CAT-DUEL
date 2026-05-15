@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Pressable, StyleSheet,
   ScrollView, Alert, BackHandler, Animated, Platform, Image,
@@ -8,7 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
 import { Socket } from 'socket.io-client';
-import { RootStackParamList, GameFinishedPayload, ClientQuestion as NavClientQuestion } from '../navigation';
+import {
+  RootStackParamList,
+  GameFinishedPayload,
+  ClientQuestion as NavClientQuestion,
+  OpponentInfo,
+} from '../navigation';
 import { getGameSocket, releaseGameSocket } from '../services/socket';
 import { useAuth } from '../context/AuthContext';
 import AppText from '../components/Text';
@@ -94,7 +99,7 @@ function BlinkingDot({ color, animate }: { color: string; animate: boolean }) {
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function DuelScreen({ route, navigation }: Props) {
   const { gameId } = route.params;
-  const opponent = route.params.opponent!;
+  const initialOpponent = route.params.opponent!;
   const initialState = route.params.initialState!;
   const { user } = useAuth();
   const { theme } = useTheme();
@@ -110,6 +115,8 @@ export default function DuelScreen({ route, navigation }: Props) {
     questionNumber: initialState.questionNumber,
   });
   const [opponentDisconnectNotice, setOpponentDisconnectNotice] = useState<string | null>(null);
+  const [opponent, setOpponent] = useState<OpponentInfo>(initialOpponent);
+  const opponentRef = useRef(initialOpponent);
   const socketRef         = useRef<Socket | null>(null);
   const questionStartTime = useRef(Date.now());
   const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -128,6 +135,11 @@ export default function DuelScreen({ route, navigation }: Props) {
       Animated.timing(anim, { toValue: 1,    duration: 90, useNativeDriver: true }),
     ]).start();
   }
+
+  const applyOpponent = useCallback((nextOpponent: OpponentInfo) => {
+    opponentRef.current = nextOpponent;
+    setOpponent(nextOpponent);
+  }, []);
 
   useEffect(() => {
     if (matchStartedTrackedRef.current) return;
@@ -218,6 +230,7 @@ export default function DuelScreen({ route, navigation }: Props) {
       socket.on('game:sync', ({
         yourScore,
         opponentScore,
+        opponent: syncedOpponent,
         timeRemaining,
         currentQuestion,
         questionNumber,
@@ -226,6 +239,7 @@ export default function DuelScreen({ route, navigation }: Props) {
       }: {
         yourScore: number;
         opponentScore: number;
+        opponent?: OpponentInfo;
         timeRemaining: number;
         currentQuestion: ClientQuestion | undefined;
         questionNumber: number;
@@ -233,6 +247,7 @@ export default function DuelScreen({ route, navigation }: Props) {
         opponentProgress: OpponentProgress | null;
       }) => {
         if (!mounted || !currentQuestion) return;
+        if (syncedOpponent) applyOpponent(syncedOpponent);
         questionStartTime.current = Date.now();
         questionOpacity.setValue(1);
         setDs(prev => ({
@@ -270,7 +285,12 @@ export default function DuelScreen({ route, navigation }: Props) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.games.all() });
         void queryClient.invalidateQueries({ queryKey: queryKeys.leaderboard.all() });
         socket.disconnect();
-        navigation.replace('DuelResults', { gameId, results, userId: results.currentUserId, opponent });
+        navigation.replace('DuelResults', {
+          gameId,
+          results,
+          userId: results.currentUserId,
+          opponent: opponentRef.current,
+        });
       });
 
       socket.on('game:error', ({ message }: { message: string }) => {
@@ -287,7 +307,7 @@ export default function DuelScreen({ route, navigation }: Props) {
       socketRef.current = null;
       releaseGameSocket();
     };
-  }, [gameId, navigation, opponent, playHaptic, queryClient, questionOpacity, reduceMotionEnabled]);
+  }, [applyOpponent, gameId, navigation, playHaptic, queryClient, questionOpacity, reduceMotionEnabled]);
 
   useEffect(() => {
     if (ds.timeRemaining > 60 || timerWarningSentRef.current) return;
