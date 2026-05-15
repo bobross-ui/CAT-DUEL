@@ -1542,6 +1542,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
 
     socket.on('disconnect', withSentry(async () => {
       const currentSocketId = await redis.get(socketKey(user.id));
+      const isStaleSocket = currentSocketId !== null && currentSocketId !== socket.id;
       if (currentSocketId === socket.id) {
         await redis.del(socketKey(user.id));
       }
@@ -1568,6 +1569,10 @@ export function registerGameHandlers(gameNs: Namespace): void {
 
       const state = await getGameState(gameId);
       if (!state || state.status !== 'ACTIVE') return;
+
+      // User already reconnected on a newer socket — this is the old socket's
+      // late-arriving disconnect. Don't start a forfeit timer.
+      if (isStaleSocket) return;
 
       if (forfeitTimers.has(user.id)) return;
 
