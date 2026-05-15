@@ -267,7 +267,7 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
   const requeueingRef = useRef(false);
   const trackedRatingPreviewRef = useRef(false);
 
-  const range = elapsed >= 30 ? 300 : 150;
+  const range = elapsed >= 10 ? 300 : 150;
   const eloLow = user ? Math.max(0, user.eloRating - range) : null;
   const eloHigh = user ? user.eloRating + range : null;
 

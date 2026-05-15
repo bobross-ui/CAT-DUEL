@@ -152,7 +152,7 @@ describe('runMatchmaking', () => {
     mockRedis.zrevrangebyscore.mockResolvedValueOnce(['p1', '1000']);
     mockRedis.zscore.mockResolvedValueOnce('1000');
     mockRedis.get.mockImplementation(async (key: string) => (
-      key === 'queue_joined:p1' ? String(NOW - 31_000) : null
+      key === 'queue_joined:p1' ? String(NOW - 11_000) : null
     ));
 
     await runMatchmaking(matchmakingNs as unknown as Namespace, gameNs as unknown as Namespace);
@@ -189,7 +189,7 @@ describe('runMatchmaking', () => {
 
     expect(mockRedis.zadd).toHaveBeenCalledWith(
       'matchmaking_queue_due',
-      NOW + 30_001,
+      NOW + 10_001,
       'p1',
     );
     expect(createMatch).not.toHaveBeenCalled();
@@ -203,7 +203,7 @@ describe('runMatchmaking', () => {
     mockRedis.zrevrangebyscore.mockResolvedValueOnce([]);
     mockRedis.zscore.mockResolvedValueOnce('1000');
     mockRedis.get.mockImplementation(async (key: string) => {
-      if (key === 'queue_joined:p1') return String(NOW - 61_000);
+      if (key === 'queue_joined:p1') return String(NOW - 31_000);
       if (key === 'socket:mm:p1') return 'socket-1';
       return null;
     });
@@ -229,7 +229,7 @@ describe('runMatchmaking', () => {
     mockRedis.zrevrangebyscore.mockResolvedValueOnce([]);
     mockRedis.zscore.mockResolvedValueOnce('1000');
     mockRedis.get.mockImplementation(async (key: string) => (
-      key === 'queue_joined:p1' ? String(NOW - 31_000) : null
+      key === 'queue_joined:p1' ? String(NOW - 11_000) : null
     ));
     mockGetBotForPlayer.mockResolvedValueOnce({ id: 'bot-1', eloRating: 1040 });
 
@@ -258,8 +258,8 @@ describe('runMatchmaking', () => {
       .mockResolvedValueOnce('1000')
       .mockResolvedValueOnce('1200');
     mockRedis.get.mockImplementation(async (key: string) => {
-      if (key === 'queue_joined:p1') return String(NOW - 31_000);
-      if (key === 'queue_joined:p2') return String(NOW - 31_000);
+      if (key === 'queue_joined:p1') return String(NOW - 11_000);
+      if (key === 'queue_joined:p2') return String(NOW - 11_000);
       return null;
     });
     mockGetBotForPlayer
@@ -290,7 +290,7 @@ describe('runMatchmaking', () => {
     mockRedis.zrevrangebyscore.mockResolvedValueOnce([]);
     mockRedis.zscore.mockResolvedValueOnce('1000');
     mockRedis.get.mockImplementation(async (key: string) => (
-      key === 'queue_joined:p1' ? String(NOW - 31_000) : null
+      key === 'queue_joined:p1' ? String(NOW - 11_000) : null
     ));
     mockGetBotForPlayer.mockResolvedValueOnce({ id: 'bot-1', eloRating: 1040 });
     (createMatch as jest.Mock).mockRejectedValueOnce(
@@ -316,7 +316,7 @@ describe('runMatchmaking', () => {
     mockRedis.zrevrangebyscore.mockResolvedValueOnce([]);
     mockRedis.zscore.mockResolvedValueOnce('1000');
     mockRedis.get.mockImplementation(async (key: string) => (
-      key === 'queue_joined:p1' ? String(NOW - 31_000) : null
+      key === 'queue_joined:p1' ? String(NOW - 11_000) : null
     ));
     mockGetBotForPlayer.mockResolvedValueOnce({ id: 'bot-1', eloRating: 1040 });
     (createMatch as jest.Mock).mockRejectedValueOnce(

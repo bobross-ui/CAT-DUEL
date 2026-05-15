@@ -189,7 +189,7 @@ export default function MatchmakingScreen({ navigation, route }: Props) {
     navigation.navigate('MainTabs');
   }
 
-  const range  = elapsed >= 30 ? 300 : 150;
+  const range  = elapsed >= 10 ? 300 : 150;
   const eloLow = profile ? Math.max(0, profile.eloRating - range) : null;
   const eloHigh = profile ? profile.eloRating + range : null;
 

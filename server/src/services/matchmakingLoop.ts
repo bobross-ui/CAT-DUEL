@@ -8,8 +8,8 @@ import { Sentry } from '../lib/sentry';
 
 const INITIAL_RANGE = 150;
 const EXPANDED_RANGE = 300;
-const EXPAND_AFTER_MS = 30_000;
-const TIMEOUT_MS = 60_000;
+const EXPAND_AFTER_MS = 10_000;
+const TIMEOUT_MS = 30_000;
 const CLAIM_TTL_SECONDS = 30;
 const LOOP_INTERVAL_MS = 2_000;
 const DUE_BATCH_SIZE = 100;
