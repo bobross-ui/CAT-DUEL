@@ -8,14 +8,36 @@ const mockRedis = {
   zrevrangebyscore: jest.fn(),
   zscore: jest.fn(),
 };
+const mockGetBotForPlayer = jest.fn();
 
 jest.mock('../../config/redis', () => ({
   redis: mockRedis,
 }));
 
-jest.mock('../matchmaking', () => ({
-  createMatch: jest.fn(),
+jest.mock('../botPlayer', () => ({
+  botBusyKey: (botId: string) => `bot_busy:${botId}`,
+  getBotForPlayer: mockGetBotForPlayer,
 }));
+
+jest.mock('../matchmaking', () => {
+  class CreateMatchError extends Error {
+    phase: 'preflight' | 'post-commit';
+    cause: unknown;
+    gameId?: string;
+
+    constructor(phase: 'preflight' | 'post-commit', cause: unknown, metadata: { gameId?: string } = {}) {
+      super('createMatch failed');
+      this.phase = phase;
+      this.cause = cause;
+      this.gameId = metadata.gameId;
+    }
+  }
+
+  return {
+    createMatch: jest.fn(),
+    CreateMatchError,
+  };
+});
 
 jest.mock('../../lib/logger', () => ({
   logger: {
@@ -29,7 +51,7 @@ jest.mock('../../lib/sentry', () => ({
   },
 }));
 
-import { createMatch } from '../matchmaking';
+import { CreateMatchError, createMatch } from '../matchmaking';
 import { runMatchmaking } from '../matchmakingLoop';
 import type { Namespace } from 'socket.io';
 
@@ -60,6 +82,7 @@ describe('runMatchmaking', () => {
     mockRedis.zrem.mockResolvedValue(1);
     mockRedis.zrevrangebyscore.mockResolvedValue([]);
     mockRedis.zscore.mockResolvedValue(null);
+    mockGetBotForPlayer.mockResolvedValue(null);
     (createMatch as jest.Mock).mockResolvedValue(undefined);
   });
 
@@ -196,5 +219,115 @@ describe('runMatchmaking', () => {
     expect(mockRedis.zrem).toHaveBeenCalledWith('matchmaking_queue_due', 'p1');
     expect(mockRedis.del).toHaveBeenCalledWith('queue_joined:p1', 'socket:mm:p1');
     expect(createMatch).not.toHaveBeenCalled();
+  });
+
+  it('selects a bot after the expanded human search finds no candidate', async () => {
+    const { matchmakingNs, gameNs } = namespaces();
+    mockRedis.zrangebyscore
+      .mockResolvedValueOnce(['p1'])
+      .mockResolvedValueOnce([]);
+    mockRedis.zrevrangebyscore.mockResolvedValueOnce([]);
+    mockRedis.zscore.mockResolvedValueOnce('1000');
+    mockRedis.get.mockImplementation(async (key: string) => (
+      key === 'queue_joined:p1' ? String(NOW - 31_000) : null
+    ));
+    mockGetBotForPlayer.mockResolvedValueOnce({ id: 'bot-1', eloRating: 1040 });
+
+    await runMatchmaking(matchmakingNs as unknown as Namespace, gameNs as unknown as Namespace);
+
+    expect(mockGetBotForPlayer).toHaveBeenCalledWith(1000);
+    expect(createMatch).toHaveBeenCalledWith(
+      matchmakingNs,
+      gameNs,
+      { userId: 'p1', elo: 1000 },
+      { userId: 'bot-1', elo: 1040 },
+    );
+    expect(mockRedis.zadd).not.toHaveBeenCalledWith('matchmaking_queue', 1000, 'p1');
+  });
+
+  it('requeues the human when no bot is available and continues the loop pass', async () => {
+    const { matchmakingNs, gameNs } = namespaces();
+    mockRedis.zrangebyscore
+      .mockResolvedValueOnce(['p1', 'p2'])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    mockRedis.zrevrangebyscore
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    mockRedis.zscore
+      .mockResolvedValueOnce('1000')
+      .mockResolvedValueOnce('1200');
+    mockRedis.get.mockImplementation(async (key: string) => {
+      if (key === 'queue_joined:p1') return String(NOW - 31_000);
+      if (key === 'queue_joined:p2') return String(NOW - 31_000);
+      return null;
+    });
+    mockGetBotForPlayer
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'bot-2', eloRating: 1210 });
+
+    await runMatchmaking(matchmakingNs as unknown as Namespace, gameNs as unknown as Namespace);
+
+    expect(mockRedis.zadd).toHaveBeenCalledWith('matchmaking_queue', 1000, 'p1');
+    expect(mockRedis.zadd).toHaveBeenCalledWith(
+      'matchmaking_queue_due',
+      NOW + 2_000,
+      'p1',
+    );
+    expect(createMatch).toHaveBeenCalledWith(
+      matchmakingNs,
+      gameNs,
+      { userId: 'p2', elo: 1200 },
+      { userId: 'bot-2', elo: 1210 },
+    );
+  });
+
+  it('releases bot_busy and requeues the human after a preflight bot match failure', async () => {
+    const { matchmakingNs, gameNs } = namespaces();
+    mockRedis.zrangebyscore
+      .mockResolvedValueOnce(['p1'])
+      .mockResolvedValueOnce([]);
+    mockRedis.zrevrangebyscore.mockResolvedValueOnce([]);
+    mockRedis.zscore.mockResolvedValueOnce('1000');
+    mockRedis.get.mockImplementation(async (key: string) => (
+      key === 'queue_joined:p1' ? String(NOW - 31_000) : null
+    ));
+    mockGetBotForPlayer.mockResolvedValueOnce({ id: 'bot-1', eloRating: 1040 });
+    (createMatch as jest.Mock).mockRejectedValueOnce(
+      new CreateMatchError('preflight', new Error('missing user')),
+    );
+
+    await runMatchmaking(matchmakingNs as unknown as Namespace, gameNs as unknown as Namespace);
+
+    expect(mockRedis.del).toHaveBeenCalledWith('bot_busy:bot-1');
+    expect(mockRedis.zadd).toHaveBeenCalledWith('matchmaking_queue', 1000, 'p1');
+    expect(mockRedis.zadd).toHaveBeenCalledWith(
+      'matchmaking_queue_due',
+      NOW + 2_000,
+      'p1',
+    );
+  });
+
+  it('does not requeue or release bot_busy after a post-commit bot match failure', async () => {
+    const { matchmakingNs, gameNs } = namespaces();
+    mockRedis.zrangebyscore
+      .mockResolvedValueOnce(['p1'])
+      .mockResolvedValueOnce([]);
+    mockRedis.zrevrangebyscore.mockResolvedValueOnce([]);
+    mockRedis.zscore.mockResolvedValueOnce('1000');
+    mockRedis.get.mockImplementation(async (key: string) => (
+      key === 'queue_joined:p1' ? String(NOW - 31_000) : null
+    ));
+    mockGetBotForPlayer.mockResolvedValueOnce({ id: 'bot-1', eloRating: 1040 });
+    (createMatch as jest.Mock).mockRejectedValueOnce(
+      new CreateMatchError('post-commit', new Error('emit failed'), { gameId: 'game-1' }),
+    );
+
+    await expect(
+      runMatchmaking(matchmakingNs as unknown as Namespace, gameNs as unknown as Namespace),
+    ).rejects.toBeInstanceOf(CreateMatchError);
+
+    expect(mockRedis.del).not.toHaveBeenCalledWith('bot_busy:bot-1');
+    expect(mockRedis.zadd).not.toHaveBeenCalledWith('matchmaking_queue', 1000, 'p1');
   });
 });

@@ -1,6 +1,129 @@
 import { PrismaClient } from '../src/generated/prisma/client'
 
 const prisma = new PrismaClient();
+type RankTier = 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND';
+
+const BOT_GAMES_PLAYED = 30;
+const BOT_NAMES = [
+  'Aarav Khanna',
+  'Aisha Mehra',
+  'Kabir Batra',
+  'Myra Sood',
+  'Vivaan Chopra',
+  'Tara Walia',
+  'Aryan Bahl',
+  'Ira Kapoor',
+  'Devansh Suri',
+  'Kiara Anand',
+  'Reyansh Kohli',
+  'Saanvi Chopra',
+  'Neil Dutta',
+  'Avni Mukherjee',
+  'Yashvi Sethi',
+  'Dhruv Narang',
+  'Shanaya Gill',
+  'Arnav Sinha',
+  'Anvi Chawla',
+  'Raghav Talwar',
+  'Ishita Bajaj',
+  'Vihaan Arora',
+  'Anika Bhasin',
+  'Rudra Mehra',
+  'Kavish Malhotra',
+  'Manya Tandon',
+  'Omkar Kulkarni',
+  'Jia Mathur',
+  'Parth Kapur',
+  'Naina Luthra',
+  'Eshan Bedi',
+  'Sara Juneja',
+  'Advait Kaul',
+  'Navya Sehgal',
+  'Riaan Monga',
+  'Amaira Grover',
+  'Shaurya Bansal',
+  'Isha Taneja',
+  'Atharv Khurana',
+  'Rhea Chhabra',
+  'Vedant Vohra',
+  'Samaira Puri',
+  'Karthik Nanda',
+  'Diya Ahuja',
+  'Armaan Sabharwal',
+  'Mehak Chopra',
+  'Lakshya Bhardwaj',
+  'Nyra Sachdeva',
+  'Harshit Goel',
+  'Siya Makhija',
+  'Sahil Wadhwa',
+  'Aanya Lamba',
+  'Rishabh Madan',
+  'Tia Oberoi',
+  'Abhinav Chugh',
+  'Anvi Saran',
+  'Viraj Bakshi',
+  'Esha Dhingra',
+  'Prisha Walia',
+  'Manav Kohli',
+  'Anshuman Sethi',
+  'Kriti Arora',
+  'Nivaan Tuli',
+  'Ahana Batra',
+  'Ishan Wadhwani',
+  'Sanya Chadha',
+  'Samar Bhasin',
+  'Kashvi Ahuja',
+  'Daksh Bansal',
+  'Misha Mehra',
+  'Hriday Anand',
+  'Vanya Sood',
+  'Ranveer Bedi',
+  'Tanisha Kapur',
+  'Agastya Chawla',
+  'Lavish Juneja',
+  'Riddhi Monga',
+  'Arya Vohra',
+  'Keshav Nanda',
+  'Alia Sehgal',
+  'Mihir Grover',
+  'Raina Talwar',
+  'Reyaansh Goel',
+  'Mishka Puri',
+  'Adhiraj Luthra',
+  'Kanika Tandon',
+  'Naman Dhingra',
+  'Trisha Khurana',
+  'Shaan Makhija',
+  'Elina Sachdeva',
+  'Ritvik Sabharwal',
+  'Kiara Bedi',
+  'Dhairya Chugh',
+  'Meera Bakshi',
+  'Yug Madan',
+  'Vriti Chadha',
+  'Abeer Oberoi',
+  'Kavya Lamba',
+  'Neel Kaul',
+  'Riyaan Tuli',
+];
+
+function getRankTier(elo: number): RankTier {
+  if (elo >= 1900) return 'DIAMOND';
+  if (elo >= 1600) return 'PLATINUM';
+  if (elo >= 1300) return 'GOLD';
+  if (elo >= 1000) return 'SILVER';
+  return 'BRONZE';
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function spacedElos(count: number, min: number, max: number): number[] {
+  return Array.from({ length: count }, (_, index) => (
+    count === 1 ? min : Math.round(min + ((max - min) * index) / (count - 1))
+  ));
+}
 
 async function main() {
   if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PROD_SEED !== 'true') {
@@ -113,6 +236,45 @@ async function main() {
     });
   }
   console.log(`Seeded ${dummyUsers.length} dummy leaderboard users (${dummyUsers.length - 20} new)`);
+
+  const botElos = [
+    ...spacedElos(20, 700, 999),
+    ...spacedElos(30, 1000, 1299),
+    ...spacedElos(30, 1300, 1599),
+    ...spacedElos(15, 1600, 1899),
+    ...spacedElos(5, 1900, 2100),
+  ];
+  const botUsers = BOT_NAMES.map((displayName, index) => {
+    const elo = botElos[index];
+    const winRateTarget = clamp(0.5 + (elo - 1500) / 2500, 0.3, 0.7);
+    const wins = Math.round(BOT_GAMES_PLAYED * winRateTarget);
+    const draws = index % 4 === 0 ? 2 : 1;
+
+    return {
+      firebaseUid: `bot:${String(index + 1).padStart(3, '0')}`,
+      email: null,
+      displayName,
+      isBot: true,
+      eloRating: elo,
+      peakElo: elo,
+      rankTier: getRankTier(elo),
+      gamesPlayed: BOT_GAMES_PLAYED,
+      wins,
+      draws,
+      winRate: wins / BOT_GAMES_PLAYED,
+      currentStreak: 0,
+      longestStreak: 0,
+    };
+  });
+
+  for (const bot of botUsers) {
+    await prisma.user.upsert({
+      where: { firebaseUid: bot.firebaseUid },
+      update: {},
+      create: bot,
+    });
+  }
+  console.log(`Seeded ${botUsers.length} bot users`);
 
   // Seed sample questions
   const questions = [

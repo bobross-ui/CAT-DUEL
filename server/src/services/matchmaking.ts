@@ -3,6 +3,7 @@ import { env } from '../config/env';
 import { redis } from '../config/redis';
 import { prisma } from '../models/prisma';
 import {
+  autojoinBotPlayer,
   initializeGame,
   GamePlayer,
   GamePlayerProfile,
@@ -19,6 +20,24 @@ export type QueuePlayer = GamePlayer;
 
 const QUEUE_KEY = 'matchmaking_queue';
 const QUEUE_DUE_KEY = 'matchmaking_queue_due';
+
+export type CreateMatchPhase = 'preflight' | 'post-commit';
+
+export class CreateMatchError extends Error {
+  phase: CreateMatchPhase;
+  cause: unknown;
+  gameId?: string;
+
+  constructor(phase: CreateMatchPhase, cause: unknown, metadata: { gameId?: string } = {}) {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    super(`createMatch ${phase} failed: ${causeMessage}`);
+    this.name = 'CreateMatchError';
+    this.phase = phase;
+    this.cause = cause;
+    this.gameId = metadata.gameId;
+    Object.setPrototypeOf(this, CreateMatchError.prototype);
+  }
+}
 
 function publicProfile(user: {
   id: string;
@@ -46,79 +65,139 @@ export async function createMatch(
 ): Promise<void> {
   const gameId = crypto.randomUUID();
 
-  await redis.zrem(QUEUE_KEY, player1.userId, player2.userId);
-  await redis.zrem(QUEUE_DUE_KEY, player1.userId, player2.userId);
-  await redis.del(
-    `queue_joined:${player1.userId}`,
-    `queue_joined:${player2.userId}`,
-  );
+  let preflight:
+    | {
+        p1User: {
+          id: string;
+          displayName: string | null;
+          avatarUrl: string | null;
+          eloRating: number;
+          gamesPlayed: number;
+          winRate: number;
+          isBot: boolean;
+        };
+        p2User: {
+          id: string;
+          displayName: string | null;
+          avatarUrl: string | null;
+          eloRating: number;
+          gamesPlayed: number;
+          winRate: number;
+          isBot: boolean;
+        };
+        socket1: string | null;
+        socket2: string | null;
+        p1Profile: GamePlayerProfile;
+        p2Profile: GamePlayerProfile;
+        p1RatingImpact: RatingImpact;
+        p2RatingImpact: RatingImpact;
+      };
 
-  const [p1User, p2User] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: player1.userId },
-      select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true, winRate: true },
-    }),
-    prisma.user.findUnique({
-      where: { id: player2.userId },
-      select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true, winRate: true },
-    }),
-  ]);
+  try {
+    const [p1User, p2User] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: player1.userId },
+        select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true, winRate: true, isBot: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: player2.userId },
+        select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true, winRate: true, isBot: true },
+      }),
+    ]);
 
-  if (!p1User || !p2User) return;
+    if (!p1User || !p2User) {
+      throw new Error('matched user not found');
+    }
 
-  const [socket1, socket2] = await Promise.all([
-    redis.get(`socket:mm:${player1.userId}`),
-    redis.get(`socket:mm:${player2.userId}`),
-  ]);
+    const [socket1, socket2] = await Promise.all([
+      redis.get(`socket:mm:${player1.userId}`),
+      redis.get(`socket:mm:${player2.userId}`),
+    ]);
 
-  const matchData = { gameId, duration: env.GAME_DURATION_SECONDS };
-
-  const p1Profile = publicProfile(p1User);
-  const p2Profile = publicProfile(p2User);
-  const p1WinElo = calculateMatchElo({
-    player1: { elo: p1User.eloRating, gamesPlayed: p1User.gamesPlayed },
-    player2: { elo: p2User.eloRating, gamesPlayed: p2User.gamesPlayed },
-    player1Score: 1,
-    player2Score: 0,
-  });
-  const p2WinElo = calculateMatchElo({
-    player1: { elo: p1User.eloRating, gamesPlayed: p1User.gamesPlayed },
-    player2: { elo: p2User.eloRating, gamesPlayed: p2User.gamesPlayed },
-    player1Score: 0,
-    player2Score: 1,
-  });
-  const p1RatingImpact: RatingImpact = {
-    win: p1WinElo.player1.delta,
-    loss: p2WinElo.player1.delta,
-  };
-  const p2RatingImpact: RatingImpact = {
-    win: p2WinElo.player2.delta,
-    loss: p1WinElo.player2.delta,
-  };
-
-  await initializeGame(gameId, player1, player2, {
-    player1Profile: p1Profile,
-    player2Profile: p2Profile,
-    player1RatingImpact: p1RatingImpact,
-    player2RatingImpact: p2RatingImpact,
-    gameNs,
-  });
-
-  if (socket1) {
-    matchmakingNs.to(socket1).emit('match:found', {
-      ...matchData,
-      opponent: p2Profile,
-      ratingImpact: p1RatingImpact,
+    const p1Profile = publicProfile(p1User);
+    const p2Profile = publicProfile(p2User);
+    const p1WinElo = calculateMatchElo({
+      player1: { elo: p1User.eloRating, gamesPlayed: p1User.gamesPlayed },
+      player2: { elo: p2User.eloRating, gamesPlayed: p2User.gamesPlayed },
+      player1Score: 1,
+      player2Score: 0,
     });
-  }
-  if (socket2) {
-    matchmakingNs.to(socket2).emit('match:found', {
-      ...matchData,
-      opponent: p1Profile,
-      ratingImpact: p2RatingImpact,
+    const p2WinElo = calculateMatchElo({
+      player1: { elo: p1User.eloRating, gamesPlayed: p1User.gamesPlayed },
+      player2: { elo: p2User.eloRating, gamesPlayed: p2User.gamesPlayed },
+      player1Score: 0,
+      player2Score: 1,
     });
+    const p1RatingImpact: RatingImpact = {
+      win: p1WinElo.player1.delta,
+      loss: p2WinElo.player1.delta,
+    };
+    const p2RatingImpact: RatingImpact = {
+      win: p2WinElo.player2.delta,
+      loss: p1WinElo.player2.delta,
+    };
+
+    preflight = {
+      p1User,
+      p2User,
+      socket1,
+      socket2,
+      p1Profile,
+      p2Profile,
+      p1RatingImpact,
+      p2RatingImpact,
+    };
+  } catch (err) {
+    throw new CreateMatchError('preflight', err);
   }
-  logger.info({ event: 'mm:match', gameId, player1Id: player1.userId, player2Id: player2.userId, player1Elo: p1User.eloRating, player2Elo: p2User.eloRating }, 'Match created');
+
+  let gameInitialized = false;
+  try {
+    await redis.zrem(QUEUE_KEY, player1.userId, player2.userId);
+    await redis.zrem(QUEUE_DUE_KEY, player1.userId, player2.userId);
+    await redis.del(
+      `queue_joined:${player1.userId}`,
+      `queue_joined:${player2.userId}`,
+    );
+
+    await initializeGame(gameId, player1, player2, {
+      player1Profile: preflight.p1Profile,
+      player2Profile: preflight.p2Profile,
+      player1RatingImpact: preflight.p1RatingImpact,
+      player2RatingImpact: preflight.p2RatingImpact,
+      player1IsBot: preflight.p1User.isBot,
+      player2IsBot: preflight.p2User.isBot,
+      gameNs,
+    });
+    gameInitialized = true;
+
+    if (preflight.p2User.isBot) {
+      await autojoinBotPlayer(gameId, player2.userId, gameNs);
+    }
+
+    const matchData = { gameId, duration: env.GAME_DURATION_SECONDS };
+    if (preflight.socket1) {
+      matchmakingNs.to(preflight.socket1).emit('match:found', {
+        ...matchData,
+        opponent: preflight.p2Profile,
+        ratingImpact: preflight.p1RatingImpact,
+      });
+    }
+    if (!preflight.p2User.isBot && preflight.socket2) {
+      matchmakingNs.to(preflight.socket2).emit('match:found', {
+        ...matchData,
+        opponent: preflight.p1Profile,
+        ratingImpact: preflight.p2RatingImpact,
+      });
+    }
+    logger.info({ event: 'mm:match', gameId, player1Id: player1.userId, player2Id: player2.userId, player1Elo: preflight.p1User.eloRating, player2Elo: preflight.p2User.eloRating }, 'Match created');
+  } catch (err) {
+    throw new CreateMatchError(
+      gameInitialized ? 'post-commit' : 'preflight',
+      err,
+      gameInitialized ? { gameId } : undefined,
+    );
+  }
 }
 
 export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {

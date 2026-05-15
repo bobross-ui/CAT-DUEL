@@ -1,6 +1,7 @@
 import type { Namespace } from 'socket.io';
 import { redis } from '../config/redis';
-import { createMatch } from './matchmaking';
+import { botBusyKey, getBotForPlayer } from './botPlayer';
+import { CreateMatchError, createMatch } from './matchmaking';
 import type { QueuePlayer } from './matchmaking';
 import { logger } from '../lib/logger';
 import { Sentry } from '../lib/sentry';
@@ -50,6 +51,33 @@ async function claimPlayers(player1: QueuePlayer, player2: QueuePlayer): Promise
   return claimed === 1 ? token : null;
 }
 
+async function claimSinglePlayer(player: QueuePlayer): Promise<string | null> {
+  const token = crypto.randomUUID();
+  const claimed = await redis.eval(
+    `
+    if redis.call("exists", KEYS[1]) == 1 then
+      return 0
+    end
+    if not redis.call("zscore", KEYS[2], ARGV[1]) then
+      return 0
+    end
+    redis.call("set", KEYS[1], ARGV[2], "EX", ARGV[3])
+    redis.call("zrem", KEYS[2], ARGV[1])
+    redis.call("zrem", KEYS[3], ARGV[1])
+    return 1
+    `,
+    3,
+    claimKey(player.userId),
+    QUEUE_KEY,
+    QUEUE_DUE_KEY,
+    player.userId,
+    token,
+    CLAIM_TTL_SECONDS,
+  );
+
+  return claimed === 1 ? token : null;
+}
+
 async function releasePlayerClaims(
   player1: QueuePlayer,
   player2: QueuePlayer,
@@ -70,6 +98,25 @@ async function releasePlayerClaims(
     claimKey(player2.userId),
     token,
   );
+}
+
+async function releaseSinglePlayerClaim(player: QueuePlayer, token: string): Promise<void> {
+  await redis.eval(
+    `
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+      redis.call("del", KEYS[1])
+    end
+    return 0
+    `,
+    1,
+    claimKey(player.userId),
+    token,
+  );
+}
+
+async function requeuePlayer(player: QueuePlayer, joinedAt: number, now: number): Promise<void> {
+  await redis.zadd(QUEUE_KEY, player.elo, player.userId);
+  await redis.zadd(QUEUE_DUE_KEY, nextAttemptAt(joinedAt, now), player.userId);
 }
 
 async function removeQueuedPlayer(userId: string): Promise<void> {
@@ -188,6 +235,8 @@ export async function runMatchmaking(matchmakingNs: Namespace, gameNs: Namespace
 
       try {
         await createMatch(matchmakingNs, gameNs, player, opponent);
+      } catch (err) {
+        logger.error({ err, player1Id: player.userId, player2Id: opponent.userId }, 'Create match failed');
       } finally {
         await releasePlayerClaims(player, opponent, claimToken);
       }
@@ -199,6 +248,38 @@ export async function runMatchmaking(matchmakingNs: Namespace, gameNs: Namespace
           .emit('queue:timeout', { message: 'No match found, try again later' });
       }
       await removeQueuedPlayer(player.userId);
+    } else if (waitTime > EXPAND_AFTER_MS) {
+      const claimToken = await claimSinglePlayer(player);
+      if (!claimToken) continue;
+
+      let bot: Awaited<ReturnType<typeof getBotForPlayer>> = null;
+      try {
+        bot = await getBotForPlayer(player.elo);
+        if (!bot) {
+          await requeuePlayer(player, joinedAt, now);
+          continue;
+        }
+
+        matched.add(player.userId);
+        try {
+          await createMatch(
+            matchmakingNs,
+            gameNs,
+            player,
+            { userId: bot.id, elo: bot.eloRating },
+          );
+        } catch (err) {
+          if (err instanceof CreateMatchError && err.phase === 'preflight') {
+            await redis.del(botBusyKey(bot.id));
+            await requeuePlayer(player, joinedAt, now);
+            logger.error({ err, playerId: player.userId, botId: bot.id }, 'Create bot match failed before commit');
+            continue;
+          }
+          throw err;
+        }
+      } finally {
+        await releaseSinglePlayerClaim(player, claimToken);
+      }
     } else {
       await redis.zadd(QUEUE_DUE_KEY, nextAttemptAt(joinedAt, now), player.userId);
     }

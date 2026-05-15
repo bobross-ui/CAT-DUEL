@@ -9,6 +9,7 @@ import { bufferQuestionServes } from './questionServeBuffer';
 import { invalidateUserById } from './userCache';
 import { gradeAnswer } from './answerGrading';
 import { isAnswerForQuestionType } from './answerValidation';
+import { botBusyKey, rollBotCorrect } from './botPlayer';
 import { enforceSocketEventLimit } from './socketRateLimit';
 import {
   socketAnswerSubmitPayloadSchema,
@@ -93,6 +94,8 @@ interface GameState {
   status: 'FOUND' | 'WAITING_FOR_PLAYERS' | 'COUNTDOWN' | 'ACTIVE' | 'FINISHED' | 'CANCELLED';
   player1Id: string;
   player2Id: string;
+  player1IsBot: boolean;
+  player2IsBot: boolean;
   player1Profile: GamePlayerProfile;
   player2Profile: GamePlayerProfile;
   player1RatingImpact: RatingImpact;
@@ -199,6 +202,7 @@ const SECTION_ORDER = ['QUANT', 'DILR', 'VARC'];
 // would need their timers re-initialized by scanning active_game:* keys on startup
 // (deferred to a future hardening pass).
 const activeTimers = new Map<string, NodeJS.Timeout>();
+const botTimers = new Map<string, NodeJS.Timeout>();
 const forfeitTimers = new Map<string, NodeJS.Timeout>(); // keyed by userId
 const preStartTimers = new Map<string, NodeJS.Timeout>();
 const countdownTimers = new Map<string, NodeJS.Timeout>();
@@ -388,6 +392,12 @@ function clearForfeitTimer(userId: string) {
   forfeitTimers.delete(userId);
 }
 
+function clearBotTimer(gameId: string) {
+  const timer = botTimers.get(gameId);
+  if (timer) clearTimeout(timer);
+  botTimers.delete(gameId);
+}
+
 function isPlayer1(state: GameState, userId: string) {
   return state.player1Id === userId;
 }
@@ -479,7 +489,11 @@ async function cancelPreStartGame(
   const requeueTargets = [
     state.player1Joined ? state.player1Id : null,
     state.player2Joined ? state.player2Id : null,
-  ].filter((value): value is string => value != null && value !== excludedRequeueUserId);
+  ].filter((value): value is string => (
+    value != null &&
+    value !== excludedRequeueUserId &&
+    !(state.player2IsBot && value === state.player2Id)
+  ));
 
   await Promise.all(
     requeueTargets.map((userId) =>
@@ -488,6 +502,9 @@ async function cancelPreStartGame(
   );
 
   await clearPreStartState(state);
+  if (state.player2IsBot) {
+    await redis.del(botBusyKey(state.player2Id));
+  }
 }
 
 async function schedulePreStartTimeout(
@@ -688,6 +705,156 @@ async function incrementQuestionServeCounts(questionIds: string[]): Promise<void
 
 // ─── Game lifecycle ────────────────────────────────────────────────────────────
 
+function wrongMcqAnswer(correctAnswer: number | null): number {
+  const options = [0, 1, 2, 3].filter((option) => option !== correctAnswer);
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+function botAnswerForQuestion(
+  state: GameState,
+  questionId: string,
+): { selectedAnswer: number | null; typedAnswer: string | null; isCorrect: boolean } | null {
+  const answerKey = state.answerKeys[questionId];
+  const question = state.questions[questionId];
+  if (!answerKey || !question) return null;
+
+  const isCorrect = rollBotCorrect(
+    state.player1Profile.eloRating,
+    state.player2Profile.eloRating,
+  );
+
+  if (answerKey.questionType === 'MCQ') {
+    const selectedAnswer = isCorrect
+      ? answerKey.correctAnswer
+      : wrongMcqAnswer(answerKey.correctAnswer);
+    if (!isAnswerForQuestionType(answerKey.questionType, { selectedAnswer })) return null;
+    return { selectedAnswer, typedAnswer: null, isCorrect };
+  }
+
+  const typedAnswer = isCorrect
+    ? answerKey.correctAnswerText
+    : '__incorrect__';
+  if (!isAnswerForQuestionType(answerKey.questionType, { typedAnswer })) return null;
+  return { selectedAnswer: null, typedAnswer, isCorrect };
+}
+
+export async function autojoinBotPlayer(
+  gameId: string,
+  botId: string,
+  gameNs: Namespace,
+): Promise<void> {
+  const state = await getGameState(gameId);
+  if (
+    !state ||
+    (state.status !== 'FOUND' && state.status !== 'WAITING_FOR_PLAYERS') ||
+    !isParticipant(state, botId)
+  ) {
+    return;
+  }
+
+  const readiness = await markPreStartPlayerJoined(state, botId);
+  if (
+    !readiness ||
+    !readiness.player1Joined ||
+    !readiness.player2Joined ||
+    (readiness.status !== 'FOUND' && readiness.status !== 'WAITING_FOR_PLAYERS')
+  ) {
+    return;
+  }
+
+  const lock = await redis.set(
+    `game:${gameId}:starting`,
+    '1',
+    'EX',
+    30,
+    'NX',
+  );
+  if (!lock) return;
+
+  const latestState = await getGameState(gameId);
+  if (
+    latestState &&
+    latestState.status === 'WAITING_FOR_PLAYERS' &&
+    bothPlayersJoined(latestState)
+  ) {
+    await startCountdown(gameId, latestState, gameNs);
+  }
+}
+
+export async function submitBotAnswer(
+  gameId: string,
+  botId: string,
+  delayMs: number,
+  gameNs: Namespace,
+): Promise<void> {
+  const state = await getGameState(gameId);
+  if (
+    !state ||
+    state.status !== 'ACTIVE' ||
+    !state.player2IsBot ||
+    state.player2Id !== botId
+  ) {
+    return;
+  }
+
+  const questionId = state.questionIds[state.player2Progress];
+  if (!questionId || state.player2Answers[questionId]) return;
+
+  const answer = botAnswerForQuestion(state, questionId);
+  if (!answer) return;
+
+  state.player2Answers[questionId] = {
+    selected: answer.selectedAnswer,
+    typed: answer.typedAnswer,
+    correct: answer.isCorrect,
+    timeMs: delayMs,
+  };
+  state.player2Progress += 1;
+  if (answer.isCorrect) state.player2Score += 1;
+
+  const changedFields: (keyof GameState)[] = ['player2Answers', 'player2Progress'];
+  if (answer.isCorrect) changedFields.push('player2Score');
+  await saveGameStateFields(state, changedFields);
+
+  gameNs.to(gameId).emit('opponent:scored', {
+    opponentScore: state.player2Score,
+  });
+  gameNs.to(gameId).emit(
+    'opponent:progress',
+    buildOpponentProgress(state.player2Progress, state.questionIds.length),
+  );
+
+  if (
+    state.player1Progress >= state.questionIds.length &&
+    state.player2Progress >= state.questionIds.length
+  ) {
+    await endGame(gameId, gameNs);
+    return;
+  }
+
+  if (state.player2Progress < state.questionIds.length) {
+    startBotAnswering(gameId, botId, gameNs);
+  }
+}
+
+export function startBotAnswering(
+  gameId: string,
+  botId: string,
+  gameNs: Namespace,
+): void {
+  clearBotTimer(gameId);
+  const delayMs = 30_000 + Math.floor(Math.random() * 60_001);
+  const timer = setTimeout(() => {
+    if (botTimers.get(gameId) !== timer) return;
+    botTimers.delete(gameId);
+    submitBotAnswer(gameId, botId, delayMs, gameNs).catch((err) => {
+      Sentry.captureException(err, { extra: { gameId, botId } });
+      logger.error({ err, gameId, botId }, 'Bot answer error');
+    });
+  }, delayMs);
+  botTimers.set(gameId, timer);
+}
+
 async function startCountdown(
   gameId: string,
   state: GameState,
@@ -744,6 +911,9 @@ async function startCountdown(
       firstQuestion: firstQuestion ? withPassage(firstQuestion, current.passages) : null,
       questionNumber: 1,
     });
+    if (current.player2IsBot) {
+      startBotAnswering(gameId, current.player2Id, gameNs);
+    }
     logger.info({ event: 'game:start', gameId, player1Id: current.player1Id, player2Id: current.player2Id, totalQuestions: current.questionIds.length, durationSeconds: current.durationSeconds }, 'Game started');
 
     startGameTimer(gameId, current.durationSeconds, gameNs);
@@ -902,6 +1072,7 @@ export async function endGame(
   activeTimers.delete(gameId);
   clearPreStartTimer(gameId);
   clearCountdownTimer(gameId);
+  clearBotTimer(gameId);
   clearForfeitTimer(state.player1Id);
   clearForfeitTimer(state.player2Id);
 
@@ -1050,85 +1221,91 @@ async function persistMatch(
     });
   }
 
-  const MAX_RETRIES = 3;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      await prisma.$transaction(async (tx) => {
-        await tx.match.create({
-          data: {
-            id: state.gameId,
-            player1Id: state.player1Id,
-            player2Id: state.player2Id,
-            winnerId,
-            isDraw: winnerId === null,
-            player1Score: state.player1Score,
-            player2Score: state.player2Score,
-            player1EloChange: eloResult.player1.delta,
-            player2EloChange: eloResult.player2.delta,
-            player1EloAfter: eloResult.player1.newRating,
-            player2EloAfter: eloResult.player2.newRating,
-            player1Answered: state.player1Progress,
-            player2Answered: state.player2Progress,
-            totalQuestions: state.questionIds.length,
-            durationSeconds: state.durationSeconds,
-            status: isForfeit ? 'forfeited' : 'completed',
-            finishedAt: new Date(),
-          },
+  try {
+    const MAX_RETRIES = 3;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.match.create({
+            data: {
+              id: state.gameId,
+              player1Id: state.player1Id,
+              player2Id: state.player2Id,
+              winnerId,
+              isDraw: winnerId === null,
+              player1Score: state.player1Score,
+              player2Score: state.player2Score,
+              player1EloChange: eloResult.player1.delta,
+              player2EloChange: eloResult.player2.delta,
+              player1EloAfter: eloResult.player1.newRating,
+              player2EloAfter: eloResult.player2.newRating,
+              player1Answered: state.player1Progress,
+              player2Answered: state.player2Progress,
+              totalQuestions: state.questionIds.length,
+              durationSeconds: state.durationSeconds,
+              status: isForfeit ? 'forfeited' : 'completed',
+              finishedAt: new Date(),
+            },
+          });
+
+          await tx.matchAnswer.createMany({ data: answerRows });
+
+          const player1GamesPlayed = userStats.player1.gamesPlayed + 1;
+          const player1Wins = userStats.player1.wins + (winnerId === state.player1Id ? 1 : 0);
+          const player1Draws = userStats.player1.draws + (winnerId === null ? 1 : 0);
+          const player2GamesPlayed = userStats.player2.gamesPlayed + 1;
+          const player2Wins = userStats.player2.wins + (winnerId === state.player2Id ? 1 : 0);
+          const player2Draws = userStats.player2.draws + (winnerId === null ? 1 : 0);
+
+          await tx.user.update({
+            where: { id: state.player1Id },
+            data: {
+              eloRating: eloResult.player1.newRating,
+              peakElo: Math.max(userStats.player1.peakElo, eloResult.player1.newRating),
+              rankTier: getRankTier(eloResult.player1.newRating),
+              gamesPlayed: { increment: 1 },
+              wins: player1Wins,
+              draws: player1Draws,
+              winRate: player1Wins / player1GamesPlayed,
+            },
+          });
+          await tx.user.update({
+            where: { id: state.player2Id },
+            data: {
+              eloRating: eloResult.player2.newRating,
+              peakElo: Math.max(userStats.player2.peakElo, eloResult.player2.newRating),
+              rankTier: getRankTier(eloResult.player2.newRating),
+              gamesPlayed: { increment: 1 },
+              wins: player2Wins,
+              draws: player2Draws,
+              winRate: player2Wins / player2GamesPlayed,
+            },
+          });
         });
 
-        await tx.matchAnswer.createMany({ data: answerRows });
+        await Promise.all([
+          invalidateUserById(state.player1Id),
+          invalidateUserById(state.player2Id),
+          invalidateUserGlobalRank(state.player1Id),
+          invalidateUserGlobalRank(state.player2Id),
+        ]);
 
-        const player1GamesPlayed = userStats.player1.gamesPlayed + 1;
-        const player1Wins = userStats.player1.wins + (winnerId === state.player1Id ? 1 : 0);
-        const player1Draws = userStats.player1.draws + (winnerId === null ? 1 : 0);
-        const player2GamesPlayed = userStats.player2.gamesPlayed + 1;
-        const player2Wins = userStats.player2.wins + (winnerId === state.player2Id ? 1 : 0);
-        const player2Draws = userStats.player2.draws + (winnerId === null ? 1 : 0);
-
-        await tx.user.update({
-          where: { id: state.player1Id },
-          data: {
-            eloRating: eloResult.player1.newRating,
-            peakElo: Math.max(userStats.player1.peakElo, eloResult.player1.newRating),
-            rankTier: getRankTier(eloResult.player1.newRating),
-            gamesPlayed: { increment: 1 },
-            wins: player1Wins,
-            draws: player1Draws,
-            winRate: player1Wins / player1GamesPlayed,
-          },
-        });
-        await tx.user.update({
-          where: { id: state.player2Id },
-          data: {
-            eloRating: eloResult.player2.newRating,
-            peakElo: Math.max(userStats.player2.peakElo, eloResult.player2.newRating),
-            rankTier: getRankTier(eloResult.player2.newRating),
-            gamesPlayed: { increment: 1 },
-            wins: player2Wins,
-            draws: player2Draws,
-            winRate: player2Wins / player2GamesPlayed,
-          },
-        });
-      });
-
-      await Promise.all([
-        invalidateUserById(state.player1Id),
-        invalidateUserById(state.player2Id),
-        invalidateUserGlobalRank(state.player1Id),
-        invalidateUserGlobalRank(state.player2Id),
-      ]);
-
-      return;
-    } catch (err) {
-      logger.error({ err, gameId: state.gameId, attempt, maxRetries: MAX_RETRIES }, 'persistMatch attempt failed');
-      if (attempt === MAX_RETRIES) {
-        await redis.lpush(
-          'match_persist_failed',
-          JSON.stringify({ gameId: state.gameId, failedAt: Date.now() }),
-        );
-        throw err;
+        return;
+      } catch (err) {
+        logger.error({ err, gameId: state.gameId, attempt, maxRetries: MAX_RETRIES }, 'persistMatch attempt failed');
+        if (attempt === MAX_RETRIES) {
+          await redis.lpush(
+            'match_persist_failed',
+            JSON.stringify({ gameId: state.gameId, failedAt: Date.now() }),
+          );
+          throw err;
+        }
+        await new Promise((r) => setTimeout(r, 200 * Math.pow(2, attempt)));
       }
-      await new Promise((r) => setTimeout(r, 200 * Math.pow(2, attempt)));
+    }
+  } finally {
+    if (state.player2IsBot) {
+      await redis.del(botBusyKey(state.player2Id));
     }
   }
 }
@@ -1144,6 +1321,8 @@ export async function initializeGame(
     player2Profile: GamePlayerProfile;
     player1RatingImpact: RatingImpact;
     player2RatingImpact: RatingImpact;
+    player1IsBot?: boolean;
+    player2IsBot?: boolean;
     gameNs: Namespace;
   },
 ): Promise<void> {
@@ -1155,6 +1334,8 @@ export async function initializeGame(
     status: 'FOUND',
     player1Id: player1.userId,
     player2Id: player2.userId,
+    player1IsBot: options.player1IsBot ?? false,
+    player2IsBot: options.player2IsBot ?? false,
     player1Profile: options.player1Profile,
     player2Profile: options.player2Profile,
     player1RatingImpact: options.player1RatingImpact,
@@ -1524,6 +1705,9 @@ export async function recoverActiveGames(gameNs: Namespace): Promise<void> {
       } else {
         const remainingSeconds = Math.ceil((endTime - now) / 1000);
         startGameTimer(gameId, remainingSeconds, gameNs);
+        if (state.player2IsBot) {
+          startBotAnswering(gameId, state.player2Id, gameNs);
+        }
       }
     } catch (err) {
       Sentry.captureException(err, { extra: { gameId } });

@@ -39,6 +39,7 @@ model User {
   displayName           String?   @unique @map("display_name")
   avatarUrl             String?   @map("avatar_url")
   role                  String    @default("user")
+  isBot                 Boolean   @default(false) @map("is_bot")
   eloRating             Int       @default(1200) @map("elo_rating")
   peakElo               Int       @default(1200) @map("peak_elo")
   rankTier              RankTier  @default(SILVER) @map("rank_tier")
