@@ -131,10 +131,6 @@ export default function LeaderboardScreen({ route }: Props) {
     void activeQuery.refetch();
   }, [activeQuery]);
 
-  const gamesNeeded = activeTab !== 'tier' && data?.currentUserRank == null
-    ? Math.max(0, 5 - (data?.entries.find(e => e.isCurrentUser)?.gamesPlayed ?? 0))
-    : null;
-
   return (
     <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
@@ -190,15 +186,6 @@ export default function LeaderboardScreen({ route }: Props) {
         </View>
       )}
 
-      {/* ── Unranked nudge ── */}
-      {data != null && data.currentUserRank == null && gamesNeeded != null && gamesNeeded > 0 && (
-        <View style={[styles.rankBanner, { backgroundColor: theme.bg2 }]}>
-          <AppText.Mono preset="eyebrow" color={theme.ink3}>
-            PLAY {gamesNeeded} MORE MATCH{gamesNeeded !== 1 ? 'ES' : ''} TO EARN YOUR RANK
-          </AppText.Mono>
-        </View>
-      )}
-
       {activeQuery.isLoading ? (
         <View style={styles.list}>
           {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -231,12 +218,12 @@ export default function LeaderboardScreen({ route }: Props) {
               <AppText.Serif preset="h1Serif" color={theme.ink} style={styles.emptyHeading}>
                 {activeTab === 'tier'
                   ? `Be the first ${selectedTier[0]}${selectedTier.slice(1).toLowerCase()}.`
-                  : 'Play a few matches\nto earn your rank.'}
+                  : 'Play a game\nto show on the leaderboard.'}
               </AppText.Serif>
               <AppText.Sans preset="body" color={theme.ink3} style={styles.emptyBody}>
                 {activeTab === 'tier'
                   ? `No ${selectedTier[0]}${selectedTier.slice(1).toLowerCase()} players yet.`
-                  : 'Your position appears here once you have 5 matches.'}
+                  : 'Your rank appears here once you have a result.'}
               </AppText.Sans>
             </View>
           }

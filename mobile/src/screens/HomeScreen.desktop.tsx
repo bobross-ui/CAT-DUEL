@@ -160,7 +160,7 @@ export default function HomeScreenDesktop({ navigation }: Props) {
               )) : (
                 <View style={styles.emptySide}>
                   <Text.Serif preset="h1Serif" color={theme.ink}>No ranked table yet.</Text.Serif>
-                  <Text.Sans preset="small" color={theme.ink3}>Play five matches to enter the climb.</Text.Sans>
+                  <Text.Sans preset="small" color={theme.ink3}>Play a game to show on the leaderboard.</Text.Sans>
                 </View>
               )}
             </View>

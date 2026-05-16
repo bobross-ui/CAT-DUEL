@@ -5,8 +5,8 @@ import { RankTier } from './elo';
 import { publicDisplayName } from './displayName';
 import { logger } from '../lib/logger';
 
-const MIN_GAMES_TO_RANK = 5;
-const GLOBAL_CACHE_KEY = 'leaderboard:global:v2:top100';
+const MIN_GAMES_TO_RANK = 1;
+const GLOBAL_CACHE_KEY = 'leaderboard:global:v4:top100';
 const GLOBAL_CACHE_TTL = 60; // seconds
 const USER_GLOBAL_RANK_CACHE_TTL = 60; // seconds
 const RANK_TIERS: RankTier[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
@@ -36,7 +36,7 @@ interface CachedGlobalLeaderboard {
 }
 
 function userGlobalRankCacheKey(userId: string): string {
-  return `user:rank:global:${userId}`;
+  return `user:rank:global:v3:${userId}`;
 }
 
 export async function getUserGlobalRank(userId: string): Promise<number | null> {
@@ -103,7 +103,7 @@ export async function invalidateLeaderboardCaches(userId: string): Promise<void>
     await redis.del(
       GLOBAL_CACHE_KEY,
       userGlobalRankCacheKey(userId),
-      ...RANK_TIERS.map((tier) => `leaderboard:tier:${tier}:v2:top100`),
+      ...RANK_TIERS.map((tier) => `leaderboard:tier:${tier}:v4:top100`),
     );
   } catch (err) {
     logger.error({ err }, 'leaderboard: cache invalidate failed');
@@ -236,7 +236,7 @@ export async function getAroundMeLeaderboard(userId: string): Promise<Leaderboar
 }
 
 export async function getTierLeaderboard(tier: RankTier, user: User): Promise<LeaderboardResponse> {
-  const cacheKey = `leaderboard:tier:${tier}:v2:top100`;
+  const cacheKey = `leaderboard:tier:${tier}:v4:top100`;
   let entries: LeaderboardEntry[];
 
   const cached = await redis.get(cacheKey);
@@ -294,7 +294,7 @@ export async function getTierLeaderboard(tier: RankTier, user: User): Promise<Le
   return { entries: withFlag, currentUserRank, totalRanked };
 }
 
-const TIER_COUNTS_CACHE_KEY = 'leaderboard:tier_counts';
+const TIER_COUNTS_CACHE_KEY = 'leaderboard:tier_counts:v3';
 const TIER_COUNTS_CACHE_TTL = 60; // seconds
 
 async function getTierCounts(): Promise<Record<RankTier, number>> {

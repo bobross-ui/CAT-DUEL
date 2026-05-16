@@ -231,7 +231,7 @@ async function main() {
         eloRating: u.elo,
         peakElo: u.elo,
         rankTier: u.tier as 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND',
-        gamesPlayed: 10, // above the 5-game threshold to appear on leaderboard
+        gamesPlayed: 10,
       },
     });
   }

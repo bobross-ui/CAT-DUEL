@@ -52,9 +52,7 @@ function formatWinRate(value: number | undefined) {
 function rankLabel(data: LeaderboardData | null) {
   if (!data) return 'Loading rank';
   if (data.currentUserRank != null) return `Your rank #${data.currentUserRank}`;
-  const currentEntry = data.entries.find((entry) => entry.isCurrentUser);
-  const gamesNeeded = Math.max(0, 5 - (currentEntry?.gamesPlayed ?? 0));
-  return gamesNeeded > 0 ? `Play ${gamesNeeded} more matches to rank` : 'Play more matches to rank';
+  return 'Play a game to show on the leaderboard';
 }
 
 function PodiumPlayer({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 | 3 }) {
@@ -131,7 +129,7 @@ function LeaderboardTable({
       {entries.length === 0 ? (
         <View style={styles.emptyTable}>
           <Text.Serif preset="h1Serif" color={theme.ink}>{emptyTitle}</Text.Serif>
-          <Text.Sans preset="small" color={theme.ink3}>Ranked players appear here after five matches.</Text.Sans>
+          <Text.Sans preset="small" color={theme.ink3}>Play a game to show on the leaderboard.</Text.Sans>
         </View>
       ) : entries.map((entry) => (
         <View
