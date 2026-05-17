@@ -37,9 +37,16 @@ function getMedal(rank: number) {
   return null;
 }
 
+function splitDisplayCode(displayName: string) {
+  const match = displayName.match(/^(.*)(#[0-9]{6})$/);
+  return match ? { name: match[1], code: match[2] } : { name: displayName, code: null };
+}
+
 function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
   const { theme } = useTheme();
   const medal = getMedal(entry.rank);
+  const displayName = splitDisplayCode(entry.displayName);
+
   return (
     <View style={[
       styles.row,
@@ -68,7 +75,8 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
           numberOfLines={1}
           style={styles.nameText}
         >
-          {entry.displayName}{entry.isCurrentUser ? ' (You)' : ''}
+          {displayName.name}
+          {entry.isCurrentUser ? ' (You)' : ''}
         </AppText.Serif>
         <TierBadge tier={entry.rankTier} small />
       </View>

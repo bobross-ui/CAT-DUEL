@@ -55,10 +55,16 @@ function rankLabel(data: LeaderboardData | null) {
   return 'Play a game to show on the leaderboard';
 }
 
+function splitDisplayCode(displayName: string) {
+  const match = displayName.match(/^(.*)(#[0-9]{6})$/);
+  return match ? { name: match[1], code: match[2] } : { name: displayName, code: null };
+}
+
 function PodiumPlayer({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 | 3 }) {
   const { theme } = useTheme();
   const avatarSize = place === 1 ? 'xl' as const : 'lg' as const;
   const blockHeight = place === 1 ? 110 : place === 2 ? 80 : 50;
+  const displayName = splitDisplayCode(entry.displayName);
 
   return (
     <View style={styles.podiumPlayer}>
@@ -71,7 +77,7 @@ function PodiumPlayer({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 
         <Avatar name={entry.displayName} size={avatarSize} variant={entry.isCurrentUser ? 'you' : 'opponent'} />
       </View>
       <Text.Sans preset="label" color={theme.ink} numberOfLines={1} style={styles.podiumName}>
-        {entry.displayName}
+        {displayName.name}
       </Text.Sans>
       <Text.Mono preset="chipLabel" color={theme.ink3}>RATING {entry.eloRating}</Text.Mono>
       <View
@@ -131,32 +137,35 @@ function LeaderboardTable({
           <Text.Serif preset="h1Serif" color={theme.ink}>{emptyTitle}</Text.Serif>
           <Text.Sans preset="small" color={theme.ink3}>Play a game to show on the leaderboard.</Text.Sans>
         </View>
-      ) : entries.map((entry) => (
-        <View
-          key={`${entry.userId}-${entry.rank}`}
-          style={[
-            styles.tableRow,
-            { borderBottomColor: theme.line2 },
-            entry.isCurrentUser && { backgroundColor: theme.accentSoft },
-          ]}
-        >
-          <Text.Mono preset="mono" color={entry.rank <= 3 ? theme.accentDeep : theme.ink3} style={styles.rankCell}>
-            #{entry.rank}
-          </Text.Mono>
-          <View style={styles.playerCell}>
-            <Avatar name={entry.displayName} size="sm" variant={entry.isCurrentUser ? 'you' : 'opponent'} />
-            <View style={styles.playerNameWrap}>
-              <Text.Sans preset="label" color={theme.ink} numberOfLines={1}>
-                {entry.displayName}{entry.isCurrentUser ? ' · you' : ''}
-              </Text.Sans>
+      ) : entries.map((entry) => {
+        const displayName = splitDisplayCode(entry.displayName);
+        return (
+          <View
+            key={`${entry.userId}-${entry.rank}`}
+            style={[
+              styles.tableRow,
+              { borderBottomColor: theme.line2 },
+              entry.isCurrentUser && { backgroundColor: theme.accentSoft },
+            ]}
+          >
+            <Text.Mono preset="mono" color={entry.rank <= 3 ? theme.accentDeep : theme.ink3} style={styles.rankCell}>
+              #{entry.rank}
+            </Text.Mono>
+            <View style={styles.playerCell}>
+              <Avatar name={entry.displayName} size="sm" variant={entry.isCurrentUser ? 'you' : 'opponent'} />
+              <View style={styles.playerNameWrap}>
+                <Text.Sans preset="label" color={theme.ink} numberOfLines={1}>
+                  {displayName.name}{displayName.code ? <Text.Mono preset="chipLabel" color={theme.ink3}>{`  ${displayName.code}`}</Text.Mono> : null}{entry.isCurrentUser ? ' · you' : ''}
+                </Text.Sans>
+              </View>
             </View>
+            <Text.Serif preset="statVal" color={theme.ink} style={styles.ratingCell}>{entry.eloRating}</Text.Serif>
+            <Text.Sans preset="small" color={theme.ink2} style={styles.tierCell}>{titleCaseTier(entry.rankTier)}</Text.Sans>
+            <Text.Mono preset="mono" color={theme.ink2} style={styles.winCell}>{formatWinRate(entry.winRate)}</Text.Mono>
+            <Text.Mono preset="mono" color={theme.ink2} style={styles.matchesCell}>{entry.gamesPlayed}</Text.Mono>
           </View>
-          <Text.Serif preset="statVal" color={theme.ink} style={styles.ratingCell}>{entry.eloRating}</Text.Serif>
-          <Text.Sans preset="small" color={theme.ink2} style={styles.tierCell}>{titleCaseTier(entry.rankTier)}</Text.Sans>
-          <Text.Mono preset="mono" color={theme.ink2} style={styles.winCell}>{formatWinRate(entry.winRate)}</Text.Mono>
-          <Text.Mono preset="mono" color={theme.ink2} style={styles.matchesCell}>{entry.gamesPlayed}</Text.Mono>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
