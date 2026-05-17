@@ -7,6 +7,7 @@ import api from '../services/api';
 export interface CurrentProfile {
   id: string;
   displayName: string | null;
+  displayCode?: string | null;
   email?: string;
   role?: string;
   avatarUrl?: string | null;
@@ -20,6 +21,7 @@ export interface CurrentProfile {
   wins?: number;
   winRate?: number;
   onboardingCompletedAt?: string | null;
+  isGuest?: boolean;
 }
 
 async function fetchCurrentProfile() {

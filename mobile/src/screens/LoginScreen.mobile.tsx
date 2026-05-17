@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   TextInput,
   StyleSheet,
@@ -11,9 +11,10 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeProvider';
 import Button from '../components/Button';
 import AppText from '../components/Text';
+import { hasUsedGuestTrial } from '../services/guestTrial';
 
 export default function LoginScreen() {
-  const { registerWithEmail, signInWithEmail, signInWithGoogle } = useAuth();
+  const { registerWithEmail, signInWithEmail, signInWithGoogle, signInAsGuest } = useAuth();
   const { theme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,6 +22,23 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [guestTrialLoaded, setGuestTrialLoaded] = useState(false);
+  const [guestTrialUsed, setGuestTrialUsed] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    hasUsedGuestTrial()
+      .then((used) => {
+        if (mounted) setGuestTrialUsed(used);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setGuestTrialLoaded(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleEmailSignIn = async () => {
     if (!email || !password) {
@@ -58,6 +76,23 @@ export default function LoginScreen() {
     } catch (err: unknown) {
       console.warn('Google sign-in failed', err);
       setError(getGoogleSignInErrorMessage(err));
+    }
+  };
+
+  const handlePlayAsGuest = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await signInAsGuest();
+    } catch (err: unknown) {
+      console.warn('Guest sign-in failed', err);
+      if (getAuthErrorCode(err) === 'GUEST_TRIAL_USED') {
+        setGuestTrialUsed(true);
+        setError('You have already used your guest trial. Sign up to play more.');
+      } else {
+        setError('Could not start guest session. Try again.');
+      }
+      setLoading(false);
     }
   };
 
@@ -136,6 +171,15 @@ export default function LoginScreen() {
           style={styles.buttonSpacing}
         />
       )}
+
+      <Button
+        label={guestTrialUsed ? 'Guest trial used' : 'Play as Guest'}
+        variant="ghost"
+        onPress={handlePlayAsGuest}
+        disabled={loading || !guestTrialLoaded || guestTrialUsed}
+        accessibilityHint={guestTrialUsed ? 'Sign up to play more duels' : 'Try one practice duel without signing up'}
+        style={styles.buttonSpacing}
+      />
 
       {/* Bottom spacer so keyboard avoid doesn't crush content */}
       <View style={{ height: 1 }} />

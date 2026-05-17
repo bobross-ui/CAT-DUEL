@@ -85,8 +85,8 @@ export interface MatchDetailData {
   totalQuestions: number;
   durationSeconds: number;
   finishedAt: string;
-  player1: { id: string; displayName: string | null; avatarUrl: string | null; eloRating: number };
-  player2: { id: string; displayName: string | null; avatarUrl: string | null; eloRating: number };
+  player1: { id: string; displayName: string | null; displayCode?: string | null; avatarUrl: string | null; eloRating: number };
+  player2: { id: string; displayName: string | null; displayCode?: string | null; avatarUrl: string | null; eloRating: number };
   answers: AnswerDetail[];
 }
 

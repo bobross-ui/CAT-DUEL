@@ -82,7 +82,7 @@ router.get('/history', authMiddleware, async (req, res, next) => {
       });
     }
 
-    const playerSelect = { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } };
+    const playerSelect = { select: { id: true, displayName: true, displayCode: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true, isBot: true, isGuest: true } };
     const userMatchWhere = { OR: [{ player1Id: userId }, { player2Id: userId }] };
     const cursorWhere = cursor
       ? {
@@ -228,8 +228,8 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
     const match = await prisma.match.findUnique({
       where: { id: req.params.id },
       include: {
-        player1: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } },
-        player2: { select: { id: true, displayName: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true } },
+        player1: { select: { id: true, displayName: true, displayCode: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true, isBot: true, isGuest: true } },
+        player2: { select: { id: true, displayName: true, displayCode: true, avatarUrl: true, eloRating: true, rankTier: true, deletedAt: true, isBot: true, isGuest: true } },
         answers: {
           include: {
             question: {

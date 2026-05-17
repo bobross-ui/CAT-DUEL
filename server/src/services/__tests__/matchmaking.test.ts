@@ -27,6 +27,12 @@ jest.mock('../gameSession', () => ({
   getActiveGameForUser: jest.fn(),
   getPendingMatchForUser: jest.fn(),
   initializeGame: jest.fn(),
+  GUEST_DURATION_SECONDS: 180,
+}));
+
+jest.mock('../botPlayer', () => ({
+  getBotForPlayer: jest.fn(),
+  botBusyKey: (id: string) => `bot_busy:${id}`,
 }));
 
 jest.mock('../../lib/logger', () => ({
@@ -38,7 +44,8 @@ jest.mock('../../lib/logger', () => ({
 import type { Namespace } from 'socket.io';
 import { prisma } from '../../models/prisma';
 import { autojoinBotPlayer, initializeGame } from '../gameSession';
-import { createMatch, CreateMatchError } from '../matchmaking';
+import { getBotForPlayer } from '../botPlayer';
+import { createGuestMatch, createMatch, CreateMatchError, GuestMatchError } from '../matchmaking';
 
 const GAME_ID = '00000000-0000-4000-8000-000000000001' as ReturnType<typeof crypto.randomUUID>;
 
@@ -50,6 +57,7 @@ function user(overrides: Partial<{
   gamesPlayed: number;
   winRate: number;
   isBot: boolean;
+  isGuest: boolean;
 }> = {}) {
   return {
     id: 'user-1',
@@ -59,6 +67,7 @@ function user(overrides: Partial<{
     gamesPlayed: 30,
     winRate: 0.5,
     isBot: false,
+    isGuest: false,
     ...overrides,
   };
 }
@@ -192,6 +201,158 @@ describe('createMatch', () => {
     expect(mockedAutojoinBotPlayer.mock.invocationCallOrder[0]).toBeLessThan(
       emit.mock.invocationCallOrder[0],
     );
+  });
+
+});
+
+describe('createGuestMatch', () => {
+  const mockedGetBotForPlayer = getBotForPlayer as jest.Mock;
+  const GUEST_ID = 'guest-1';
+  const BOT_ID = 'bot-1';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(crypto, 'randomUUID').mockReturnValue(GAME_ID);
+    mockRedis.del.mockResolvedValue(1);
+    mockedInitializeGame.mockResolvedValue(undefined);
+    mockedAutojoinBotPlayer.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('rejects when the caller is not a guest', async () => {
+    findUnique.mockResolvedValueOnce(user({ id: GUEST_ID, isGuest: false }));
+    const { ns: matchmakingNs } = namespace();
+    const { ns: gameNs } = namespace();
+
+    await expect(
+      createGuestMatch(matchmakingNs, gameNs, GUEST_ID, 'socket-1'),
+    ).rejects.toMatchObject({ code: 'NOT_GUEST' });
+
+    expect(mockedGetBotForPlayer).not.toHaveBeenCalled();
+    expect(mockedInitializeGame).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the guest has already played', async () => {
+    findUnique.mockResolvedValueOnce(user({ id: GUEST_ID, isGuest: true, gamesPlayed: 1 }));
+    const { ns: matchmakingNs } = namespace();
+    const { ns: gameNs } = namespace();
+
+    await expect(
+      createGuestMatch(matchmakingNs, gameNs, GUEST_ID, 'socket-1'),
+    ).rejects.toMatchObject({ code: 'ALREADY_PLAYED' });
+
+    expect(mockedGetBotForPlayer).not.toHaveBeenCalled();
+    expect(mockedInitializeGame).not.toHaveBeenCalled();
+  });
+
+  it('rejects when no bot is available', async () => {
+    findUnique.mockResolvedValueOnce(user({ id: GUEST_ID, isGuest: true, gamesPlayed: 0 }));
+    mockedGetBotForPlayer.mockResolvedValueOnce(null);
+    const { ns: matchmakingNs } = namespace();
+    const { ns: gameNs } = namespace();
+
+    await expect(
+      createGuestMatch(matchmakingNs, gameNs, GUEST_ID, 'socket-1'),
+    ).rejects.toMatchObject({ code: 'NO_BOT_AVAILABLE' });
+
+    expect(mockedInitializeGame).not.toHaveBeenCalled();
+    expect(mockRedis.del).not.toHaveBeenCalled();
+  });
+
+  it('initializes the match in guest_practice mode, autojoins the bot, and emits match:found with GUEST_DURATION_SECONDS', async () => {
+    findUnique.mockResolvedValueOnce(user({ id: GUEST_ID, isGuest: true, gamesPlayed: 0, eloRating: 1200 }));
+    mockedGetBotForPlayer.mockResolvedValueOnce(user({ id: BOT_ID, isBot: true, eloRating: 1180 }));
+    const { ns: matchmakingNs, emit, to } = namespace();
+    const { ns: gameNs } = namespace();
+
+    await createGuestMatch(matchmakingNs, gameNs, GUEST_ID, 'socket-guest');
+
+    expect(mockedInitializeGame).toHaveBeenCalledWith(
+      GAME_ID,
+      { userId: GUEST_ID, elo: 1200 },
+      { userId: BOT_ID, elo: 1180 },
+      expect.objectContaining({
+        mode: 'guest_practice',
+        player1IsBot: false,
+        player2IsBot: true,
+        gameNs,
+      }),
+    );
+    expect(mockedAutojoinBotPlayer).toHaveBeenCalledWith(GAME_ID, BOT_ID, gameNs);
+    expect(to).toHaveBeenCalledWith('socket-guest');
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit.mock.calls[0][0]).toBe('match:found');
+    expect(emit.mock.calls[0][1]).toMatchObject({
+      gameId: GAME_ID,
+      duration: 180,
+      opponent: expect.objectContaining({ userId: BOT_ID }),
+    });
+    expect(mockedAutojoinBotPlayer.mock.invocationCallOrder[0]).toBeLessThan(
+      emit.mock.invocationCallOrder[0],
+    );
+    expect(mockRedis.del).not.toHaveBeenCalled();
+  });
+
+  it('releases bot_busy if initializeGame throws after the bot was claimed', async () => {
+    findUnique.mockResolvedValueOnce(user({ id: GUEST_ID, isGuest: true, gamesPlayed: 0 }));
+    mockedGetBotForPlayer.mockResolvedValueOnce(user({ id: BOT_ID, isBot: true, eloRating: 1200 }));
+    mockedInitializeGame.mockRejectedValueOnce(new Error('init failed'));
+    const { ns: matchmakingNs } = namespace();
+    const { ns: gameNs } = namespace();
+
+    await expect(
+      createGuestMatch(matchmakingNs, gameNs, GUEST_ID, 'socket-guest'),
+    ).rejects.toThrow('init failed');
+
+    expect(mockRedis.del).toHaveBeenCalledWith(`bot_busy:${BOT_ID}`);
+  });
+
+  it('does not release bot_busy if the failure is post-commit (after initializeGame)', async () => {
+    findUnique.mockResolvedValueOnce(user({ id: GUEST_ID, isGuest: true, gamesPlayed: 0 }));
+    mockedGetBotForPlayer.mockResolvedValueOnce(user({ id: BOT_ID, isBot: true, eloRating: 1200 }));
+    mockedAutojoinBotPlayer.mockRejectedValueOnce(new Error('autojoin failed'));
+    const { ns: matchmakingNs } = namespace();
+    const { ns: gameNs } = namespace();
+
+    await expect(
+      createGuestMatch(matchmakingNs, gameNs, GUEST_ID, 'socket-guest'),
+    ).rejects.toThrow('autojoin failed');
+
+    // bot_busy is owned by gameSession's lifecycle from here on (cancelPreStartGame / persistMatch)
+    expect(mockRedis.del).not.toHaveBeenCalled();
+  });
+
+  it('preserves GuestMatchError instance identity for socket-layer dispatch', async () => {
+    findUnique.mockResolvedValueOnce(user({ id: GUEST_ID, isGuest: true, gamesPlayed: 2 }));
+    const { ns: matchmakingNs } = namespace();
+    const { ns: gameNs } = namespace();
+
+    let error: unknown;
+    try {
+      await createGuestMatch(matchmakingNs, gameNs, GUEST_ID, 'socket-1');
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(GuestMatchError);
+  });
+});
+
+describe('createMatch post-commit failure', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(crypto, 'randomUUID').mockReturnValue(GAME_ID);
+    mockRedis.del.mockResolvedValue(1);
+    mockRedis.get.mockResolvedValue(null);
+    mockRedis.zrem.mockResolvedValue(1);
+    mockedInitializeGame.mockResolvedValue(undefined);
+    mockedAutojoinBotPlayer.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('wraps failures after initializeGame as post-commit with the game id', async () => {

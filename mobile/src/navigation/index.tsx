@@ -25,6 +25,7 @@ import PracticeHomeScreen from '../screens/PracticeHomeScreen';
 import QuestionScreen from '../screens/QuestionScreen';
 import PracticeSummaryScreen from '../screens/PracticeSummaryScreen';
 import MatchmakingScreen from '../screens/MatchmakingScreen';
+import GuestMatchmakingScreen from '../screens/GuestMatchmakingScreen';
 import FoundScreen from '../screens/FoundScreen';
 import DuelScreen from '../screens/DuelScreen';
 import DuelResultsScreen from '../screens/DuelResultsScreen';
@@ -66,6 +67,7 @@ export interface InitialGameState {
 export type OpponentInfo = {
   userId: string;
   displayName: string | null;
+  displayCode?: string | null;
   avatarUrl: string | null;
   eloRating: number;
   gamesPlayed?: number;
@@ -149,6 +151,7 @@ export type RootStackParamList = {
   DeepLinkedLeaderboard: { tier?: string };
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Matchmaking: { notice?: string } | undefined;
+  GuestMatchmaking: undefined;
   Found: { gameId: string; opponent: OpponentInfo; ratingImpact: { win: number; loss: number; draw?: number } | null };
   Duel: { gameId: string; opponent?: OpponentInfo; initialState?: InitialGameState };
   DuelResults: { gameId: string; results?: GameFinishedPayload; userId?: string; opponent?: OpponentInfo };
@@ -401,22 +404,33 @@ export default function RootNavigator({
     );
   }
 
+  const isGuest = profile?.isGuest === true;
+
   const initialRouteName = !firebaseUser
     ? 'Login'
-    : hasCompletedOnboarding
-      ? 'MainTabs'
-      : 'Onboarding';
+    : isGuest
+      ? 'GuestMatchmaking'
+      : hasCompletedOnboarding
+        ? 'MainTabs'
+        : 'Onboarding';
 
   return (
     <Stack.Navigator
-      key={`${firebaseUser ? 'user' : 'guest'}-${hasCompletedOnboarding ? 'ready' : 'onboarding'}`}
+      key={`${firebaseUser ? 'user' : 'guest'}-${isGuest ? 'guestplay' : hasCompletedOnboarding ? 'ready' : 'onboarding'}`}
       screenOptions={{ headerShown: false }}
       initialRouteName={initialRouteName}
     >
       <Stack.Screen name="DeepLinkedProfile" component={DeepLinkedProfileRedirect} />
       <Stack.Screen name="DeepLinkedMatch" component={DeepLinkedMatchRedirect} />
       <Stack.Screen name="DeepLinkedLeaderboard" component={DeepLinkedLeaderboardRedirect} />
-      {firebaseUser && hasCompletedOnboarding ? (
+      {firebaseUser && isGuest ? (
+        <>
+          <Stack.Screen name="GuestMatchmaking" component={GuestMatchmakingScreen} options={{ gestureEnabled: false }} />
+          <Stack.Screen name="Found" component={FoundScreen} options={{ gestureEnabled: false }} />
+          <Stack.Screen name="Duel" component={DuelScreen} options={{ gestureEnabled: false }} />
+          <Stack.Screen name="DuelResults" component={DuelResultsScreen} options={{ gestureEnabled: false }} />
+        </>
+      ) : firebaseUser && hasCompletedOnboarding ? (
         <>
           <Stack.Screen name="MainTabs" component={MainTabNavigator} />
           <Stack.Screen name="Matchmaking" component={MatchmakingScreen} />

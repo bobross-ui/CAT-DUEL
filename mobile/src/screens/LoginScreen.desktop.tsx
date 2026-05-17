@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -15,12 +15,13 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import Text from '../components/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
+import { hasUsedGuestTrial } from '../services/guestTrial';
 
 type Field = 'displayName' | 'email' | 'password';
-type ButtonName = 'submit' | 'google' | 'toggle';
+type ButtonName = 'submit' | 'google' | 'guest' | 'toggle';
 
 export default function LoginScreenDesktop() {
-  const { registerWithEmail, signInWithEmail, signInWithGoogle } = useAuth();
+  const { registerWithEmail, signInWithEmail, signInWithGoogle, signInAsGuest } = useAuth();
   const { theme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,11 +29,29 @@ export default function LoginScreenDesktop() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [focusedField, setFocusedField] = useState<Field | null>(null);
   const [focusedButton, setFocusedButton] = useState<ButtonName | null>(null);
+  const [guestTrialLoaded, setGuestTrialLoaded] = useState(false);
+  const [guestTrialUsed, setGuestTrialUsed] = useState(false);
 
   useDocumentTitle(isRegistering ? 'Create account · CAT Duel' : 'Sign in · CAT Duel');
+
+  useEffect(() => {
+    let mounted = true;
+    hasUsedGuestTrial()
+      .then((used) => {
+        if (mounted) setGuestTrialUsed(used);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setGuestTrialLoaded(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleEmailSignIn = async () => {
     if (!email || !password) {
@@ -79,13 +98,31 @@ export default function LoginScreenDesktop() {
     }
   };
 
+  const handlePlayAsGuest = async () => {
+    setError('');
+    setGuestLoading(true);
+    try {
+      await signInAsGuest();
+    } catch (err: unknown) {
+      console.warn('Guest sign-in failed', err);
+      if (getAuthErrorCode(err) === 'GUEST_TRIAL_USED') {
+        setGuestTrialUsed(true);
+        setError('You have already used your guest trial. Sign up to play more.');
+      } else {
+        setError('Could not start guest session. Try again.');
+      }
+      setGuestLoading(false);
+    }
+  };
+
   const toggleMode = () => {
     setIsRegistering((value) => !value);
     setError('');
     setDisplayName('');
   };
 
-  const disabled = loading || googleLoading;
+  const disabled = loading || googleLoading || guestLoading;
+  const guestDisabled = disabled || !guestTrialLoaded || guestTrialUsed;
 
   return (
     <View style={[styles.page, { backgroundColor: theme.bg2 }]}>
@@ -187,6 +224,19 @@ export default function LoginScreenDesktop() {
             accessibilityHint="Starts Google sign in"
           />
         )}
+
+        <DesktopButton
+          label={guestTrialUsed ? 'Guest trial used' : 'Play as Guest'}
+          onPress={handlePlayAsGuest}
+          loading={guestLoading}
+          disabled={guestDisabled}
+          focused={focusedButton === 'guest'}
+          onFocus={() => setFocusedButton('guest')}
+          onBlur={() => setFocusedButton(null)}
+          style={{ backgroundColor: theme.card, borderColor: theme.line, borderWidth: 1 }}
+          textColor={theme.ink}
+          accessibilityHint={guestTrialUsed ? 'Sign up to play more duels' : 'Try one practice duel without signing up'}
+        />
 
         <Pressable
           onPress={toggleMode}

@@ -5,15 +5,29 @@ import { Sentry } from '../lib/sentry';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
-import { displayNameSchema } from '../services/displayName';
+import {
+  DISPLAY_CODE_MAX_ATTEMPTS,
+  displayNameSchema,
+  generateDisplayCode,
+  isDisplayCodeUniqueViolation,
+} from '../services/displayName';
 import { cacheUser, getCachedUserByFirebaseUid, isFirebaseUidBlocked } from '../services/userCache';
 import { startOfUtcDay } from '../services/streak';
 import { z } from 'zod';
 
 const router = Router();
 
+function generateGuestDisplayName(): string {
+  const suffix = Math.floor(100_000 + Math.random() * 900_000);
+  return `Guest${suffix}`;
+}
+
 const bootstrapSchema = z.object({
   displayName: displayNameSchema.optional(),
+});
+
+const convertGuestSchema = z.object({
+  displayName: displayNameSchema,
 });
 
 router.post('/bootstrap', validate(bootstrapSchema), async (req, res, next) => {
@@ -42,15 +56,70 @@ router.post('/bootstrap', validate(bootstrapSchema), async (req, res, next) => {
       return;
     }
 
+    const isAnonymous = decoded.firebase?.sign_in_provider === 'anonymous';
+
+    if (isAnonymous) {
+      let user = null;
+      for (let attempt = 0; attempt < DISPLAY_CODE_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          user = await prisma.user.create({
+            data: {
+              firebaseUid: decoded.uid,
+              email: null,
+              displayName: generateGuestDisplayName(),
+              displayCode: generateDisplayCode(),
+              avatarUrl: null,
+              isGuest: true,
+              onboardingCompletedAt: new Date(),
+            },
+          });
+          break;
+        } catch (error) {
+          if (isDisplayCodeUniqueViolation(error)) continue;
+          throw error;
+        }
+      }
+
+      if (!user) {
+        res.status(503).json({
+          success: false,
+          error: { code: 'GUEST_NAME_UNAVAILABLE', message: 'Could not allocate a guest name. Try again.' },
+        });
+        return;
+      }
+
+      await cacheUser(user);
+      res.status(201).json({ success: true, data: user });
+      return;
+    }
+
     try {
-      const user = await prisma.user.create({
-        data: {
-          firebaseUid: decoded.uid,
-          email: decoded.email ?? '',
-          displayName: req.body.displayName ?? decoded.name ?? null,
-          avatarUrl: decoded.picture ?? null,
-        },
-      });
+      const displayName = req.body.displayName ?? decoded.name ?? null;
+      let user = null;
+      for (let attempt = 0; attempt < DISPLAY_CODE_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          user = await prisma.user.create({
+            data: {
+              firebaseUid: decoded.uid,
+              email: decoded.email ?? '',
+              displayName,
+              displayCode: displayName ? generateDisplayCode() : null,
+              avatarUrl: decoded.picture ?? null,
+            },
+          });
+          break;
+        } catch (error) {
+          if (isDisplayCodeUniqueViolation(error)) continue;
+          throw error;
+        }
+      }
+      if (!user) {
+        res.status(503).json({
+          success: false,
+          error: { code: 'DISPLAY_CODE_UNAVAILABLE', message: 'Could not allocate a display code. Try again.' },
+        });
+        return;
+      }
       await cacheUser(user);
 
       res.status(201).json({ success: true, data: user });
@@ -68,13 +137,58 @@ router.post('/bootstrap', validate(bootstrapSchema), async (req, res, next) => {
         });
         res.status(409).json({
           success: false,
-          error: { code: 'DISPLAY_NAME_TAKEN', message: 'That display name is already taken.' },
+          error: { code: 'ACCOUNT_CONFLICT', message: 'Could not create this account. Try signing in.' },
         });
         return;
       }
 
       throw error;
     }
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/convert-guest', authMiddleware, validate(convertGuestSchema), async (req, res, next) => {
+  try {
+    if (!req.user.isGuest) {
+      res.status(409).json({
+        success: false,
+        error: { code: 'NOT_GUEST', message: 'This account is not a guest.' },
+      });
+      return;
+    }
+
+    const decoded = req.firebaseToken;
+
+    let user = null;
+    for (let attempt = 0; attempt < DISPLAY_CODE_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        user = await prisma.user.update({
+          where: { id: req.user.id },
+          data: {
+            isGuest: false,
+            displayName: req.body.displayName,
+            displayCode: generateDisplayCode(),
+            email: decoded.email ?? '',
+            avatarUrl: decoded.picture ?? req.user.avatarUrl,
+          },
+        });
+        break;
+      } catch (error) {
+        if (isDisplayCodeUniqueViolation(error)) continue;
+        throw error;
+      }
+    }
+    if (!user) {
+      res.status(503).json({
+        success: false,
+        error: { code: 'DISPLAY_CODE_UNAVAILABLE', message: 'Could not allocate a display code. Try again.' },
+      });
+      return;
+    }
+    await cacheUser(user);
+    res.json({ success: true, data: user });
   } catch (error) {
     next(error);
   }

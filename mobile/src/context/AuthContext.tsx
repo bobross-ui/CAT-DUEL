@@ -1,11 +1,16 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   User,
+  EmailAuthProvider,
   createUserWithEmailAndPassword,
   getRedirectResult,
+  linkWithCredential,
+  linkWithPopup,
   onAuthStateChanged,
   reload,
   sendEmailVerification,
+  signInAnonymously,
   signInWithEmailAndPassword,
   signInWithCredential,
   signInWithPopup,
@@ -19,7 +24,9 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import { auth } from '../config/firebase';
+import { queryKeys } from '../queries/keys';
 import api from '../services/api';
+import { guestTrialUsedError, hasUsedGuestTrial, markGuestTrialUsed } from '../services/guestTrial';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -33,6 +40,9 @@ interface AuthContextValue {
   registerWithEmail: (email: string, password: string, displayName: string) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  signInAsGuest: () => Promise<void>;
+  convertGuestWithEmail: (email: string, password: string, displayName: string) => Promise<void>;
+  convertGuestWithGoogle: (displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
   resendEmailVerification: () => Promise<void>;
   reloadUser: () => Promise<void>;
@@ -50,12 +60,20 @@ interface PendingBootstrap {
   reject: (error: unknown) => void;
 }
 
+interface PendingGoogleConversion {
+  displayName: string;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [, setUserVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const authStateSeq = useRef(0);
   const pendingBootstrap = useRef<PendingBootstrap | null>(null);
+  const pendingGoogleConversion = useRef<PendingGoogleConversion | null>(null);
 
   const redirectUri = makeRedirectUri();
 
@@ -106,12 +124,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (response?.type === 'success') {
+    if (!response) return;
+
+    if (response.type === 'success') {
       const { accessToken } = response.authentication!;
       const credential = GoogleAuthProvider.credential(null, accessToken);
-      signInWithCredential(auth, credential);
+      const pending = pendingGoogleConversion.current;
+
+      if (pending && auth.currentUser) {
+        pendingGoogleConversion.current = null;
+        (async () => {
+          try {
+            await linkWithCredential(auth.currentUser!, credential);
+            await auth.currentUser!.getIdToken(true);
+            const profile = await convertGuestProfile(pending.displayName);
+            updateCurrentProfileCache(queryClient, profile);
+            pending.resolve();
+          } catch (err) {
+            pending.reject(err);
+          }
+        })();
+      } else {
+        signInWithCredential(auth, credential);
+      }
+    } else {
+      const pending = pendingGoogleConversion.current;
+      if (pending) {
+        pendingGoogleConversion.current = null;
+        pending.reject(new Error('Google sign-in cancelled'));
+      }
     }
-  }, [response]);
+  }, [queryClient, response]);
 
   const signInWithEmail = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
@@ -161,12 +204,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await promptAsync();
   };
 
+  const signInAsGuest = async () => {
+    if (await hasUsedGuestTrial()) throw guestTrialUsedError();
+    await signInAnonymously(auth);
+    await markGuestTrialUsed();
+  };
+
+  const convertGuestWithEmail = async (email: string, password: string, displayName: string) => {
+    if (!auth.currentUser) throw new Error('Not signed in');
+    const credential = EmailAuthProvider.credential(email, password);
+    await linkWithCredential(auth.currentUser, credential);
+    await updateProfile(auth.currentUser, { displayName });
+    await sendEmailVerification(auth.currentUser).catch((error) => {
+      console.warn('Failed to send verification email', error);
+    });
+    await auth.currentUser.getIdToken(true);
+    const profile = await convertGuestProfile(displayName);
+    updateCurrentProfileCache(queryClient, profile);
+  };
+
+  const convertGuestWithGoogle = async (displayName: string) => {
+    if (!auth.currentUser) throw new Error('Not signed in');
+
+    if (Platform.OS === 'web') {
+      try {
+        await linkWithPopup(auth.currentUser, googleProvider);
+      } catch (error) {
+        if (isPopupFallbackError(error)) {
+          throw new Error('Popup was blocked. Allow popups and try again.');
+        }
+        throw error;
+      }
+      await auth.currentUser.getIdToken(true);
+      const profile = await convertGuestProfile(displayName);
+      updateCurrentProfileCache(queryClient, profile);
+      return;
+    }
+
+    const conversionPromise = new Promise<void>((resolve, reject) => {
+      pendingGoogleConversion.current = { displayName, resolve, reject };
+    });
+    try {
+      await promptAsync();
+    } catch (err) {
+      pendingGoogleConversion.current = null;
+      throw err;
+    }
+    await conversionPromise;
+  };
+
   const signOut = async () => {
     await firebaseSignOut(auth);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, bootstrapUser, registerWithEmail, signInWithEmail, signInWithGoogle, signOut, resendEmailVerification, reloadUser }}>
+    <AuthContext.Provider value={{ user, loading, bootstrapUser, registerWithEmail, signInWithEmail, signInWithGoogle, signInAsGuest, convertGuestWithEmail, convertGuestWithGoogle, signOut, resendEmailVerification, reloadUser }}>
       {children}
     </AuthContext.Provider>
   );
@@ -175,6 +267,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 async function bootstrapUser(firebaseUser: User, input?: BootstrapUserInput) {
   await firebaseUser.getIdToken();
   await api.post('/auth/bootstrap', input ?? {});
+}
+
+async function convertGuestProfile(displayName: string) {
+  const res = await api.post('/auth/convert-guest', { displayName });
+  return res.data.data;
+}
+
+function updateCurrentProfileCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  profile: unknown,
+) {
+  queryClient.setQueryData(queryKeys.me(), profile);
+  void queryClient.invalidateQueries({ queryKey: queryKeys.me() });
 }
 
 function isPopupFallbackError(error: unknown) {

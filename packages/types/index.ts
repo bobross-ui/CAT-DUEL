@@ -11,6 +11,7 @@ export interface User {
   id: string;
   email: string;
   displayName: string | null;
+  displayCode: string | null;
   avatarUrl: string | null;
   eloRating: number;
   gamesPlayed: number;

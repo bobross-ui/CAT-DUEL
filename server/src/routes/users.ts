@@ -1,14 +1,18 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Prisma } from '../generated/prisma/client';
 import admin from '../config/firebase';
 import { redis } from '../config/redis';
 import { authMiddleware, requireFirebaseRevocationCheck } from '../middleware/auth';
 import { deleteAccountRateLimit, updateProfileRateLimit } from '../middleware/rateLimit';
 import { validate } from '../middleware/validate';
 import { prisma } from '../models/prisma';
-import { displayNameSchema, publicDisplayName } from '../services/displayName';
-import { invalidateLeaderboardCaches } from '../services/leaderboard';
+import {
+  DISPLAY_CODE_MAX_ATTEMPTS,
+  displayNameSchema,
+  generateDisplayCode,
+  isDisplayCodeUniqueViolation,
+  publicDisplayName,
+} from '../services/displayName';
 import {
   cacheFirebaseUidBlock,
   invalidateUserByFirebaseUid,
@@ -53,20 +57,37 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
 router.patch('/me', authMiddleware, updateProfileRateLimit, validate(updateProfileSchema), async (req, res, next) => {
   try {
     const { onboardingCompletedAt, ...profileData } = req.body;
-    const user = await prisma.user.update({
-      where: { id: req.user.id },
-      data: {
-        ...profileData,
-        ...(onboardingCompletedAt && { onboardingCompletedAt: new Date(onboardingCompletedAt) }),
-      },
-    });
+    const data = {
+      ...profileData,
+      ...(onboardingCompletedAt && { onboardingCompletedAt: new Date(onboardingCompletedAt) }),
+    };
+    let user = null;
+    if (profileData.displayName !== undefined) {
+      for (let attempt = 0; attempt < DISPLAY_CODE_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          user = await prisma.user.update({
+            where: { id: req.user.id },
+            data: { ...data, displayCode: generateDisplayCode() },
+          });
+          break;
+        } catch (err) {
+          if (isDisplayCodeUniqueViolation(err)) continue;
+          throw err;
+        }
+      }
+    } else {
+      user = await prisma.user.update({
+        where: { id: req.user.id },
+        data,
+      });
+    }
+    if (!user) {
+      res.status(503).json({ success: false, error: { code: 'DISPLAY_CODE_UNAVAILABLE', message: 'Could not allocate a display code. Try again.' } });
+      return;
+    }
     await invalidateUserById(req.user.id);
     res.json({ success: true, data: user });
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      res.status(409).json({ success: false, error: { code: 'DISPLAY_NAME_TAKEN', message: 'That display name is already taken.' } });
-      return;
-    }
     next(err);
   }
 });
@@ -103,6 +124,7 @@ router.delete('/me', authMiddleware, deleteAccountRateLimit, requireFirebaseRevo
           firebaseUid: `deleted:${req.user.firebaseUid}`,
           email: null,
           displayName: null,
+          displayCode: null,
           avatarUrl: null,
           deletedAt: new Date(),
         },
@@ -112,7 +134,6 @@ router.delete('/me', authMiddleware, deleteAccountRateLimit, requireFirebaseRevo
     await Promise.all([
       invalidateUserByFirebaseUid(req.user.firebaseUid),
       cacheFirebaseUidBlock(req.user.firebaseUid),
-      invalidateLeaderboardCaches(req.user.id),
     ]);
     await admin.auth().deleteUser(req.user.firebaseUid);
 

@@ -36,10 +36,12 @@ model User {
   id                    String    @id @default(uuid())
   firebaseUid           String    @unique @map("firebase_uid")
   email                 String?   @unique
-  displayName           String?   @unique @map("display_name")
+  displayName           String?   @map("display_name")
+  displayCode           String?   @map("display_code")
   avatarUrl             String?   @map("avatar_url")
   role                  String    @default("user")
   isBot                 Boolean   @default(false) @map("is_bot")
+  isGuest               Boolean   @default(false) @map("is_guest")
   eloRating             Int       @default(1200) @map("elo_rating")
   peakElo               Int       @default(1200) @map("peak_elo")
   rankTier              RankTier  @default(SILVER) @map("rank_tier")
@@ -62,6 +64,8 @@ model User {
 
   @@index([deletedAt, gamesPlayed, eloRating(sort: Desc)])
   @@index([deletedAt, rankTier, gamesPlayed, eloRating(sort: Desc)])
+  @@index([isGuest, createdAt])
+  @@unique([displayName, displayCode])
   @@map("users")
 }
 

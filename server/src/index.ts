@@ -178,7 +178,7 @@ async function startServer(): Promise<void> {
   const subClient = redis.duplicate();
   io.adapter(createAdapter(pubClient, subClient));
 
-  registerMatchmakingHandlers(matchmakingNs);
+  registerMatchmakingHandlers(matchmakingNs, gameNs);
   registerGameHandlers(gameNs);
 
   if (env.RUN_BACKGROUND_JOBS) {

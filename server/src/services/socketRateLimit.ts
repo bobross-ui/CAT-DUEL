@@ -43,6 +43,13 @@ const socketEventLimiters = {
     duration: 60,
     rejectIfRedisNotReady: true,
   }),
+  'guest:start': new RateLimiterRedis({
+    storeClient: redis,
+    keyPrefix: 'rate:socket:event:guest-start',
+    points: 5,
+    duration: 60,
+    rejectIfRedisNotReady: true,
+  }),
 };
 
 type SocketLimitedEvent = keyof typeof socketEventLimiters;

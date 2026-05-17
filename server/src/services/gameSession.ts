@@ -57,6 +57,8 @@ interface ResultsAnswerDetail {
   };
 }
 
+export type GameMode = 'standard' | 'guest_practice';
+
 export interface RatingImpact {
   win: number;
   loss: number;
@@ -96,6 +98,7 @@ interface GameState {
   player2Id: string;
   player1IsBot: boolean;
   player2IsBot: boolean;
+  mode: GameMode;
   player1Profile: GamePlayerProfile;
   player2Profile: GamePlayerProfile;
   player1RatingImpact: RatingImpact;
@@ -192,6 +195,8 @@ async function buildResultsAnswers(state: GameState): Promise<ResultsAnswerDetai
 const QUESTION_COUNT = 20;
 const QUESTION_POOL_SAMPLE_PER_CATEGORY = 40;
 const GAME_DURATION_SECONDS = env.GAME_DURATION_SECONDS;
+const GUEST_QUESTION_COUNT = 5;
+export const GUEST_DURATION_SECONDS = 180;
 const COUNTDOWN_SECONDS = 3;
 const PRESTART_TIMEOUT_MS = 10_000;
 const PRESTART_TTL_SECONDS = 30;
@@ -570,6 +575,7 @@ function balanceByCategory<T extends { category: string }>(
 async function selectQuestionsForMatch(
   p1Elo: number,
   p2Elo: number,
+  questionCount: number,
 ): Promise<{
   questionIds: string[];
   questions: Record<string, ClientQuestion>;
@@ -591,8 +597,8 @@ async function selectQuestionsForMatch(
     for (const id of ids) candidates.push({ id, category: cat });
   }
 
-  if (candidates.length >= QUESTION_COUNT) {
-    const selected = balanceByCategory(candidates, QUESTION_COUNT);
+  if (candidates.length >= questionCount) {
+    const selected = balanceByCategory(candidates, questionCount);
     const contentMap = await getQuestionsContent(selected.map((s) => s.id));
 
     const questionIds: string[] = [];
@@ -623,7 +629,7 @@ async function selectQuestionsForMatch(
       if (q.passage) passages[q.passage.id] = q.passage;
     }
 
-    if (questionIds.length >= QUESTION_COUNT) {
+    if (questionIds.length >= questionCount) {
       return { questionIds, questions: clientQuestions, answerKeys, passages };
     }
   }
@@ -648,7 +654,7 @@ async function selectQuestionsForMatch(
     },
   });
 
-  const balanced = balanceByCategory(questionRows, QUESTION_COUNT);
+  const balanced = balanceByCategory(questionRows, questionCount);
 
   const questionIds: string[] = [];
   const clientQuestions: Record<string, ClientQuestion> = {};
@@ -1323,10 +1329,14 @@ export async function initializeGame(
     player2RatingImpact: RatingImpact;
     player1IsBot?: boolean;
     player2IsBot?: boolean;
+    mode?: GameMode;
     gameNs: Namespace;
   },
 ): Promise<void> {
-  const { questionIds, questions, answerKeys, passages } = await selectQuestionsForMatch(player1.elo, player2.elo);
+  const mode: GameMode = options.mode ?? 'standard';
+  const questionCount = mode === 'guest_practice' ? GUEST_QUESTION_COUNT : QUESTION_COUNT;
+  const durationSeconds = mode === 'guest_practice' ? GUEST_DURATION_SECONDS : GAME_DURATION_SECONDS;
+  const { questionIds, questions, answerKeys, passages } = await selectQuestionsForMatch(player1.elo, player2.elo, questionCount);
   const joinDeadlineAt = Date.now() + PRESTART_TIMEOUT_MS;
 
   const state: GameState = {
@@ -1336,6 +1346,7 @@ export async function initializeGame(
     player2Id: player2.userId,
     player1IsBot: options.player1IsBot ?? false,
     player2IsBot: options.player2IsBot ?? false,
+    mode,
     player1Profile: options.player1Profile,
     player2Profile: options.player2Profile,
     player1RatingImpact: options.player1RatingImpact,
@@ -1352,7 +1363,7 @@ export async function initializeGame(
     player2Joined: false,
     player1Answers: {},
     player2Answers: {},
-    durationSeconds: GAME_DURATION_SECONDS,
+    durationSeconds,
     joinDeadlineAt,
     countdownStartedAt: null,
     startedAt: null,

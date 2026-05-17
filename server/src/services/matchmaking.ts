@@ -9,12 +9,15 @@ import {
   GamePlayerProfile,
   getActiveGameForUser,
   getPendingMatchForUser,
+  GUEST_DURATION_SECONDS,
   RatingImpact,
 } from './gameSession';
 import { calculateMatchElo } from './elo';
+import { botBusyKey, getBotForPlayer } from './botPlayer';
 import { enforceSocketEventLimit } from './socketRateLimit';
 import { withSentry } from '../lib/sentry';
 import { logger } from '../lib/logger';
+import { publicDisplayName } from './displayName';
 
 export type QueuePlayer = GamePlayer;
 
@@ -42,14 +45,17 @@ export class CreateMatchError extends Error {
 function publicProfile(user: {
   id: string;
   displayName: string | null;
+  displayCode?: string | null;
   avatarUrl: string | null;
   eloRating: number;
   gamesPlayed: number;
   winRate: number;
+  isBot?: boolean;
+  isGuest?: boolean;
 }): GamePlayerProfile {
   return {
     userId: user.id,
-    displayName: user.displayName,
+    displayName: publicDisplayName(user),
     avatarUrl: user.avatarUrl,
     eloRating: user.eloRating,
     gamesPlayed: user.gamesPlayed,
@@ -70,6 +76,7 @@ export async function createMatch(
         p1User: {
           id: string;
           displayName: string | null;
+          displayCode: string | null;
           avatarUrl: string | null;
           eloRating: number;
           gamesPlayed: number;
@@ -79,6 +86,7 @@ export async function createMatch(
         p2User: {
           id: string;
           displayName: string | null;
+          displayCode: string | null;
           avatarUrl: string | null;
           eloRating: number;
           gamesPlayed: number;
@@ -97,11 +105,11 @@ export async function createMatch(
     const [p1User, p2User] = await Promise.all([
       prisma.user.findUnique({
         where: { id: player1.userId },
-        select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true, winRate: true, isBot: true },
+        select: { id: true, displayName: true, displayCode: true, avatarUrl: true, eloRating: true, gamesPlayed: true, winRate: true, isBot: true },
       }),
       prisma.user.findUnique({
         where: { id: player2.userId },
-        select: { id: true, displayName: true, avatarUrl: true, eloRating: true, gamesPlayed: true, winRate: true, isBot: true },
+        select: { id: true, displayName: true, displayCode: true, avatarUrl: true, eloRating: true, gamesPlayed: true, winRate: true, isBot: true },
       }),
     ]);
 
@@ -200,12 +208,113 @@ export async function createMatch(
   }
 }
 
-export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
+export type GuestMatchErrorCode = 'NOT_GUEST' | 'ALREADY_PLAYED' | 'NO_BOT_AVAILABLE' | 'INTERNAL';
+
+export class GuestMatchError extends Error {
+  code: GuestMatchErrorCode;
+
+  constructor(code: GuestMatchErrorCode, message?: string) {
+    super(message ?? code);
+    this.name = 'GuestMatchError';
+    this.code = code;
+    Object.setPrototypeOf(this, GuestMatchError.prototype);
+  }
+}
+
+export async function createGuestMatch(
+  matchmakingNs: Namespace,
+  gameNs: Namespace,
+  guestUserId: string,
+  socketId: string,
+): Promise<void> {
+  const guest = await prisma.user.findUnique({
+    where: { id: guestUserId },
+    select: {
+      id: true, displayName: true, displayCode: true, avatarUrl: true,
+      eloRating: true, gamesPlayed: true, winRate: true,
+      isGuest: true,
+    },
+  });
+
+  if (!guest) throw new GuestMatchError('INTERNAL', 'guest user not found');
+  if (!guest.isGuest) throw new GuestMatchError('NOT_GUEST');
+  if (guest.gamesPlayed > 0) throw new GuestMatchError('ALREADY_PLAYED');
+
+  const bot = await getBotForPlayer(guest.eloRating);
+  if (!bot) throw new GuestMatchError('NO_BOT_AVAILABLE');
+
+  const gameId = crypto.randomUUID();
+  let gameInitialized = false;
+
+  try {
+    const guestProfile = publicProfile(guest);
+    const botProfile = publicProfile(bot);
+    const guestWinElo = calculateMatchElo({
+      player1: { elo: guest.eloRating, gamesPlayed: guest.gamesPlayed },
+      player2: { elo: bot.eloRating, gamesPlayed: bot.gamesPlayed },
+      player1Score: 1,
+      player2Score: 0,
+    });
+    const guestLossElo = calculateMatchElo({
+      player1: { elo: guest.eloRating, gamesPlayed: guest.gamesPlayed },
+      player2: { elo: bot.eloRating, gamesPlayed: bot.gamesPlayed },
+      player1Score: 0,
+      player2Score: 1,
+    });
+    const guestRatingImpact: RatingImpact = {
+      win: guestWinElo.player1.delta,
+      loss: guestLossElo.player1.delta,
+    };
+    const botRatingImpact: RatingImpact = {
+      win: guestLossElo.player2.delta,
+      loss: guestWinElo.player2.delta,
+    };
+
+    await initializeGame(
+      gameId,
+      { userId: guest.id, elo: guest.eloRating },
+      { userId: bot.id, elo: bot.eloRating },
+      {
+        player1Profile: guestProfile,
+        player2Profile: botProfile,
+        player1RatingImpact: guestRatingImpact,
+        player2RatingImpact: botRatingImpact,
+        player1IsBot: false,
+        player2IsBot: true,
+        mode: 'guest_practice',
+        gameNs,
+      },
+    );
+    gameInitialized = true;
+
+    await autojoinBotPlayer(gameId, bot.id, gameNs);
+
+    matchmakingNs.to(socketId).emit('match:found', {
+      gameId,
+      duration: GUEST_DURATION_SECONDS,
+      opponent: botProfile,
+      ratingImpact: guestRatingImpact,
+    });
+    logger.info({ event: 'mm:guest', gameId, guestId: guest.id, botId: bot.id, guestElo: guest.eloRating, botElo: bot.eloRating }, 'Guest match created');
+  } catch (err) {
+    if (!gameInitialized) {
+      await redis.del(botBusyKey(bot.id)).catch(() => {});
+    }
+    throw err;
+  }
+}
+
+export function registerMatchmakingHandlers(matchmakingNs: Namespace, gameNs: Namespace): void {
   matchmakingNs.on('connection', (socket) => {
     const user = socket.data.user;
 
     socket.on('queue:join', withSentry(async () => {
       if (!(await enforceSocketEventLimit(socket, 'queue:join', user.id))) return;
+
+      if (user.isGuest) {
+        socket.emit('queue:error', { message: 'Sign up to play ranked duels.' });
+        return;
+      }
 
       if (!socket.data.emailVerified) {
         socket.emit('queue:error', { message: 'Verify your email to play ranked duels. Check your inbox (and spam folder) for the verification link.' });
@@ -246,6 +355,34 @@ export function registerMatchmakingHandlers(matchmakingNs: Namespace): void {
       await redis.zrem(QUEUE_DUE_KEY, user.id);
       await redis.del(`queue_joined:${user.id}`, `socket:mm:${user.id}`);
       socket.emit('queue:left');
+    }));
+
+    socket.on('guest:start', withSentry(async () => {
+      if (!(await enforceSocketEventLimit(socket, 'guest:start', user.id))) return;
+
+      const activeGame = await getActiveGameForUser(user.id);
+      if (activeGame) {
+        socket.emit('queue:active_game', activeGame);
+        return;
+      }
+
+      const pendingMatch = await getPendingMatchForUser(user.id);
+      if (pendingMatch) {
+        socket.emit('match:found', pendingMatch);
+        return;
+      }
+
+      await redis.set(`socket:mm:${user.id}`, socket.id, 'EX', 120);
+
+      try {
+        await createGuestMatch(matchmakingNs, gameNs, user.id, socket.id);
+      } catch (err) {
+        if (err instanceof GuestMatchError) {
+          socket.emit('guest:error', { code: err.code });
+          return;
+        }
+        throw err;
+      }
     }));
 
     socket.on('disconnect', withSentry(async () => {
