@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,17 +15,21 @@ import { Feather } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import Button from '../components/Button';
+import GuestConversionModal from '../components/GuestConversionModal';
 import ShareLinkModal from '../components/ShareLinkModal';
 import AppText from '../components/Text';
 import MathText from '../components/MathText';
 import ScreenTransitionView from '../components/ScreenTransitionView';
 import { useAppPreferences } from '../context/AppPreferencesContext';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
 import { matchUrl } from '../navigation/linking';
 import { track } from '../services/analytics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DuelResults'>;
+
+const GUEST_CONVERSION_MODAL_DELAY_MS = 1200;
 
 interface AnswerDetail {
   id: string;
@@ -95,7 +99,9 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
   const opponent = route.params.opponent!;
   const { theme } = useTheme();
   const { reduceMotionEnabled } = useAppPreferences();
+  const { user: profile } = useCurrentProfile();
   const insets = useSafeAreaInsets();
+  const isGuest = profile?.isGuest === true;
 
   const isPlayer1 = results.player1.userId === userId;
   const yours  = isPlayer1 ? results.player1 : results.player2;
@@ -126,6 +132,35 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [shareVisible, setShareVisible] = useState(false);
+  const [guestModalVisible, setGuestModalVisible] = useState(false);
+  const guestModalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const guestModalAutoOpenedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isGuest || guestModalAutoOpenedRef.current) return;
+
+    guestModalTimerRef.current = setTimeout(() => {
+      guestModalAutoOpenedRef.current = true;
+      setGuestModalVisible(true);
+      guestModalTimerRef.current = null;
+    }, GUEST_CONVERSION_MODAL_DELAY_MS);
+
+    return () => {
+      if (guestModalTimerRef.current) {
+        clearTimeout(guestModalTimerRef.current);
+        guestModalTimerRef.current = null;
+      }
+    };
+  }, [isGuest]);
+
+  function openGuestModal() {
+    if (guestModalTimerRef.current) {
+      clearTimeout(guestModalTimerRef.current);
+      guestModalTimerRef.current = null;
+    }
+    guestModalAutoOpenedRef.current = true;
+    setGuestModalVisible(true);
+  }
 
   useEffect(() => {
     if (splitBarWidth <= 0) return;
@@ -389,28 +424,39 @@ export default function DuelResultsScreen({ route, navigation }: Props) {
 
         {/* ── Actions ── */}
         <View style={[styles.actions, { borderTopColor: theme.line }]}>
-          <Pressable
-            onPress={() => navigation.navigate('MainTabs')}
-            style={[styles.homeBtn, { backgroundColor: theme.card, borderColor: theme.line }]}
-            accessibilityRole="button"
-            accessibilityLabel="Back to home"
-          >
-            <Feather name="home" size={22} color={theme.ink2} />
-          </Pressable>
-          <Pressable
-            onPress={openShareMatch}
-            style={[styles.homeBtn, { backgroundColor: theme.card, borderColor: theme.line }]}
-            accessibilityRole="button"
-            accessibilityLabel="Share match"
-          >
-            <Feather name="share-2" size={20} color={theme.ink2} />
-          </Pressable>
-          <View style={styles.rematchWrap}>
-            <Button label="Rematch →" onPress={() => navigation.replace('Matchmaking')} />
-          </View>
+          {isGuest ? (
+            <View style={styles.saveScoreWrap}>
+              <Button label="Save your score" onPress={openGuestModal} />
+            </View>
+          ) : (
+            <>
+              <Pressable
+                onPress={() => navigation.navigate('MainTabs')}
+                style={[styles.homeBtn, { backgroundColor: theme.card, borderColor: theme.line }]}
+                accessibilityRole="button"
+                accessibilityLabel="Back to home"
+              >
+                <Feather name="home" size={22} color={theme.ink2} />
+              </Pressable>
+              <Pressable
+                onPress={openShareMatch}
+                style={[styles.homeBtn, { backgroundColor: theme.card, borderColor: theme.line }]}
+                accessibilityRole="button"
+                accessibilityLabel="Share match"
+              >
+                <Feather name="share-2" size={20} color={theme.ink2} />
+              </Pressable>
+              <View style={styles.rematchWrap}>
+                <Button label="Rematch →" onPress={() => navigation.replace('Matchmaking')} />
+              </View>
+            </>
+          )}
         </View>
 
       </ScrollView>
+      {isGuest ? (
+        <GuestConversionModal visible={guestModalVisible} onClose={() => setGuestModalVisible(false)} />
+      ) : null}
       <ShareLinkModal
         visible={shareVisible}
         title="CAT Duel match"
@@ -563,4 +609,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rematchWrap: { flex: 1 },
+  saveScoreWrap: { flex: 1 },
 });

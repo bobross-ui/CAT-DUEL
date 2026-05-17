@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { imageUri } from '../services/imageUri';
 import AutoImage from '../components/AutoImage';
@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import GuestConversionModal from '../components/GuestConversionModal';
 import MathText from '../components/MathText';
 import ShareLinkModal from '../components/ShareLinkModal';
 import Text from '../components/Text';
@@ -22,6 +23,8 @@ import { radii } from '../theme/tokens';
 import MobileDuelResultsScreen from './DuelResultsScreen.mobile';
 
 type Props = ComponentProps<typeof MobileDuelResultsScreen>;
+
+const GUEST_CONVERSION_MODAL_DELAY_MS = 1200;
 
 interface AnswerDetail {
   id: string;
@@ -105,8 +108,38 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
   const opponent = route.params.opponent!;
   const { theme } = useTheme();
   const { user } = useCurrentProfile();
+  const isGuest = user?.isGuest === true;
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [shareVisible, setShareVisible] = useState(false);
+  const [guestModalVisible, setGuestModalVisible] = useState(false);
+  const guestModalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const guestModalAutoOpenedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isGuest || guestModalAutoOpenedRef.current) return;
+
+    guestModalTimerRef.current = setTimeout(() => {
+      guestModalAutoOpenedRef.current = true;
+      setGuestModalVisible(true);
+      guestModalTimerRef.current = null;
+    }, GUEST_CONVERSION_MODAL_DELAY_MS);
+
+    return () => {
+      if (guestModalTimerRef.current) {
+        clearTimeout(guestModalTimerRef.current);
+        guestModalTimerRef.current = null;
+      }
+    };
+  }, [isGuest]);
+
+  function openGuestModal() {
+    if (guestModalTimerRef.current) {
+      clearTimeout(guestModalTimerRef.current);
+      guestModalTimerRef.current = null;
+    }
+    guestModalAutoOpenedRef.current = true;
+    setGuestModalVisible(true);
+  }
 
   const isPlayer1 = results.player1.userId === userId;
   const yours = isPlayer1 ? results.player1 : results.player2;
@@ -173,7 +206,7 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
   }, []);
 
   return (
-    <DesktopFrame activeRoute="DuelResults">
+    <DesktopFrame activeRoute="DuelResults" showLeftRail={!isGuest}>
       <PageContainer maxWidth={1180} style={styles.page}>
         <DesktopHero variant="accent" style={styles.hero}>
           <View style={styles.heroContent}>
@@ -448,15 +481,24 @@ export default function DuelResultsScreenDesktop({ route, navigation }: Props) {
               </View>
             </Card>
 
-            <Card style={styles.actionsCard}>
-              <Button label="Home" variant="ghost" onPress={() => navigation.navigate('MainTabs')} />
-              <Button label="Share" variant="ghost" onPress={openShareMatch} />
-              <Button label="Rematch →" variant="dark" onPress={() => navigation.replace('Matchmaking')} />
-            </Card>
+            {isGuest ? (
+              <Card style={styles.actionsCard}>
+                <Button label="Save your score" onPress={openGuestModal} />
+              </Card>
+            ) : (
+              <Card style={styles.actionsCard}>
+                <Button label="Home" variant="ghost" onPress={() => navigation.navigate('MainTabs')} />
+                <Button label="Share" variant="ghost" onPress={openShareMatch} />
+                <Button label="Rematch →" variant="dark" onPress={() => navigation.replace('Matchmaking')} />
+              </Card>
+            )}
           </View>
         </View>
       </PageContainer>
 
+      {isGuest ? (
+        <GuestConversionModal visible={guestModalVisible} onClose={() => setGuestModalVisible(false)} />
+      ) : null}
       <ShareLinkModal
         visible={shareVisible}
         title="CAT Duel match"
