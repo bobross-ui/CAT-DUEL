@@ -28,6 +28,11 @@ type FoundMatch = {
 
 const RING_SIZE = 150;
 
+function splitDisplayCode(displayName: string) {
+  const match = displayName.match(/^(.*)(#[0-9]{6})$/);
+  return match ? { name: match[1], code: match[2] } : { name: displayName, code: null };
+}
+
 function RippleRing({ delay, color, animate }: { delay: number; color: string; animate: boolean }) {
   const anim = useRef(new Animated.Value(0)).current;
 
@@ -151,6 +156,7 @@ function PlayerCard({
   const { theme } = useTheme();
   const tier = elo != null ? getTier(elo).name : '...';
   const winPct = winRate != null ? `${Math.round(winRate * 100)}%` : '--';
+  const displayName = splitDisplayCode(name ?? 'Player');
 
   return (
     <View
@@ -170,8 +176,13 @@ function PlayerCard({
         <Avatar name={name ?? '?'} size="xl" variant={variant} />
       </View>
       <Text.Serif preset="heroSerif" color={theme.ink} style={styles.playerName} numberOfLines={1}>
-        {name ?? 'Player'}
+        {displayName.name}
       </Text.Serif>
+      {displayName.code ? (
+        <Text.Mono preset="chipLabel" color={theme.ink3}>
+          {displayName.code}
+        </Text.Mono>
+      ) : null}
       <Text.Mono preset="mono" color={found ? theme.accentDeep : theme.ink2}>
         {elo != null ? `◆ ${elo}` : '◆ ...'}
       </Text.Mono>

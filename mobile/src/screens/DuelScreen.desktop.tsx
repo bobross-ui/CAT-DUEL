@@ -75,6 +75,11 @@ function formatTime(s: number) {
   return `${m}:${sec}`;
 }
 
+function splitDisplayCode(displayName: string) {
+  const match = displayName.match(/^(.*)(#[0-9]{6})$/);
+  return match ? { name: match[1], code: match[2] } : { name: displayName, code: null };
+}
+
 function BlinkingDot({ color, animate }: { color: string; animate: boolean }) {
   const opacity = useRef(new Animated.Value(1)).current;
 
@@ -139,6 +144,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   const yourRating = profile?.eloRating ?? 0;
   const yourTier = profile ? getTier(profile.eloRating).name : 'Ranked';
   const opponentName = opponent.displayName ?? 'Opponent';
+  const opponentDisplayName = splitDisplayCode(opponentName);
   const opponentTier = getTier(opponent.eloRating).name;
   const opponentDone = ds.opponentProgress && ds.opponentProgress.questionsAnswered >= ds.totalQuestions;
   const category = ds.currentQuestion ? [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ') : '';
@@ -475,7 +481,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
             {opponentDone ? 'DONE' : `Q${ds.opponentProgress?.currentQuestion ?? 1}`}
           </Text.Mono>
           <Text.Sans preset="label" color={theme.ink} numberOfLines={1} style={styles.currentOpponentName}>
-            {opponentName}
+            {opponentDisplayName.name}
           </Text.Sans>
         </View>
       </Card>
@@ -720,11 +726,15 @@ function PlayerHud({
   status?: string;
 }) {
   const { theme } = useTheme();
+  const displayName = splitDisplayCode(name);
   return (
     <View style={[styles.playerHud, alignRight && styles.playerHudRight]}>
       {!alignRight && <Avatar name={name} size="md" variant={avatarVariant} />}
       <View style={[styles.playerCopy, alignRight && styles.playerCopyRight]}>
-        <Text.Sans preset="label" color={theme.ink} numberOfLines={1}>{name}</Text.Sans>
+        <Text.Sans preset="label" color={theme.ink} numberOfLines={1}>
+          {displayName.name}
+          {displayName.code ? <Text.Mono preset="chipLabel" color={theme.ink3}>{`  ${displayName.code}`}</Text.Mono> : null}
+        </Text.Sans>
         <Text.Mono preset="chipLabel" color={theme.ink3} numberOfLines={1}>{status ? `${meta} · ${status}` : meta}</Text.Mono>
       </View>
       <Animated.View style={[

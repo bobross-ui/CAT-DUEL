@@ -19,6 +19,11 @@ import { useGamesStats } from '../queries/games';
 type Props = NativeStackScreenProps<RootStackParamList, 'Found'>;
 type PreStartStatus = 'waiting_for_opponent' | 'countdown';
 
+function splitDisplayCode(displayName: string) {
+  const match = displayName.match(/^(.*)(#[0-9]{6})$/);
+  return match ? { name: match[1], code: match[2] } : { name: displayName, code: null };
+}
+
 // ── Countdown digit — scales in from 1.2 on each tick ────────────────────────
 function CountdownDigit({ count, animate }: { count: number; animate: boolean }) {
   const { theme, mode } = useTheme();
@@ -73,6 +78,7 @@ function SideCard({
   winRate?: number | null;
 }) {
   const { theme } = useTheme();
+  const displayName = splitDisplayCode(name ?? 'Player');
 
   const tierLine = winRate != null
     ? `${tierName} · ${Math.round(winRate * 100)}% win`
@@ -92,8 +98,13 @@ function SideCard({
         style={styles.sideName}
         numberOfLines={1}
       >
-        {name ?? 'Player'}
+        {displayName.name}
       </AppText.Serif>
+      {displayName.code ? (
+        <AppText.Mono preset="chipLabel" color={theme.ink3}>
+          {displayName.code}
+        </AppText.Mono>
+      ) : null}
       <AppText.Mono preset="mono" color={isYou ? theme.ink2 : theme.accentDeep}>
         ◆ {elo}
       </AppText.Mono>
@@ -270,6 +281,7 @@ export default function FoundScreen({ navigation, route }: Props) {
 
   const myTierName  = profile ? getTier(profile.eloRating).name : '—';
   const oppTierName = getTier(opponent.eloRating).name;
+  const opponentDisplayName = splitDisplayCode(opponent.displayName ?? 'opponent');
 
   // Banner colors: ink bg, bg-colored text
   const bannerBg   = theme.ink;
@@ -296,7 +308,7 @@ export default function FoundScreen({ navigation, route }: Props) {
             color={theme.accentDeep}
             style={{ fontFamily: 'SourceSerif-MediumItalic' }}
           >
-            {opponent.displayName ?? 'opponent'}
+            {opponentDisplayName.name}
           </AppText.Serif>
         </View>
 

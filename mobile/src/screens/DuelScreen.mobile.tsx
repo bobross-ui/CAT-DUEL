@@ -68,6 +68,11 @@ function formatTime(s: number) {
   return `${m}:${sec}`;
 }
 
+function splitDisplayCode(displayName: string) {
+  const match = displayName.match(/^(.*)(#[0-9]{6})$/);
+  return match ? { name: match[1], code: match[2] } : { name: displayName, code: null };
+}
+
 // ── Blinking dot — 1.4s period ────────────────────────────────────────────────
 function BlinkingDot({ color, animate }: { color: string; animate: boolean }) {
   const opacity = useRef(new Animated.Value(1)).current;
@@ -352,6 +357,7 @@ export default function DuelScreen({ route, navigation }: Props) {
   const isTimerCritical = ds.timeRemaining <= 60;
   const progressPct     = ds.totalQuestions > 0 ? (ds.questionNumber - 1) / ds.totalQuestions : 0;
   const oppName         = opponent.displayName ?? 'Opp';
+  const opponentDisplayName = splitDisplayCode(oppName);
   const opponentDone    = ds.opponentProgress && ds.opponentProgress.questionsAnswered >= ds.totalQuestions;
   const category        = [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ');
   const isTita          = ds.currentQuestion.questionType === 'TITA';
@@ -389,12 +395,12 @@ export default function DuelScreen({ route, navigation }: Props) {
               }
               <AppText.Sans preset="small" color={theme.ink3} numberOfLines={1} style={{ flexShrink: 1 }}>
                 {opponentDone
-                  ? `${oppName} · done`
-                  : `${oppName} · on Q${ds.opponentProgress.currentQuestion}`}
+                  ? `${opponentDisplayName.name} · done`
+                  : `${opponentDisplayName.name} · on Q${ds.opponentProgress.currentQuestion}`}
               </AppText.Sans>
             </View>
           ) : (
-            <AppText.Sans preset="small" color={theme.ink3} numberOfLines={1}>{oppName}</AppText.Sans>
+            <AppText.Sans preset="small" color={theme.ink3} numberOfLines={1}>{opponentDisplayName.name}</AppText.Sans>
           )}
         </View>
       </View>
