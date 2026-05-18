@@ -241,6 +241,7 @@ export default function DuelScreen({ route, navigation }: Props) {
         questionNumber,
         totalQuestions,
         opponentProgress,
+        playerFinished,
       }: {
         yourScore: number;
         opponentScore: number;
@@ -250,9 +251,15 @@ export default function DuelScreen({ route, navigation }: Props) {
         questionNumber: number;
         totalQuestions: number;
         opponentProgress: OpponentProgress | null;
+        playerFinished?: boolean;
       }) => {
-        if (!mounted || !currentQuestion) return;
+        if (!mounted) return;
         if (syncedOpponent) applyOpponent(syncedOpponent);
+        if (playerFinished) {
+          setDs(prev => ({ ...prev, yourScore, opponentScore, timeRemaining, totalQuestions, opponentProgress, showFeedback: true, questionNumber: totalQuestions, ...(currentQuestion ? { currentQuestion } : {}) }));
+          return;
+        }
+        if (!currentQuestion) return;
         questionStartTime.current = Date.now();
         questionOpacity.setValue(1);
         setDs(prev => ({
@@ -352,15 +359,17 @@ export default function DuelScreen({ route, navigation }: Props) {
     }
   }
 
-  if (!ds.currentQuestion) return null;
+  const allDone         = ds.showFeedback && ds.questionNumber === ds.totalQuestions;
+
+  if (!ds.currentQuestion && !allDone) return null;
 
   const isTimerCritical = ds.timeRemaining <= 60;
   const progressPct     = ds.totalQuestions > 0 ? (ds.questionNumber - 1) / ds.totalQuestions : 0;
   const oppName         = opponent.displayName ?? 'Opp';
   const opponentDisplayName = splitDisplayCode(oppName);
   const opponentDone    = ds.opponentProgress && ds.opponentProgress.questionsAnswered >= ds.totalQuestions;
-  const category        = [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ');
-  const isTita          = ds.currentQuestion.questionType === 'TITA';
+  const category        = ds.currentQuestion ? [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ') : '';
+  const isTita          = ds.currentQuestion?.questionType === 'TITA';
 
   return (
     <ScreenTransitionView style={[styles.container, { backgroundColor: theme.bg, paddingTop: insets.top }]}>
@@ -431,6 +440,14 @@ export default function DuelScreen({ route, navigation }: Props) {
       </View>
 
       {/* ── Question area (fades on transition) ── */}
+      {allDone ? (
+        <View style={styles.waitingArea}>
+          <AppText.Serif preset="h1Serif" color={theme.ink}>You're done.</AppText.Serif>
+          <AppText.Sans preset="body" color={theme.ink3}>
+            {opponentDone ? 'Results on their way.' : `Waiting for ${opponentDisplayName.name} to finish…`}
+          </AppText.Sans>
+        </View>
+      ) : (
       <Animated.View style={[styles.questionArea, { opacity: questionOpacity }]}>
         <ScrollView contentContainerStyle={styles.questionContent} showsVerticalScrollIndicator={false}>
 
@@ -521,6 +538,7 @@ export default function DuelScreen({ route, navigation }: Props) {
           )}
         </ScrollView>
       </Animated.View>
+      )}
 
       {/* ── Footer: quit + submit ── */}
       <View style={[styles.footer, { borderTopColor: theme.line }]}>
@@ -612,6 +630,13 @@ const styles = StyleSheet.create({
 
   // Question area
   questionArea:    { flex: 1 },
+  waitingArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 32,
+  },
   questionContent: { padding: 20, paddingBottom: 16 },
 
   // Q-meta row

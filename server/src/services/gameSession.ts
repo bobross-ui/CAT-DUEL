@@ -1443,6 +1443,7 @@ export function registerGameHandlers(gameNs: Namespace): void {
           questionNumber: Math.min(playerProgress + 1, state.questionIds.length),
           totalQuestions: state.questionIds.length,
           opponentProgress: buildOpponentProgress(opponentAnswered, state.questionIds.length),
+          playerFinished: playerProgress >= state.questionIds.length,
         });
         return;
       }

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+canvas { display: block; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const BG = '#111', CAT_COL = '#7c6fce', OBS_COL = '#b0a898', GROUND_COL = '#2a2a2a', MUTED = '#555';
+const GRAVITY = 0.55, JUMP_V = -13, BASE_SPEED = 5;
+
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+
+let runner, obstacles, frame, speed, nextObs, state;
+let highScore = 0;
+
+const gY = () => c.height * 0.68;
+const rX = () => c.width * 0.13;
+
+function resize() {
+  c.width = window.innerWidth;
+  c.height = window.innerHeight;
+}
+
+function init() {
+  runner = { y: gY(), vy: 0, w: 26, h: 34, grounded: true };
+  obstacles = [];
+  frame = 0;
+  speed = BASE_SPEED;
+  nextObs = 90;
+  state = 'idle';
+}
+
+function interact() {
+  if (state === 'idle' || state === 'dead') {
+    runner.y = gY(); runner.vy = 0; runner.grounded = true;
+    obstacles = []; frame = 0; speed = BASE_SPEED; nextObs = 90;
+    state = 'running';
+  } else if (runner.grounded) {
+    runner.vy = JUMP_V;
+    runner.grounded = false;
+  }
+}
+
+window.addEventListener('resize', resize);
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); interact(); }
+});
+c.addEventListener('click', interact);
+
+function update() {
+  if (state !== 'running') return;
+  frame++;
+  speed = BASE_SPEED + frame * 0.003;
+
+  runner.vy += GRAVITY;
+  runner.y += runner.vy;
+  const gy = gY();
+  if (runner.y >= gy) { runner.y = gy; runner.vy = 0; runner.grounded = true; }
+
+  if (--nextObs <= 0) {
+    obstacles.push({ x: c.width + 10, w: 14 + Math.random() * 12, h: 20 + Math.random() * 42 });
+    nextObs = 55 + Math.random() * 70;
+  }
+  for (const o of obstacles) o.x -= speed;
+  obstacles = obstacles.filter(o => o.x + o.w > 0);
+
+  const rx = rX(), gy2 = gY();
+  for (const o of obstacles) {
+    if (rx + runner.w - 5 > o.x + 3 && rx + 5 < o.x + o.w - 3 &&
+        runner.y + runner.h - 3 > gy2 - o.h + 3) {
+      const score = Math.floor(frame / 7);
+      if (score > highScore) highScore = score;
+      state = 'dead';
+    }
+  }
+}
+
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.fill();
+}
+
+function drawCat(x, y, w, h, col) {
+  ctx.fillStyle = col;
+  rr(x, y, w, h, 5);
+  ctx.beginPath();
+  ctx.moveTo(x + 5, y); ctx.lineTo(x + 5, y - 9); ctx.lineTo(x + 13, y); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x + w - 5, y); ctx.lineTo(x + w - 5, y - 9); ctx.lineTo(x + w - 13, y); ctx.closePath(); ctx.fill();
+}
+
+function drawRetryBtn(cx, cy) {
+  const R = 11;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+  ctx.fillStyle = '#222';
+  ctx.fill();
+  ctx.strokeStyle = '#999';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, Math.PI * 0.1, Math.PI * 1.9, false);
+  ctx.stroke();
+  const ea = Math.PI * 1.9;
+  const ex = cx + R * Math.cos(ea);
+  const ey = cy + R * Math.sin(ea);
+  const ta = ea + Math.PI / 2;
+  const hs = 5.5;
+  ctx.fillStyle = '#999';
+  ctx.beginPath();
+  ctx.moveTo(ex + hs * Math.cos(ta - 0.55), ey + hs * Math.sin(ta - 0.55));
+  ctx.lineTo(ex, ey);
+  ctx.lineTo(ex + hs * Math.cos(ta + 0.55), ey + hs * Math.sin(ta + 0.55));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function draw() {
+  const gy = gY(), rx = rX(), score = Math.floor(frame / 7);
+  const now = Date.now();
+  const cx = c.width / 2;
+  const titleY = gy * 0.38;
+  const btnY = titleY + 56;
+
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  // Title
+  ctx.font = 'bold 22px "Courier New", Courier, monospace';
+  ctx.letterSpacing = '5px';
+  const base = 'WAITING FOR OPPONENT';
+  const bw = ctx.measureText(base).width;
+  ctx.fillStyle = state === 'running' ? '#282828' : '#555';
+  ctx.textAlign = 'left';
+  ctx.fillText(base, cx - bw / 2, titleY);
+  ctx.letterSpacing = '0px';
+  const t = now % 1600;
+  const dotCount = t < 400 ? 0 : t < 800 ? 1 : t < 1200 ? 2 : 3;
+  if (dotCount > 0) ctx.fillText('.'.repeat(dotCount), cx + bw / 2, titleY);
+
+  // Retry button — only after first death
+  if (state === 'dead') {
+    drawRetryBtn(cx, btnY);
+  }
+
+  // Idle hint — before first run
+  if (state === 'idle') {
+    ctx.fillStyle = '#383838';
+    ctx.font = '12px "Courier New", Courier, monospace';
+    ctx.letterSpacing = '2px';
+    ctx.textAlign = 'center';
+    ctx.fillText('SPACE OR TAP TO PLAY', cx, btnY + 6);
+    ctx.letterSpacing = '0px';
+  }
+
+  ctx.fillStyle = GROUND_COL;
+  ctx.fillRect(0, gy + runner.h + 2, c.width, 1);
+
+  drawCat(rx, runner.y, runner.w, runner.h, state === 'dead' ? '#a04040' : CAT_COL);
+
+  ctx.fillStyle = OBS_COL;
+  for (const o of obstacles) rr(o.x, gy + runner.h - o.h, o.w, o.h, 3);
+
+  // Scores (top right)
+  ctx.font = '13px monospace';
+  ctx.textAlign = 'right';
+  if (highScore > 0) {
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillText('HI ' + String(highScore).padStart(5, '0'), c.width - 90, 28);
+  }
+  ctx.fillStyle = MUTED;
+  ctx.fillText(String(score).padStart(5, '0'), c.width - 20, 28);
+}
+
+resize();
+init();
+window.focus();
+(function loop() { update(); draw(); requestAnimationFrame(loop); })();
+</script>
+</body>
+</html>

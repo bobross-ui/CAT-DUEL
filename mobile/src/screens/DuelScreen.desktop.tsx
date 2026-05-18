@@ -34,6 +34,7 @@ import { track } from '../services/analytics';
 import { queryKeys } from '../queries/keys';
 import { useTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
+import DinoGame from '../components/DinoGame';
 import MobileDuelScreen from './DuelScreen.mobile';
 
 type Props = ComponentProps<typeof MobileDuelScreen>;
@@ -153,6 +154,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
     ? ((ds.opponentProgress?.questionsAnswered ?? 0) / ds.totalQuestions)
     : 0;
   const isTita = ds.currentQuestion?.questionType === 'TITA';
+  const allDone = ds.showFeedback && ds.questionNumber === ds.totalQuestions;
 
   useDocumentTitle(`${isTimerCritical ? '(!) ' : ''}${formatTime(ds.timeRemaining)} Duel · CAT Duel`);
   useUnsavedChangesWarning(duelActive);
@@ -350,6 +352,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
         questionNumber,
         totalQuestions,
         opponentProgress,
+        playerFinished,
       }: {
         yourScore: number;
         opponentScore: number;
@@ -359,9 +362,15 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
         questionNumber: number;
         totalQuestions: number;
         opponentProgress: OpponentProgress | null;
+        playerFinished?: boolean;
       }) => {
-        if (!mounted || !currentQuestion) return;
+        if (!mounted) return;
         if (syncedOpponent) applyOpponent(syncedOpponent);
+        if (playerFinished) {
+          setDs(prev => ({ ...prev, yourScore, opponentScore, timeRemaining, totalQuestions, opponentProgress, showFeedback: true, questionNumber: totalQuestions, ...(currentQuestion ? { currentQuestion } : {}) }));
+          return;
+        }
+        if (!currentQuestion) return;
         questionStartTime.current = Date.now();
         questionOpacity.setValue(1);
         setDs(prev => ({
@@ -445,7 +454,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
     void playHaptic('timer_warning');
   }, [ds.timeRemaining, playHaptic]);
 
-  if (!ds.currentQuestion) return null;
+  if (!ds.currentQuestion && !allDone) return null;
 
   const preventContextMenu = Platform.OS === 'web'
     ? { onContextMenu: (event: { preventDefault: () => void }) => event.preventDefault() }
@@ -579,6 +588,9 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
           </View>
         )}
 
+        {allDone ? (
+          <DinoGame />
+        ) : (
         <Animated.View style={[styles.duelBody, { opacity: questionOpacity }]}>
           <View
             nativeID="duel-passage-panel"
@@ -684,6 +696,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
             </ScrollView>
           </View>
         </Animated.View>
+        )}
 
         <View style={[styles.footerRow, { borderTopColor: theme.line }]}>
           <Pressable
@@ -696,12 +709,18 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
             <Feather name="log-out" size={16} color={theme.ink3} />
             <Text.Sans preset="label" color={theme.ink3}>Quit</Text.Sans>
           </Pressable>
-          <View style={styles.submitArea}>
-            <Text.Mono preset="mono" color={theme.ink3}>{isTita ? 'Use the keypad, then submit' : 'Press Enter to submit'}</Text.Mono>
-            <View style={styles.submitButton}>
-              <Button label="Submit" onPress={submitAnswer} disabled={ds.showFeedback || (isTita ? ds.typedAnswer.trim().length === 0 : ds.selectedAnswer === null)} />
+          {allDone ? (
+            <Text.Mono preset="mono" color={theme.ink3}>
+              {opponentDone ? 'Results loading…' : `Waiting for ${opponentDisplayName.name}…`}
+            </Text.Mono>
+          ) : (
+            <View style={styles.submitArea}>
+              <Text.Mono preset="mono" color={theme.ink3}>{isTita ? 'Use the keypad, then submit' : 'Press Enter to submit'}</Text.Mono>
+              <View style={styles.submitButton}>
+                <Button label="Submit" onPress={submitAnswer} disabled={ds.showFeedback || (isTita ? ds.typedAnswer.trim().length === 0 : ds.selectedAnswer === null)} />
+              </View>
             </View>
-          </View>
+          )}
         </View>
       </View>
     </DesktopFrame>
