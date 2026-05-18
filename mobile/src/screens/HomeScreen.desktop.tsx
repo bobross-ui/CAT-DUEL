@@ -42,6 +42,11 @@ function formatDelta(delta: number | undefined) {
   return delta > 0 ? `+${delta}` : `${delta}`;
 }
 
+function splitDisplayCode(displayName: string) {
+  const match = displayName.match(/^(.*)(#[0-9]{6})$/);
+  return match ? { name: match[1], code: match[2] } : { name: displayName, code: null };
+}
+
 function formatAgo(value: string) {
   const then = new Date(value).getTime();
   const diff = Math.max(0, Date.now() - then);
@@ -138,26 +143,29 @@ export default function HomeScreenDesktop({ navigation }: Props) {
               <Feather name="arrow-up-right" size={16} color={theme.ink3} />
             </View>
             <View style={styles.leaderList}>
-              {leaders.length > 0 ? leaders.map((entry) => (
-                <View
-                  key={entry.userId}
-                  style={[
-                    styles.leaderRow,
-                    entry.isCurrentUser && { backgroundColor: theme.accentSoft },
-                  ]}
-                >
-                  <Text.Mono preset="mono" color={theme.ink3} style={styles.leaderRank}>
-                    #{entry.rank}
-                  </Text.Mono>
-                  <Avatar name={entry.displayName} size="sm" variant={entry.isCurrentUser ? 'you' : 'opponent'} />
-                  <View style={styles.leaderName}>
-                    <Text.Sans preset="label" color={theme.ink} numberOfLines={1}>
-                      {entry.displayName}
-                    </Text.Sans>
-                    <Text.Mono preset="chipLabel" color={theme.ink3}>◆ {entry.eloRating}</Text.Mono>
+              {leaders.length > 0 ? leaders.map((entry) => {
+                const displayName = splitDisplayCode(entry.displayName);
+                return (
+                  <View
+                    key={entry.userId}
+                    style={[
+                      styles.leaderRow,
+                      entry.isCurrentUser && { backgroundColor: theme.accentSoft },
+                    ]}
+                  >
+                    <Text.Mono preset="mono" color={theme.ink3} style={styles.leaderRank}>
+                      #{entry.rank}
+                    </Text.Mono>
+                    <Avatar name={entry.displayName} size="sm" variant={entry.isCurrentUser ? 'you' : 'opponent'} />
+                    <View style={styles.leaderName}>
+                      <Text.Sans preset="label" color={theme.ink} numberOfLines={1}>
+                        {displayName.name}
+                      </Text.Sans>
+                      <Text.Mono preset="chipLabel" color={theme.ink3}>◆ {entry.eloRating}</Text.Mono>
+                    </View>
                   </View>
-                </View>
-              )) : (
+                );
+              }) : (
                 <View style={styles.emptySide}>
                   <Text.Serif preset="h1Serif" color={theme.ink}>No ranked table yet.</Text.Serif>
                   <Text.Sans preset="small" color={theme.ink3}>Play a game to show on the leaderboard.</Text.Sans>
