@@ -93,6 +93,10 @@ function activeBotGameState(overrides: Record<string, unknown> = {}) {
       },
     },
     passages: {},
+    player1Queue: ['q1'],
+    player2Queue: ['q1'],
+    player1SeenIds: ['q1'],
+    player2SeenIds: ['q1'],
     player1Progress: 0,
     player2Progress: 0,
     player1Score: 0,
@@ -179,14 +183,46 @@ describe('bot game session runtime', () => {
         },
       }),
       player2Progress: JSON.stringify(1),
+      player2Queue: JSON.stringify([]),
+      player2SeenIds: JSON.stringify(['q1']),
       player2Score: JSON.stringify(1),
     });
     expect(gameNs.to).toHaveBeenCalledWith(gameId);
     expect(gameNs.emit).toHaveBeenCalledWith('opponent:scored', { opponentScore: 1 });
     expect(gameNs.emit).toHaveBeenCalledWith('opponent:progress', {
-      currentQuestion: 1,
       questionsAnswered: 1,
+      questionsSkipped: 0,
     });
+  });
+
+  it('shifts queue head and appends new head to seenIds on bot answer', async () => {
+    const multi = createMulti();
+    (redis.multi as jest.Mock).mockReturnValueOnce(multi);
+    const multiQuestionState = activeBotGameState({
+      questionIds: ['q1', 'q2', 'q3'],
+      questions: {
+        q1: { id: 'q1', category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: '40 + 2?', options: null, passageId: null },
+        q2: { id: 'q2', category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: '40 + 3?', options: null, passageId: null },
+        q3: { id: 'q3', category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: '40 + 4?', options: null, passageId: null },
+      },
+      answerKeys: {
+        q1: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        q2: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+        q3: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '44' },
+      },
+      player1Queue: ['q1', 'q2', 'q3'],
+      player2Queue: ['q1', 'q2', 'q3'],
+      player1SeenIds: ['q1'],
+      player2SeenIds: ['q1'],
+    });
+    (redis.hgetall as jest.Mock).mockResolvedValueOnce(serializeState(multiQuestionState));
+
+    await submitBotAnswer(gameId, 'bot-1', 30_000, gameNamespace() as never);
+
+    expect(multi.hset).toHaveBeenCalledWith(`game:${gameId}`, expect.objectContaining({
+      player2Queue: JSON.stringify(['q2', 'q3']),
+      player2SeenIds: JSON.stringify(['q1', 'q2']),
+    }));
   });
 
   it('autojoinBotPlayer marks the bot joined and starts countdown when the human already joined', async () => {

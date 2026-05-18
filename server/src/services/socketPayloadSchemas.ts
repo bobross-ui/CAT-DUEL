@@ -13,3 +13,13 @@ export const socketAnswerSubmitPayloadSchema = z.object({
   ...answerPayloadShape,
   timeTakenMs: z.number().int().min(0).max(MAX_REPORTED_ANSWER_TIME_MS).optional(),
 }).strict().superRefine(addAnswerModeIssue);
+
+export const socketQuestionSkipPayloadSchema = z.object({
+  gameId: z.string().uuid(),
+  questionId: z.string().uuid(),
+}).strict();
+
+export const socketQuestionJumpPayloadSchema = z.object({
+  gameId: z.string().uuid(),
+  questionId: z.string().uuid(),
+}).strict();

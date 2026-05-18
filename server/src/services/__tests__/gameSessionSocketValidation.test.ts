@@ -61,6 +61,16 @@ function serializeState(state: Record<string, unknown>) {
   );
 }
 
+function createMultiFromMock() {
+  return {
+    del: jest.fn().mockReturnThis(),
+    exec: jest.fn().mockResolvedValue([]),
+    expire: jest.fn().mockReturnThis(),
+    hset: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+  };
+}
+
 function activeGameState(overrides: Record<string, unknown> = {}) {
   return {
     gameId,
@@ -95,6 +105,10 @@ function activeGameState(overrides: Record<string, unknown> = {}) {
       },
     },
     passages: {},
+    player1Queue: [questionId],
+    player2Queue: [questionId],
+    player1SeenIds: [questionId],
+    player2SeenIds: [questionId],
     player1Progress: 0,
     player2Progress: 0,
     player1Score: 0,
@@ -197,7 +211,284 @@ describe('game socket payload validation', () => {
 
     expect(socket.emit).toHaveBeenCalledWith('game:sync', expect.objectContaining({
       opponent: botProfile,
+      yourSeenIds: [questionId],
     }));
+  });
+
+  it('syncs queue-head current question plus seen and skipped ids on reconnect', async () => {
+    const q2 = '00000000-0000-4000-8000-000000000003';
+    const q3 = '00000000-0000-4000-8000-000000000004';
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState({
+      questionIds: [questionId, q2, q3],
+      questions: {
+        [questionId]: { id: questionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q1', options: null, passageId: null },
+        [q2]: { id: q2, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q2', options: null, passageId: null },
+        [q3]: { id: q3, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q3', options: null, passageId: null },
+      },
+      answerKeys: {
+        [questionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        [q2]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+        [q3]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '44' },
+      },
+      player1Queue: [q3, questionId],
+      player1SeenIds: [questionId, q2, q3],
+      player1Answers: { [q2]: { selected: null, typed: '43', correct: true, timeMs: 1000 } },
+      player1Progress: 1,
+    })));
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('game:join')?.({ gameId });
+
+    expect(socket.emit).toHaveBeenCalledWith('game:sync', expect.objectContaining({
+      currentQuestion: expect.objectContaining({ id: q3 }),
+      currentQuestionId: q3,
+      questionNumber: 3,
+      questionIds: [questionId, q2, q3],
+      yourSeenIds: [questionId, q2, q3],
+      yourSkippedIds: [questionId],
+    }));
+  });
+
+  it('shifts the human player queue and emits the next question on answer:submit', async () => {
+    const secondQuestionId = '00000000-0000-4000-8000-000000000003';
+    const multi = createMultiFromMock();
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState({
+      questionIds: [questionId, secondQuestionId],
+      questions: {
+        [questionId]: { id: questionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'What is 40 + 2?', options: null, passageId: null },
+        [secondQuestionId]: { id: secondQuestionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'What is 40 + 3?', options: null, passageId: null },
+      },
+      answerKeys: {
+        [questionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        [secondQuestionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+      },
+      player1Queue: [questionId, secondQuestionId],
+      player2Queue: [questionId, secondQuestionId],
+      player1SeenIds: [questionId],
+      player2SeenIds: [questionId],
+    })));
+    (redis.multi as jest.Mock).mockReturnValueOnce(multi);
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('answer:submit')?.({
+      gameId,
+      questionId,
+      typedAnswer: '42',
+    });
+
+    expect(multi.hset).toHaveBeenCalledWith(`game:${gameId}`, expect.objectContaining({
+      player1Queue: JSON.stringify([secondQuestionId]),
+      player1SeenIds: JSON.stringify([questionId, secondQuestionId]),
+      player1Progress: JSON.stringify(1),
+    }));
+    expect(socket.emit).toHaveBeenCalledWith('answer:result', expect.objectContaining({
+      isCorrect: true,
+      yourScore: 1,
+    }));
+    expect(socket.emit).toHaveBeenCalledWith('game:question', expect.objectContaining({
+      question: expect.objectContaining({ id: secondQuestionId }),
+      questionNumber: 2,
+      totalQuestions: 2,
+    }));
+  });
+
+  it('rejects answer:submit when questionId is not the queue head', async () => {
+    const staleQuestionId = '00000000-0000-4000-8000-000000000004';
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState()));
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('answer:submit')?.({
+      gameId,
+      questionId: staleQuestionId,
+      typedAnswer: '42',
+    });
+
+    expect(redis.multi).not.toHaveBeenCalled();
+    expect(socket.emit).not.toHaveBeenCalled();
+  });
+
+  it('rotates queue head to tail on question:skip and emits next question', async () => {
+    const secondQuestionId = '00000000-0000-4000-8000-000000000005';
+    const multi = createMultiFromMock();
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState({
+      questionIds: [questionId, secondQuestionId],
+      questions: {
+        [questionId]: { id: questionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q1', options: null, passageId: null },
+        [secondQuestionId]: { id: secondQuestionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q2', options: null, passageId: null },
+      },
+      answerKeys: {
+        [questionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        [secondQuestionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+      },
+      player1Queue: [questionId, secondQuestionId],
+      player2Queue: [questionId, secondQuestionId],
+      player1SeenIds: [questionId],
+      player2SeenIds: [questionId],
+    })));
+    (redis.multi as jest.Mock).mockReturnValueOnce(multi);
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('question:skip')?.({ gameId, questionId });
+
+    expect(multi.hset).toHaveBeenCalledWith(`game:${gameId}`, expect.objectContaining({
+      player1Queue: JSON.stringify([secondQuestionId, questionId]),
+      player1SeenIds: JSON.stringify([questionId, secondQuestionId]),
+    }));
+    expect(socket.emit).toHaveBeenCalledWith('game:question', expect.objectContaining({
+      question: expect.objectContaining({ id: secondQuestionId }),
+      questionNumber: 2,
+      totalQuestions: 2,
+    }));
+  });
+
+  it('emits opponent:progress with questionsSkipped after a skip', async () => {
+    const secondQuestionId = '00000000-0000-4000-8000-000000000006';
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState({
+      questionIds: [questionId, secondQuestionId],
+      questions: {
+        [questionId]: { id: questionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q1', options: null, passageId: null },
+        [secondQuestionId]: { id: secondQuestionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q2', options: null, passageId: null },
+      },
+      answerKeys: {
+        [questionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        [secondQuestionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+      },
+      player1Queue: [questionId, secondQuestionId],
+      player2Queue: [questionId, secondQuestionId],
+      player1SeenIds: [questionId],
+      player2SeenIds: [questionId],
+    })));
+    const opponentEmit = jest.fn();
+    const { socket, socketHandlers } = createHarness();
+    (socket.to as jest.Mock).mockReturnValue({ emit: opponentEmit });
+
+    await socketHandlers.get('question:skip')?.({ gameId, questionId });
+
+    expect(opponentEmit).toHaveBeenCalledWith('opponent:progress', {
+      questionsAnswered: 0,
+      questionsSkipped: 1,
+    });
+  });
+
+  it('emits opponent:progress shape (not null) when skipping a single-question queue', async () => {
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState()));
+    const opponentEmit = jest.fn();
+    const { socket, socketHandlers } = createHarness();
+    (socket.to as jest.Mock).mockReturnValue({ emit: opponentEmit });
+
+    await socketHandlers.get('question:skip')?.({ gameId, questionId });
+
+    expect(opponentEmit).toHaveBeenCalledWith('opponent:progress', {
+      questionsAnswered: 0,
+      questionsSkipped: 0,
+    });
+  });
+
+  it('rejects question:skip when questionId is not the queue head', async () => {
+    const otherQuestionId = '00000000-0000-4000-8000-000000000007';
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState()));
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('question:skip')?.({ gameId, questionId: otherQuestionId });
+
+    expect(redis.multi).not.toHaveBeenCalled();
+    expect(socket.emit).not.toHaveBeenCalled();
+  });
+
+  it('reorders queue on question:jump moving current to tail and target to head', async () => {
+    // Scenario: player has skipped q1 and q2, currently on q3. Jumps back to q1.
+    const q2 = '00000000-0000-4000-8000-000000000010';
+    const q3 = '00000000-0000-4000-8000-000000000011';
+    const multi = createMultiFromMock();
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState({
+      questionIds: [questionId, q2, q3],
+      questions: {
+        [questionId]: { id: questionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q1', options: null, passageId: null },
+        [q2]: { id: q2, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q2', options: null, passageId: null },
+        [q3]: { id: q3, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q3', options: null, passageId: null },
+      },
+      answerKeys: {
+        [questionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        [q2]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+        [q3]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '44' },
+      },
+      player1Queue: [q3, questionId, q2],
+      player2Queue: [q3, questionId, q2],
+      player1SeenIds: [questionId, q2, q3],
+      player2SeenIds: [questionId, q2, q3],
+    })));
+    (redis.multi as jest.Mock).mockReturnValueOnce(multi);
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('question:jump')?.({ gameId, questionId });
+
+    expect(multi.hset).toHaveBeenCalledWith(`game:${gameId}`, expect.objectContaining({
+      player1Queue: JSON.stringify([questionId, q2, q3]),
+    }));
+    expect(socket.emit).toHaveBeenCalledWith('game:question', expect.objectContaining({
+      question: expect.objectContaining({ id: questionId }),
+      questionNumber: 1,
+      totalQuestions: 3,
+    }));
+  });
+
+  it('rejects question:jump when target is not in seenIds', async () => {
+    const unseen = '00000000-0000-4000-8000-000000000012';
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState()));
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('question:jump')?.({ gameId, questionId: unseen });
+
+    expect(redis.multi).not.toHaveBeenCalled();
+    expect(socket.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects question:jump when target is already answered', async () => {
+    const q2 = '00000000-0000-4000-8000-000000000013';
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState({
+      questionIds: [questionId, q2],
+      questions: {
+        [questionId]: { id: questionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q1', options: null, passageId: null },
+        [q2]: { id: q2, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q2', options: null, passageId: null },
+      },
+      answerKeys: {
+        [questionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        [q2]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+      },
+      player1Queue: [q2],
+      player2Queue: [q2],
+      player1SeenIds: [questionId, q2],
+      player2SeenIds: [questionId, q2],
+      player1Answers: { [questionId]: { selected: null, typed: '42', correct: true, timeMs: 1000 } },
+      player1Progress: 1,
+    })));
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('question:jump')?.({ gameId, questionId });
+
+    expect(redis.multi).not.toHaveBeenCalled();
+    expect(socket.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects question:jump when target is the current queue head', async () => {
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState()));
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('question:jump')?.({ gameId, questionId });
+
+    expect(redis.multi).not.toHaveBeenCalled();
+    expect(socket.emit).not.toHaveBeenCalled();
   });
 
   it('rejects answers that pass transport schema but do not match the server-side question type', async () => {

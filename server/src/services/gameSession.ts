@@ -14,6 +14,8 @@ import { enforceSocketEventLimit } from './socketRateLimit';
 import {
   socketAnswerSubmitPayloadSchema,
   socketGameIdPayloadSchema,
+  socketQuestionJumpPayloadSchema,
+  socketQuestionSkipPayloadSchema,
 } from './socketPayloadSchemas';
 import { getPoolIds, getQuestionsContent, contentKey, CONTENT_TTL } from './questionPool';
 import { logger } from '../lib/logger';
@@ -107,6 +109,16 @@ interface GameState {
   questions: Record<string, ClientQuestion>;
   answerKeys: Record<string, AnswerKey>; // server-only, never sent to clients
   passages: Record<string, ClientPassage>;
+  // player{N}Queue is the ordered list of question IDs still facing player N.
+  // queue[0] is what they're being served right now; on answer it shifts off,
+  // on skip it rotates to the tail.
+  player1Queue: string[];
+  player2Queue: string[];
+  // player{N}SeenIds is the set of question IDs we've ever served to player N.
+  // Used to distinguish skipped (seen, not answered) from unseen for the navigator.
+  player1SeenIds: string[];
+  player2SeenIds: string[];
+  // Answered count. Still used for HUD, results, persistMatch.
   player1Progress: number;
   player2Progress: number;
   player1Score: number;
@@ -131,12 +143,11 @@ export type PendingMatchPayload = {
 };
 type MatchPersistUserStats = { gamesPlayed: number; wins: number; draws: number; peakElo: number };
 
-function buildOpponentProgress(answered: number, totalQuestions: number) {
-  if (answered <= 0) return null;
-
+function buildOpponentProgress(answered: number, seenCount: number, queueLength: number) {
+  const skipped = Math.max(0, seenCount - answered - (queueLength > 0 ? 1 : 0));
   return {
-    currentQuestion: Math.min(answered + 1, totalQuestions),
     questionsAnswered: answered,
+    questionsSkipped: skipped,
   };
 }
 
@@ -803,7 +814,7 @@ export async function submitBotAnswer(
     return;
   }
 
-  const questionId = state.questionIds[state.player2Progress];
+  const questionId = state.player2Queue[0];
   if (!questionId || state.player2Answers[questionId]) return;
 
   const answer = botAnswerForQuestion(state, questionId);
@@ -817,8 +828,18 @@ export async function submitBotAnswer(
   };
   state.player2Progress += 1;
   if (answer.isCorrect) state.player2Score += 1;
+  state.player2Queue = state.player2Queue.slice(1);
+  const nextQuestionId = state.player2Queue[0];
+  if (nextQuestionId && !state.player2SeenIds.includes(nextQuestionId)) {
+    state.player2SeenIds = [...state.player2SeenIds, nextQuestionId];
+  }
 
-  const changedFields: (keyof GameState)[] = ['player2Answers', 'player2Progress'];
+  const changedFields: (keyof GameState)[] = [
+    'player2Answers',
+    'player2Progress',
+    'player2Queue',
+    'player2SeenIds',
+  ];
   if (answer.isCorrect) changedFields.push('player2Score');
   await saveGameStateFields(state, changedFields);
 
@@ -827,18 +848,19 @@ export async function submitBotAnswer(
   });
   gameNs.to(gameId).emit(
     'opponent:progress',
-    buildOpponentProgress(state.player2Progress, state.questionIds.length),
+    buildOpponentProgress(
+      state.player2Progress,
+      state.player2SeenIds.length,
+      state.player2Queue.length,
+    ),
   );
 
-  if (
-    state.player1Progress >= state.questionIds.length &&
-    state.player2Progress >= state.questionIds.length
-  ) {
+  if (state.player1Queue.length === 0 && state.player2Queue.length === 0) {
     await endGame(gameId, gameNs);
     return;
   }
 
-  if (state.player2Progress < state.questionIds.length) {
+  if (state.player2Queue.length > 0) {
     startBotAnswering(gameId, botId, gameNs);
   }
 }
@@ -902,6 +924,8 @@ async function startCountdown(
 
     const firstQuestion = current.questions[current.questionIds[0]] ?? null;
     const firstQuestionId = current.questionIds[0];
+    current.player1SeenIds = [firstQuestionId];
+    current.player2SeenIds = [firstQuestionId];
     const servedAt = current.startedAt!;
     await Promise.all([
       incrementQuestionServeCounts(current.questionIds),
@@ -977,9 +1001,10 @@ async function handleAnswer(
   const progressKey = isPlayer1 ? 'player1Progress' : 'player2Progress';
   const answerKey   = isPlayer1 ? 'player1Answers'  : 'player2Answers';
   const scoreKey    = isPlayer1 ? 'player1Score'     : 'player2Score';
+  const queueKey    = isPlayer1 ? 'player1Queue'     : 'player2Queue';
+  const seenKey     = isPlayer1 ? 'player1SeenIds'   : 'player2SeenIds';
 
-  const playerProgress = state[progressKey];
-  const expectedQuestionId = state.questionIds[playerProgress];
+  const expectedQuestionId = state[queueKey][0];
 
   // Reject if this isn't the expected question
   if (questionId !== expectedQuestionId) return;
@@ -999,7 +1024,7 @@ async function handleAnswer(
   }
 
   const isCorrect = gradeAnswer(expectedAnswer, { selectedAnswer, typedAnswer });
-  logger.info({ event: 'game:answer', gameId, userId, questionId, questionNumber: playerProgress + 1, isCorrect }, 'Answer submitted');
+  logger.info({ event: 'game:answer', gameId, userId, questionId, questionNumber: state[progressKey] + 1, isCorrect }, 'Answer submitted');
 
   const servedAtRaw = await redis.get(servedAtKey(gameId, userId, questionId));
   const timeTakenMs = servedAtRaw ? Date.now() - parseInt(servedAtRaw, 10) : 0;
@@ -1012,6 +1037,11 @@ async function handleAnswer(
   };
   state[progressKey] += 1;
   if (isCorrect) state[scoreKey] += 1;
+  state[queueKey] = state[queueKey].slice(1);
+  const nextQuestionId = state[queueKey][0];
+  if (nextQuestionId && !state[seenKey].includes(nextQuestionId)) {
+    state[seenKey] = [...state[seenKey], nextQuestionId];
+  }
 
   // Emit to both players immediately — score is already computed in memory,
   // no need to wait for the Redis write before notifying clients
@@ -1027,34 +1057,143 @@ async function handleAnswer(
     opponentScore: state[scoreKey],
   });
 
-  // Persist state and read the preloaded next question
   const newProgress = state[progressKey];
-  socket.to(gameId).emit('opponent:progress', buildOpponentProgress(newProgress, state.questionIds.length));
-  const changedFields: (keyof GameState)[] = [answerKey, progressKey];
+  socket.to(gameId).emit('opponent:progress', buildOpponentProgress(
+    newProgress,
+    state[seenKey].length,
+    state[queueKey].length,
+  ));
+  const changedFields: (keyof GameState)[] = [answerKey, progressKey, queueKey, seenKey];
   if (isCorrect) changedFields.push(scoreKey);
 
-  const nextQuestion = newProgress < state.questionIds.length
-    ? state.questions[state.questionIds[newProgress]] ?? null
-    : null;
+  const nextQuestion = nextQuestionId ? state.questions[nextQuestionId] ?? null : null;
   await saveGameStateFields(state, changedFields);
 
-  if (nextQuestion) {
-    const nextQuestionId = state.questionIds[newProgress];
+  if (nextQuestion && nextQuestionId) {
     await redis.set(servedAtKey(gameId, userId, nextQuestionId), Date.now(), 'EX', state.durationSeconds + 60);
     socket.emit('game:question', {
       question: withPassage(nextQuestion, state.passages),
-      questionNumber: newProgress + 1,
+      questionNumber: state.questionIds.indexOf(nextQuestionId) + 1,
       totalQuestions: state.questionIds.length,
     });
   }
 
-  // End early if both players have answered every question
-  if (
-    state.player1Progress >= state.questionIds.length &&
-    state.player2Progress >= state.questionIds.length
-  ) {
+  // End early if both players have emptied their queue
+  if (state.player1Queue.length === 0 && state.player2Queue.length === 0) {
     await endGame(gameId, gameNs);
   }
+}
+
+async function handleSkip(
+  socket: Socket,
+  userId: string,
+  gameId: string,
+  questionId: string,
+): Promise<void> {
+  const state = await getGameState(gameId);
+  if (!state || state.status !== 'ACTIVE') return;
+
+  if (isAnswerLate(state.startedAt, state.durationSeconds)) return;
+
+  const isPlayer1 = state.player1Id === userId;
+  if (!isPlayer1 && state.player2Id !== userId) return;
+
+  const queueKey    = isPlayer1 ? 'player1Queue'   : 'player2Queue';
+  const seenKey     = isPlayer1 ? 'player1SeenIds' : 'player2SeenIds';
+  const progressKey = isPlayer1 ? 'player1Progress': 'player2Progress';
+
+  const queue = state[queueKey];
+  if (queue.length === 0 || queue[0] !== questionId) return;
+
+  // Rotate head to tail. Single-question queues stay put but still re-served
+  // so the client can reset its served-at timer and selection state.
+  const newQueue = queue.length > 1 ? [...queue.slice(1), queue[0]] : queue.slice();
+  state[queueKey] = newQueue;
+
+  const newHead = newQueue[0];
+  if (newHead && !state[seenKey].includes(newHead)) {
+    state[seenKey] = [...state[seenKey], newHead];
+  }
+
+  logger.info(
+    { event: 'game:skip', gameId, userId, questionId, queueLength: newQueue.length },
+    'Question skipped',
+  );
+
+  await saveGameStateFields(state, [queueKey, seenKey]);
+
+  if (newHead) {
+    await redis.set(servedAtKey(gameId, userId, newHead), Date.now(), 'EX', state.durationSeconds + 60);
+    const nextQuestion = state.questions[newHead] ?? null;
+    if (nextQuestion) {
+      socket.emit('game:question', {
+        question: withPassage(nextQuestion, state.passages),
+        questionNumber: state.questionIds.indexOf(newHead) + 1,
+        totalQuestions: state.questionIds.length,
+      });
+    }
+  }
+
+  socket.to(gameId).emit('opponent:progress', buildOpponentProgress(
+    state[progressKey],
+    state[seenKey].length,
+    state[queueKey].length,
+  ));
+}
+
+async function handleJump(
+  socket: Socket,
+  userId: string,
+  gameId: string,
+  targetQuestionId: string,
+): Promise<void> {
+  const state = await getGameState(gameId);
+  if (!state || state.status !== 'ACTIVE') return;
+
+  if (isAnswerLate(state.startedAt, state.durationSeconds)) return;
+
+  const isPlayer1 = state.player1Id === userId;
+  if (!isPlayer1 && state.player2Id !== userId) return;
+
+  const queueKey    = isPlayer1 ? 'player1Queue'   : 'player2Queue';
+  const seenKey     = isPlayer1 ? 'player1SeenIds' : 'player2SeenIds';
+  const answerKey   = isPlayer1 ? 'player1Answers' : 'player2Answers';
+  const progressKey = isPlayer1 ? 'player1Progress': 'player2Progress';
+
+  const queue = state[queueKey];
+  const current = queue[0];
+  if (!current || current === targetQuestionId) return;
+  if (!state[seenKey].includes(targetQuestionId)) return;
+  if (state[answerKey][targetQuestionId]) return;
+  if (!queue.includes(targetQuestionId)) return;
+
+  // Reorder: target becomes head, displaced current goes to tail,
+  // other queue items preserve their relative order.
+  const filtered = queue.filter((q) => q !== current && q !== targetQuestionId);
+  state[queueKey] = [targetQuestionId, ...filtered, current];
+
+  logger.info(
+    { event: 'game:jump', gameId, userId, targetQuestionId },
+    'Player jumped to skipped question',
+  );
+
+  await saveGameStateFields(state, [queueKey]);
+
+  await redis.set(servedAtKey(gameId, userId, targetQuestionId), Date.now(), 'EX', state.durationSeconds + 60);
+  const nextQuestion = state.questions[targetQuestionId] ?? null;
+  if (nextQuestion) {
+    socket.emit('game:question', {
+      question: withPassage(nextQuestion, state.passages),
+      questionNumber: state.questionIds.indexOf(targetQuestionId) + 1,
+      totalQuestions: state.questionIds.length,
+    });
+  }
+
+  socket.to(gameId).emit('opponent:progress', buildOpponentProgress(
+    state[progressKey],
+    state[seenKey].length,
+    state[queueKey].length,
+  ));
 }
 
 export async function endGame(
@@ -1355,6 +1494,10 @@ export async function initializeGame(
     questions,
     answerKeys,
     passages,
+    player1Queue: questionIds.slice(),
+    player2Queue: questionIds.slice(),
+    player1SeenIds: [],
+    player2SeenIds: [],
     player1Progress: 0,
     player2Progress: 0,
     player1Score: 0,
@@ -1426,10 +1569,20 @@ export function registerGameHandlers(gameNs: Namespace): void {
         }
 
         // Reconnection: send full current state so client can resume
-        const playerProgress = isPlayer1User ? state.player1Progress : state.player2Progress;
         const opponentAnswered = isPlayer1User ? state.player2Progress : state.player1Progress;
-        const questionIndex = Math.min(playerProgress, state.questionIds.length - 1);
-        const currentQuestion = state.questions[state.questionIds[questionIndex]] ?? null;
+        const opponentSeenCount = (isPlayer1User ? state.player2SeenIds : state.player1SeenIds).length;
+        const opponentQueueLength = (isPlayer1User ? state.player2Queue : state.player1Queue).length;
+        const playerQueue = isPlayer1User ? state.player1Queue : state.player2Queue;
+        const playerSeenIds = isPlayer1User ? state.player1SeenIds : state.player2SeenIds;
+        const playerAnswers = isPlayer1User ? state.player1Answers : state.player2Answers;
+        const currentQuestionId = playerQueue[0];
+        const currentQuestion = currentQuestionId ? state.questions[currentQuestionId] ?? null : null;
+        const questionNumber = currentQuestionId
+          ? state.questionIds.indexOf(currentQuestionId) + 1
+          : state.questionIds.length;
+        const playerSkippedIds = playerSeenIds.filter((id) =>
+          id !== currentQuestionId && !playerAnswers[id]
+        );
         const elapsed = Math.floor(
           (Date.now() - (state.startedAt ?? Date.now())) / 1000,
         );
@@ -1440,10 +1593,14 @@ export function registerGameHandlers(gameNs: Namespace): void {
           opponent: isPlayer1User ? state.player2Profile : state.player1Profile,
           timeRemaining: Math.max(0, state.durationSeconds - elapsed),
           currentQuestion: currentQuestion ? withPassage(currentQuestion, state.passages) : null,
-          questionNumber: Math.min(playerProgress + 1, state.questionIds.length),
+          currentQuestionId,
+          questionNumber,
+          questionIds: state.questionIds,
           totalQuestions: state.questionIds.length,
-          opponentProgress: buildOpponentProgress(opponentAnswered, state.questionIds.length),
-          playerFinished: playerProgress >= state.questionIds.length,
+          yourSeenIds: playerSeenIds,
+          yourSkippedIds: playerSkippedIds,
+          opponentProgress: buildOpponentProgress(opponentAnswered, opponentSeenCount, opponentQueueLength),
+          playerFinished: playerQueue.length === 0,
         });
         return;
       }
@@ -1517,6 +1674,44 @@ export function registerGameHandlers(gameNs: Namespace): void {
         } catch (err) {
           Sentry.captureException(err, { extra: { gameId, userId: user.id } });
           logger.error({ err, gameId }, 'Answer handling error');
+        }
+      },
+    );
+
+    socket.on(
+      'question:skip',
+      async (payload: unknown) => {
+        let gameId: string | undefined;
+        try {
+          if (!(await enforceSocketEventLimit(socket, 'question:skip', user.id))) return;
+
+          const parsedPayload = parseSocketPayload(socket, 'question:skip', socketQuestionSkipPayloadSchema, payload);
+          if (!parsedPayload) return;
+          gameId = parsedPayload.gameId;
+
+          await handleSkip(socket, user.id, parsedPayload.gameId, parsedPayload.questionId);
+        } catch (err) {
+          Sentry.captureException(err, { extra: { gameId, userId: user.id } });
+          logger.error({ err, gameId }, 'Skip handling error');
+        }
+      },
+    );
+
+    socket.on(
+      'question:jump',
+      async (payload: unknown) => {
+        let gameId: string | undefined;
+        try {
+          if (!(await enforceSocketEventLimit(socket, 'question:jump', user.id))) return;
+
+          const parsedPayload = parseSocketPayload(socket, 'question:jump', socketQuestionJumpPayloadSchema, payload);
+          if (!parsedPayload) return;
+          gameId = parsedPayload.gameId;
+
+          await handleJump(socket, user.id, parsedPayload.gameId, parsedPayload.questionId);
+        } catch (err) {
+          Sentry.captureException(err, { extra: { gameId, userId: user.id } });
+          logger.error({ err, gameId }, 'Jump handling error');
         }
       },
     );
@@ -1641,9 +1836,12 @@ export async function getActiveGameForUser(userId: string): Promise<{
   }
 
   const isPlayer1User = isPlayer1(state, userId);
-  const playerProgress = isPlayer1User ? state.player1Progress : state.player2Progress;
-  const questionIndex = Math.min(playerProgress, state.questionIds.length - 1);
-  const firstQuestion = state.questions[state.questionIds[questionIndex]] ?? null;
+  const playerQueue = isPlayer1User ? state.player1Queue : state.player2Queue;
+  // When the queue is empty the player has finished but the match is still ACTIVE
+  // (opponent hasn't finished). Fall back to the last seen question so the client
+  // has something to render until the socket game:sync arrives with playerFinished=true.
+  const resumeQuestionId = playerQueue[0] ?? state.questionIds[state.questionIds.length - 1];
+  const firstQuestion = resumeQuestionId ? state.questions[resumeQuestionId] ?? null : null;
   if (!firstQuestion) {
     await redis.del(`active_game:${userId}`);
     return null;
@@ -1658,7 +1856,7 @@ export async function getActiveGameForUser(userId: string): Promise<{
       duration: Math.max(0, state.durationSeconds - elapsed),
       totalQuestions: state.questionIds.length,
       firstQuestion: withPassage(firstQuestion, state.passages),
-      questionNumber: Math.min(playerProgress + 1, state.questionIds.length),
+      questionNumber: state.questionIds.indexOf(resumeQuestionId) + 1,
     },
   };
 }

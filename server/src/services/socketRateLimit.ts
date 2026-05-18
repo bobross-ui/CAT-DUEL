@@ -43,6 +43,20 @@ const socketEventLimiters = {
     duration: 60,
     rejectIfRedisNotReady: true,
   }),
+  'question:skip': new RateLimiterRedis({
+    storeClient: redis,
+    keyPrefix: 'rate:socket:event:question-skip',
+    points: 60,
+    duration: 60,
+    rejectIfRedisNotReady: true,
+  }),
+  'question:jump': new RateLimiterRedis({
+    storeClient: redis,
+    keyPrefix: 'rate:socket:event:question-jump',
+    points: 60,
+    duration: 60,
+    rejectIfRedisNotReady: true,
+  }),
   'guest:start': new RateLimiterRedis({
     storeClient: redis,
     keyPrefix: 'rate:socket:event:guest-start',

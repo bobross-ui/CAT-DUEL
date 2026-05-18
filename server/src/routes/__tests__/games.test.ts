@@ -35,6 +35,18 @@ jest.mock('../../models/prisma', () => ({
 const findMany = prisma.match.findMany as jest.Mock;
 const findUnique = prisma.user.findUnique as jest.Mock;
 
+type GamesResponseBody = {
+  success?: boolean;
+  error?: {
+    code: string;
+  };
+  data: {
+    entries: unknown[];
+    pagination: unknown;
+    eloHistory: unknown[];
+  } & Record<string, unknown>;
+};
+
 function cursorFor(match: { finishedAt: Date; id: string }) {
   return Buffer.from(JSON.stringify({
     finishedAt: match.finishedAt.toISOString(),
@@ -91,7 +103,7 @@ async function getHistory(query = '') {
 
     return {
       status: response.status,
-      body: await response.json() as any,
+      body: await response.json() as GamesResponseBody,
     };
   } finally {
     await new Promise<void>((resolve, reject) => {
@@ -114,7 +126,7 @@ async function getStats() {
 
     return {
       status: response.status,
-      body: await response.json() as any,
+      body: await response.json() as GamesResponseBody,
     };
   } finally {
     await new Promise<void>((resolve, reject) => {

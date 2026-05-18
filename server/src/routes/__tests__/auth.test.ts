@@ -46,6 +46,22 @@ const mockedAuthMiddleware = authMiddleware as jest.Mock;
 const mockedCacheUser = cacheUser as jest.Mock;
 const mockedGetCached = getCachedUserByFirebaseUid as jest.Mock;
 
+type UserMutationData = {
+  avatarUrl?: string | null;
+  displayCode?: string | null;
+  displayName?: string | null;
+  email?: string | null;
+  firebaseUid?: string;
+  isGuest?: boolean;
+  onboardingCompletedAt?: Date;
+};
+
+type AuthErrorBody = {
+  error: {
+    code: string;
+  };
+};
+
 function makeApp() {
   const app = express();
   app.use(express.json());
@@ -86,13 +102,13 @@ describe('POST /auth/bootstrap (anonymous provider)', () => {
         firebase: { sign_in_provider: 'anonymous' },
       }),
       deleteUser: jest.fn().mockResolvedValue(undefined),
-    } as any);
+    });
     mockedGetCached.mockResolvedValue(null);
   });
 
   it('creates a guest user with isGuest=true, onboardingCompletedAt set, and a Guest###### display name', async () => {
-    let captured: any;
-    userCreate.mockImplementation(async ({ data }: { data: any }) => {
+    let captured!: UserMutationData;
+    userCreate.mockImplementation(async ({ data }: { data: UserMutationData }) => {
       captured = data;
       return { id: 'new-guest', ...data };
     });
@@ -118,7 +134,7 @@ describe('POST /auth/bootstrap (anonymous provider)', () => {
 
   it('retries with a new display code on P2002 collisions', async () => {
     let attempts = 0;
-    userCreate.mockImplementation(async ({ data }: { data: any }) => {
+    userCreate.mockImplementation(async ({ data }: { data: UserMutationData }) => {
       attempts += 1;
       if (attempts < 3) throw p2002OnDisplayCode();
       return { id: 'new-guest', ...data };
@@ -150,7 +166,7 @@ describe('POST /auth/bootstrap (anonymous provider)', () => {
     });
 
     expect(res.status).toBe(503);
-    const body = await res.json() as any;
+    const body = await res.json() as AuthErrorBody;
     expect(body.error.code).toBe('GUEST_NAME_UNAVAILABLE');
   });
 });
@@ -165,13 +181,13 @@ describe('POST /auth/bootstrap (registered provider)', () => {
         firebase: { sign_in_provider: 'password' },
       }),
       deleteUser: jest.fn().mockResolvedValue(undefined),
-    } as any);
+    });
     mockedGetCached.mockResolvedValue(null);
   });
 
   it('creates an account with the requested display name and a generated display code', async () => {
-    let captured: any;
-    userCreate.mockImplementation(async ({ data }: { data: any }) => {
+    let captured!: UserMutationData;
+    userCreate.mockImplementation(async ({ data }: { data: UserMutationData }) => {
       captured = data;
       return { id: 'new-user', ...data };
     });
@@ -218,7 +234,7 @@ describe('POST /auth/convert-guest', () => {
     });
 
     expect(res.status).toBe(409);
-    const body = await res.json() as any;
+    const body = await res.json() as AuthErrorBody;
     expect(body.error.code).toBe('NOT_GUEST');
     expect(userUpdate).not.toHaveBeenCalled();
   });
@@ -256,7 +272,7 @@ describe('POST /auth/convert-guest', () => {
   it('retries when the generated display code collides during conversion', async () => {
     setAuthMiddleware({ id: 'guest-1', isGuest: true, avatarUrl: null }, { email: 'x@y.com' });
     let attempts = 0;
-    userUpdate.mockImplementation(async ({ data }: { data: any }) => {
+    userUpdate.mockImplementation(async ({ data }: { data: UserMutationData }) => {
       attempts += 1;
       if (attempts < 2) throw p2002OnDisplayCode();
       return { id: 'guest-1', ...data };
