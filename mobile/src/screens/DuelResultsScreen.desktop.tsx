@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { imageUri } from '../services/imageUri';
 import AutoImage from '../components/AutoImage';
 import { Feather } from '@expo/vector-icons';

@@ -10,7 +10,7 @@ export default function DinoGame() {
     if (!iframe) return;
     const focus = () => {
       iframe.focus();
-      try { iframe.contentWindow?.focus(); } catch {}
+      try { iframe.contentWindow?.focus(); } catch { /* cross-origin */ }
     };
     iframe.addEventListener('load', focus);
     focus();

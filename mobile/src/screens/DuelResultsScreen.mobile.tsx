@@ -6,7 +6,6 @@ import {
   Pressable,
   Animated,
   Easing,
-  Image,
 } from 'react-native';
 import { imageUri } from '../services/imageUri';
 import AutoImage from '../components/AutoImage';

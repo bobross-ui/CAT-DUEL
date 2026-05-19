@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Image,
+  ScrollView, ActivityIndicator,
 } from 'react-native';
 import AutoImage from '../components/AutoImage';
 import { imageUri } from '../services/imageUri';

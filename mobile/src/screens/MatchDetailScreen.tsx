@@ -1,6 +1,6 @@
 import {
   View, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Image,
+  ScrollView, ActivityIndicator,
 } from 'react-native';
 import { imageUri } from '../services/imageUri';
 import AutoImage from '../components/AutoImage';
