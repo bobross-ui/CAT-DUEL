@@ -31,6 +31,7 @@ npm-debug.log*
 
 # ── Markdown docs ─────────────────────────────────────────────────────────────
 *.md
+!README.md
 
 # ── Planning & internal docs (not for repo) ───────────────────────────────────
 PROGRESS.md
