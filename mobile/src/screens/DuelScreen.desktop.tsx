@@ -27,22 +27,20 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning';
-import type { ClientQuestion, GameFinishedPayload, OpponentInfo } from '../navigation';
+import type { ClientQuestion, GameFinishedPayload, OpponentInfo, OpponentProgress } from '../navigation';
 import { getTier } from '../constants';
 import { getGameSocket, releaseGameSocket } from '../services/socket';
 import { track } from '../services/analytics';
 import { queryKeys } from '../queries/keys';
 import { useTheme } from '../theme/ThemeProvider';
+import type { Theme } from '../theme/themes';
 import { radii } from '../theme/tokens';
 import DinoGame from '../components/DinoGame';
 import MobileDuelScreen from './DuelScreen.mobile';
 
 type Props = ComponentProps<typeof MobileDuelScreen>;
 
-interface OpponentProgress {
-  currentQuestion: number;
-  questionsAnswered: number;
-}
+type QuestionCellStatus = 'answered' | 'current' | 'skipped' | 'unseen';
 
 interface DuelState {
   currentQuestion: ClientQuestion;
@@ -54,6 +52,11 @@ interface DuelState {
   yourScore: number;
   opponentScore: number;
   timeRemaining: number;
+  yourSeenIds: string[];
+  yourSkippedIds: string[];
+  answeredQuestionIds: Set<string>;
+  questionIds: string[];
+  playerFinished: boolean;
   opponentProgress: OpponentProgress | null;
 }
 
@@ -67,6 +70,11 @@ const INITIAL: DuelState = {
   yourScore: 0,
   opponentScore: 0,
   timeRemaining: 600,
+  yourSeenIds: [],
+  yourSkippedIds: [],
+  answeredQuestionIds: new Set<string>(),
+  questionIds: [],
+  playerFinished: false,
   opponentProgress: null,
 };
 
@@ -81,34 +89,6 @@ function splitDisplayCode(displayName: string) {
   return match ? { name: match[1], code: match[2] } : { name: displayName, code: null };
 }
 
-function BlinkingDot({ color, animate }: { color: string; animate: boolean }) {
-  const opacity = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (!animate) {
-      opacity.setValue(1);
-      return;
-    }
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.3, duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-
-    return () => {
-      loop.stop();
-      opacity.stopAnimation(() => opacity.setValue(1));
-    };
-  }, [animate, opacity]);
-
-  return (
-    <Animated.View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color, opacity }} />
-  );
-}
-
 export default function DuelScreenDesktop({ route, navigation }: Props) {
   const { gameId } = route.params;
   const initialOpponent = route.params.opponent!;
@@ -118,13 +98,15 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const { playHaptic, reduceMotionEnabled } = useAppPreferences();
+  const initialQuestion = initialState.firstQuestion;
 
   const [ds, setDs] = useState<DuelState>({
     ...INITIAL,
     timeRemaining: initialState.duration,
     totalQuestions: initialState.totalQuestions,
-    currentQuestion: initialState.firstQuestion,
+    ...(initialQuestion ? { currentQuestion: initialQuestion } : {}),
     questionNumber: initialState.questionNumber,
+    yourSeenIds: initialQuestion ? [initialQuestion.id] : [],
   });
   const [opponentDisconnectNotice, setOpponentDisconnectNotice] = useState<string | null>(null);
   const [duelActive, setDuelActive] = useState(true);
@@ -147,14 +129,20 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
   const opponentName = opponent.displayName ?? 'Opponent';
   const opponentDisplayName = splitDisplayCode(opponentName);
   const opponentTier = getTier(opponent.eloRating).name;
-  const opponentDone = ds.opponentProgress && ds.opponentProgress.questionsAnswered >= ds.totalQuestions;
+  const opponentAnswered = ds.opponentProgress?.questionsAnswered ?? 0;
+  const opponentSkipped = ds.opponentProgress?.questionsSkipped ?? 0;
+  const opponentDone = ds.opponentProgress
+    ? opponentAnswered + opponentSkipped >= ds.totalQuestions
+    : false;
   const category = ds.currentQuestion ? [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ') : '';
-  const progressPct = ds.totalQuestions > 0 ? (ds.questionNumber - 1) / ds.totalQuestions : 0;
-  const opponentProgressPct = ds.totalQuestions > 0
-    ? ((ds.opponentProgress?.questionsAnswered ?? 0) / ds.totalQuestions)
-    : 0;
+  const progressPct = ds.totalQuestions > 0 ? ds.answeredQuestionIds.size / ds.totalQuestions : 0;
   const isTita = ds.currentQuestion?.questionType === 'TITA';
-  const allDone = ds.showFeedback && ds.questionNumber === ds.totalQuestions;
+  const allDone = ds.playerFinished || ds.answeredQuestionIds.size >= ds.totalQuestions;
+  const opponentHudStatus = opponentDone
+    ? 'done'
+    : opponentSkipped > 0
+      ? `${opponentAnswered} ans · ${opponentSkipped} skipped`
+      : `${opponentAnswered} answered`;
 
   useDocumentTitle(`${isTimerCritical ? '(!) ' : ''}${formatTime(ds.timeRemaining)} Duel · CAT Duel`);
   useUnsavedChangesWarning(duelActive);
@@ -208,6 +196,21 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
     });
   }, [ds.currentQuestion, ds.selectedAnswer, ds.showFeedback, ds.typedAnswer, gameId, playHaptic]);
 
+  const handleSkip = useCallback(() => {
+    if (!ds.currentQuestion || ds.showFeedback || allDone) return;
+    void playHaptic('answer_submit');
+    socketRef.current?.emit('question:skip', {
+      gameId,
+      questionId: ds.currentQuestion.id,
+    });
+  }, [allDone, ds.currentQuestion, ds.showFeedback, gameId, playHaptic]);
+
+  const handleJump = useCallback((targetQuestionId: string) => {
+    if (!ds.currentQuestion || ds.showFeedback || allDone) return;
+    if (targetQuestionId === ds.currentQuestion.id) return;
+    socketRef.current?.emit('question:jump', { gameId, questionId: targetQuestionId });
+  }, [allDone, ds.currentQuestion, ds.showFeedback, gameId]);
+
   const shortcuts = useMemo(() => {
     if (isTita) {
       return [
@@ -239,6 +242,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
             return { ...prev, typedAnswer: prev.typedAnswer.slice(0, -1) };
           }),
         },
+        { key: 's', handler: handleSkip },
         { key: 'Enter', handler: submitAnswer },
         { key: 'Escape', handler: handleQuit },
       ];
@@ -249,10 +253,11 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
       { key: '2', handler: () => selectAnswer(1) },
       { key: '3', handler: () => selectAnswer(2) },
       { key: '4', handler: () => selectAnswer(3) },
+      { key: 's', handler: handleSkip },
       { key: 'Enter', handler: submitAnswer },
       { key: 'Escape', handler: handleQuit },
     ];
-  }, [handleQuit, isTita, selectAnswer, submitAnswer]);
+  }, [handleQuit, handleSkip, isTita, selectAnswer, submitAnswer]);
   useKeyboardShortcuts(shortcuts, duelActive);
 
   useEffect(() => {
@@ -269,15 +274,17 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
       if (!mounted) return;
       socketRef.current = socket;
 
-      socket.on('connect', () => socket.emit('game:join', { gameId }));
+      const join = () => socket.emit('game:join', { gameId });
+      socket.on('connect', join);
+      if (socket.connected) join();
 
       timerRef.current = setInterval(() => {
         setDs(prev => prev.timeRemaining <= 0 ? prev : { ...prev, timeRemaining: prev.timeRemaining - 1 });
       }, 1000);
 
       socket.on('game:question', ({
-        question, questionNumber, totalQuestions,
-      }: { question: ClientQuestion; questionNumber: number; totalQuestions: number }) => {
+        question, questionNumber, totalQuestions, yourSkippedIds,
+      }: { question: ClientQuestion; questionNumber: number; totalQuestions: number; yourSkippedIds: string[] }) => {
         if (!mounted) return;
         const applyQuestion = () => {
           questionStartTime.current = Date.now();
@@ -289,6 +296,11 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
             selectedAnswer: null,
             typedAnswer: '',
             showFeedback: false,
+            playerFinished: false,
+            yourSeenIds: prev.yourSeenIds.includes(question.id)
+              ? prev.yourSeenIds
+              : [...prev.yourSeenIds, question.id],
+            yourSkippedIds,
           }));
         };
 
@@ -305,10 +317,22 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
         });
       });
 
-      socket.on('answer:result', ({ yourScore }: { isCorrect: boolean; correctAnswer: number | null; correctAnswerText?: string | null; yourScore: number }) => {
+      socket.on('answer:result', ({ questionId, yourScore }: { questionId: string; isCorrect: boolean; correctAnswer: number | null; correctAnswerText?: string | null; yourScore: number }) => {
         if (!mounted) return;
         pulseScore(yourScoreScale);
-        setDs(prev => ({ ...prev, yourScore, showFeedback: true }));
+        setDs(prev => {
+          const answeredQuestionIds = new Set(prev.answeredQuestionIds);
+          answeredQuestionIds.add(questionId);
+          const yourSkippedIds = prev.yourSkippedIds.filter(id => id !== questionId);
+          return {
+            ...prev,
+            yourScore,
+            showFeedback: true,
+            answeredQuestionIds,
+            yourSkippedIds,
+            playerFinished: answeredQuestionIds.size >= prev.totalQuestions,
+          };
+        });
       });
 
       socket.on('opponent:scored', ({ opponentScore }: { opponentScore: number }) => {
@@ -320,10 +344,10 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
       });
 
       socket.on('opponent:progress', ({
-        currentQuestion, questionsAnswered,
-      }: { currentQuestion: number; questionsAnswered: number }) => {
+        questionsAnswered, questionsSkipped,
+      }: OpponentProgress) => {
         if (!mounted) return;
-        setDs(prev => ({ ...prev, opponentProgress: { currentQuestion, questionsAnswered } }));
+        setDs(prev => ({ ...prev, opponentProgress: { questionsAnswered, questionsSkipped } }));
       });
 
       socket.on('game:timer', ({ remaining }: { remaining: number }) => {
@@ -349,8 +373,12 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
         opponent: syncedOpponent,
         timeRemaining,
         currentQuestion,
+        currentQuestionId,
         questionNumber,
+        questionIds,
         totalQuestions,
+        yourSeenIds,
+        yourSkippedIds,
         opponentProgress,
         playerFinished,
       }: {
@@ -358,16 +386,40 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
         opponentScore: number;
         opponent?: OpponentInfo;
         timeRemaining: number;
-        currentQuestion: ClientQuestion | undefined;
+        currentQuestion: ClientQuestion | null | undefined;
+        currentQuestionId?: string;
         questionNumber: number;
+        questionIds?: string[];
         totalQuestions: number;
+        yourSeenIds?: string[];
+        yourSkippedIds?: string[];
         opponentProgress: OpponentProgress | null;
         playerFinished?: boolean;
       }) => {
         if (!mounted) return;
         if (syncedOpponent) applyOpponent(syncedOpponent);
+        const syncedSkippedIds = yourSkippedIds ?? [];
+        const syncedSeenIds = yourSeenIds ?? (currentQuestionId ? [currentQuestionId] : []);
+        const answeredQuestionIds = new Set(syncedSeenIds.filter(
+          id => id !== currentQuestionId && !syncedSkippedIds.includes(id),
+        ));
         if (playerFinished) {
-          setDs(prev => ({ ...prev, yourScore, opponentScore, timeRemaining, totalQuestions, opponentProgress, showFeedback: true, questionNumber: totalQuestions, ...(currentQuestion ? { currentQuestion } : {}) }));
+          setDs(prev => ({
+            ...prev,
+            yourScore,
+            opponentScore,
+            timeRemaining,
+            totalQuestions,
+            opponentProgress,
+            showFeedback: true,
+            questionNumber: totalQuestions,
+            questionIds: questionIds ?? prev.questionIds,
+            yourSeenIds: syncedSeenIds,
+            yourSkippedIds: syncedSkippedIds,
+            answeredQuestionIds,
+            playerFinished: true,
+            ...(currentQuestion ? { currentQuestion } : {}),
+          }));
           return;
         }
         if (!currentQuestion) return;
@@ -382,6 +434,11 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
           questionNumber,
           totalQuestions,
           opponentProgress,
+          questionIds: questionIds ?? prev.questionIds,
+          yourSeenIds: syncedSeenIds,
+          yourSkippedIds: syncedSkippedIds,
+          answeredQuestionIds,
+          playerFinished: false,
           selectedAnswer: null,
           typedAnswer: '',
           showFeedback: false,
@@ -470,65 +527,57 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
     }
     : {};
 
+  const renderQuestionCell = (qId: string | null, qNumber: number) => {
+    const status: QuestionCellStatus = qId
+      ? getQuestionCellStatus(qId, ds)
+      : qNumber === ds.questionNumber ? 'current' : 'unseen';
+    const colors = questionCellColors(status, theme);
+    const isInteractive = qId !== null && (status === 'skipped' || status === 'current');
+
+    return (
+      <Pressable
+        key={qId ?? qNumber}
+        onPress={qId ? () => handleJump(qId) : undefined}
+        disabled={!isInteractive}
+        style={({ pressed }) => [
+          styles.qCell,
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.background,
+            borderStyle: status === 'skipped' ? 'dashed' : 'solid',
+            opacity: pressed ? 0.78 : 1,
+          },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={`Question ${qNumber}`}
+        accessibilityState={{ disabled: !isInteractive, selected: status === 'current' }}
+      >
+        <Text.Mono preset="mono" color={colors.text}>
+          {status === 'answered' ? '✓' : qNumber}
+        </Text.Mono>
+      </Pressable>
+    );
+  };
+
   const rightRail = (
     <View style={styles.rightRailStack}>
       <Card style={styles.sideCard}>
         <View style={styles.sideHeader}>
-          <EyebrowLabel>Opponent live track</EyebrowLabel>
-          <View style={styles.pingRow}>
-            {opponentDone
-              ? <View style={[styles.pingDot, { backgroundColor: theme.accent }]} />
-              : <BlinkingDot color={theme.accent} animate={!reduceMotionEnabled} />
-            }
-            <Text.Mono preset="chipLabel" color={theme.ink3}>
-              {opponentDone ? 'DONE' : `ON Q${ds.opponentProgress?.currentQuestion ?? 1}`}
-            </Text.Mono>
-          </View>
-        </View>
-        <View style={[styles.currentOpponentRow, { backgroundColor: theme.bg2 }]}>
-          <Text.Mono preset="mono" color={theme.ink3}>
-            {opponentDone ? 'DONE' : `Q${ds.opponentProgress?.currentQuestion ?? 1}`}
-          </Text.Mono>
-          <Text.Sans preset="label" color={theme.ink} numberOfLines={1} style={styles.currentOpponentName}>
-            {opponentDisplayName.name}
-          </Text.Sans>
-        </View>
-      </Card>
-
-      <Card style={styles.sideCard}>
-        <View style={styles.sideHeader}>
           <EyebrowLabel>Question navigator</EyebrowLabel>
           <Text.Mono preset="chipLabel" color={theme.ink3}>
-            {ds.questionNumber}/{ds.totalQuestions}
+            {ds.answeredQuestionIds.size}/{ds.totalQuestions}
           </Text.Mono>
         </View>
         <View style={styles.qGrid}>
-          {Array.from({ length: ds.totalQuestions }, (_, index) => {
-            const q = index + 1;
-            const done = q < ds.questionNumber;
-            const now = q === ds.questionNumber;
-            return (
-              <View
-                key={q}
-                style={[
-                  styles.qCell,
-                  {
-                    borderColor: now ? theme.ink : theme.line,
-                    backgroundColor: done ? theme.accentSoft : now ? theme.ink : theme.card,
-                  },
-                ]}
-              >
-                <Text.Mono preset="mono" color={now ? theme.bg : done ? theme.accentDeep : theme.ink3}>
-                  {done ? '✓' : q}
-                </Text.Mono>
-              </View>
-            );
-          })}
+          {ds.questionIds.length > 0
+            ? ds.questionIds.map((qId, index) => renderQuestionCell(qId, index + 1))
+            : Array.from({ length: ds.totalQuestions }, (_, index) => renderQuestionCell(null, index + 1))}
         </View>
         <View style={styles.legendRow}>
-          <LegendSwatch label="done" color={theme.accentSoft} border={theme.line} />
+          <LegendSwatch label="answered" color={theme.accentSoft} border={theme.line} />
           <LegendSwatch label="now" color={theme.ink} border={theme.ink} />
-          <LegendSwatch label="next" color={theme.card} border={theme.line} />
+          <LegendSwatch label="skipped" color={theme.amberSoft} border={theme.amber} />
+          <LegendSwatch label="unseen" color={theme.card} border={theme.line} />
         </View>
       </Card>
     </View>
@@ -563,12 +612,10 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
                 styles.duelProgressFill,
                 { backgroundColor: theme.accent, width: `${Math.min(progressPct * 100, 100)}%` },
               ]} />
-              <View style={[
-                styles.opponentProgressFill,
-                { backgroundColor: theme.ink4, width: `${Math.min(opponentProgressPct * 100, 100)}%` },
-              ]} />
             </View>
-            <Text.Mono preset="mono" color={theme.ink3}>Q {ds.questionNumber} of {ds.totalQuestions}</Text.Mono>
+            <Text.Mono preset="mono" color={theme.ink3}>
+              {ds.answeredQuestionIds.size} / {ds.totalQuestions} submitted
+            </Text.Mono>
           </View>
 
           <PlayerHud
@@ -578,7 +625,7 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
             avatarVariant="opponent"
             scoreScale={opponentScoreScale}
             alignRight
-            status={opponentDone ? 'done' : `on Q${ds.opponentProgress?.currentQuestion ?? 1}`}
+            status={opponentHudStatus}
           />
         </View>
 
@@ -716,6 +763,15 @@ export default function DuelScreenDesktop({ route, navigation }: Props) {
           ) : (
             <View style={styles.submitArea}>
               <Text.Mono preset="mono" color={theme.ink3}>{isTita ? 'Use the keypad, then submit' : 'Press Enter to submit'}</Text.Mono>
+              <View style={styles.skipButton}>
+                <Button
+                  label="Skip"
+                  variant="ghost"
+                  onPress={handleSkip}
+                  disabled={ds.showFeedback || allDone}
+                  accessibilityLabel="Skip question"
+                />
+              </View>
               <View style={styles.submitButton}>
                 <Button label="Submit" onPress={submitAnswer} disabled={ds.showFeedback || (isTita ? ds.typedAnswer.trim().length === 0 : ds.selectedAnswer === null)} />
               </View>
@@ -777,6 +833,26 @@ function LegendSwatch({ label, color, border }: { label: string; color: string; 
   );
 }
 
+function getQuestionCellStatus(questionId: string, ds: DuelState): QuestionCellStatus {
+  if (ds.answeredQuestionIds.has(questionId)) return 'answered';
+  if (questionId === ds.currentQuestion.id) return 'current';
+  if (ds.yourSkippedIds.includes(questionId)) return 'skipped';
+  return 'unseen';
+}
+
+function questionCellColors(status: QuestionCellStatus, theme: Theme) {
+  switch (status) {
+    case 'answered':
+      return { background: theme.accentSoft, border: theme.line, text: theme.accentDeep };
+    case 'current':
+      return { background: theme.ink, border: theme.ink, text: theme.bg };
+    case 'skipped':
+      return { background: theme.amberSoft, border: theme.amber, text: theme.amberDeep };
+    case 'unseen':
+      return { background: theme.card, border: theme.line, text: theme.ink3 };
+  }
+}
+
 const styles = StyleSheet.create({
   frameContent: {
     flexGrow: 1,
@@ -833,14 +909,6 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    borderRadius: radii.pill,
-  },
-  opponentProgressFill: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    opacity: 0.5,
     borderRadius: radii.pill,
   },
   disconnectBanner: {
@@ -960,6 +1028,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
   },
+  skipButton: {
+    width: 128,
+  },
   submitButton: {
     width: 160,
   },
@@ -984,27 +1055,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-  },
-  pingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  pingDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  currentOpponentRow: {
-    minHeight: 48,
-    borderRadius: radii.sm,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  currentOpponentName: {
-    flex: 1,
   },
   qGrid: {
     flexDirection: 'row',

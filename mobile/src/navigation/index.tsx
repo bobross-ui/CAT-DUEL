@@ -60,9 +60,16 @@ export interface ClientQuestion {
 export interface InitialGameState {
   duration: number;
   totalQuestions: number;
-  firstQuestion: ClientQuestion;
+  firstQuestion: ClientQuestion | null;
   questionNumber: number;
+  questionIds?: string[];
+  yourSkippedIds?: string[];
 }
+
+export type OpponentProgress = {
+  questionsAnswered: number;
+  questionsSkipped: number;
+};
 
 export type OpponentInfo = {
   userId: string;

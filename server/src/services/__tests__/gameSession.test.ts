@@ -97,6 +97,8 @@ function activeBotGameState(overrides: Record<string, unknown> = {}) {
     player2Queue: ['q1'],
     player1SeenIds: ['q1'],
     player2SeenIds: ['q1'],
+    player1SkippedIds: [],
+    player2SkippedIds: [],
     player1Progress: 0,
     player2Progress: 0,
     player1Score: 0,

@@ -13,6 +13,7 @@ import {
   GameFinishedPayload,
   ClientQuestion as NavClientQuestion,
   OpponentInfo,
+  OpponentProgress,
 } from '../navigation';
 import { getGameSocket, releaseGameSocket } from '../services/socket';
 import { useAuth } from '../context/AuthContext';
@@ -31,11 +32,6 @@ import { queryKeys } from '../queries/keys';
 type Props = NativeStackScreenProps<RootStackParamList, 'Duel'>;
 type ClientQuestion = NavClientQuestion;
 
-interface OpponentProgress {
-  currentQuestion: number;
-  questionsAnswered: number;
-}
-
 interface DuelState {
   currentQuestion: ClientQuestion;
   questionNumber: number;
@@ -46,6 +42,11 @@ interface DuelState {
   yourScore: number;
   opponentScore: number;
   timeRemaining: number;
+  yourSeenIds: string[];
+  yourSkippedIds: string[];
+  answeredQuestionIds: Set<string>;
+  questionIds: string[];
+  playerFinished: boolean;
   opponentProgress: OpponentProgress | null;
 }
 
@@ -59,6 +60,11 @@ const INITIAL: DuelState = {
   yourScore: 0,
   opponentScore: 0,
   timeRemaining: 600,
+  yourSeenIds: [],
+  yourSkippedIds: [],
+  answeredQuestionIds: new Set<string>(),
+  questionIds: [],
+  playerFinished: false,
   opponentProgress: null,
 };
 
@@ -111,13 +117,15 @@ export default function DuelScreen({ route, navigation }: Props) {
   const queryClient = useQueryClient();
   const { playHaptic, reduceMotionEnabled } = useAppPreferences();
   const insets = useSafeAreaInsets();
+  const initialQuestion = initialState.firstQuestion;
 
   const [ds, setDs] = useState<DuelState>({
     ...INITIAL,
     timeRemaining: initialState.duration,
     totalQuestions: initialState.totalQuestions,
-    currentQuestion: initialState.firstQuestion,
+    ...(initialQuestion ? { currentQuestion: initialQuestion } : {}),
     questionNumber: initialState.questionNumber,
+    yourSeenIds: initialQuestion ? [initialQuestion.id] : [],
   });
   const [opponentDisconnectNotice, setOpponentDisconnectNotice] = useState<string | null>(null);
   const [opponent, setOpponent] = useState<OpponentInfo>(initialOpponent);
@@ -161,8 +169,9 @@ export default function DuelScreen({ route, navigation }: Props) {
       if (!mounted) return;
       socketRef.current = socket;
 
-      // Re-join on reconnect only — FoundScreen already joined for the initial connection
-      socket.on('connect', () => socket.emit('game:join', { gameId }));
+      const join = () => socket.emit('game:join', { gameId });
+      socket.on('connect', join);
+      if (socket.connected) join();
 
       // Start the timer — game has already started when DuelScreen mounts
       timerRef.current = setInterval(() => {
@@ -170,8 +179,8 @@ export default function DuelScreen({ route, navigation }: Props) {
       }, 1000);
 
       socket.on('game:question', ({
-        question, questionNumber, totalQuestions,
-      }: { question: ClientQuestion; questionNumber: number; totalQuestions: number }) => {
+        question, questionNumber, totalQuestions, yourSkippedIds,
+      }: { question: ClientQuestion; questionNumber: number; totalQuestions: number; yourSkippedIds: string[] }) => {
         if (!mounted) return;
         if (reduceMotionEnabled) {
           questionStartTime.current = Date.now();
@@ -179,6 +188,11 @@ export default function DuelScreen({ route, navigation }: Props) {
           setDs(prev => ({
             ...prev, currentQuestion: question, questionNumber, totalQuestions,
             selectedAnswer: null, typedAnswer: '', showFeedback: false,
+            playerFinished: false,
+            yourSeenIds: prev.yourSeenIds.includes(question.id)
+              ? prev.yourSeenIds
+              : [...prev.yourSeenIds, question.id],
+            yourSkippedIds,
           }));
           return;
         }
@@ -189,15 +203,32 @@ export default function DuelScreen({ route, navigation }: Props) {
           setDs(prev => ({
             ...prev, currentQuestion: question, questionNumber, totalQuestions,
             selectedAnswer: null, typedAnswer: '', showFeedback: false,
+            playerFinished: false,
+            yourSeenIds: prev.yourSeenIds.includes(question.id)
+              ? prev.yourSeenIds
+              : [...prev.yourSeenIds, question.id],
+            yourSkippedIds,
           }));
           Animated.timing(questionOpacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
         });
       });
 
-      socket.on('answer:result', ({ yourScore }: { isCorrect: boolean; correctAnswer: number | null; correctAnswerText?: string | null; yourScore: number }) => {
+      socket.on('answer:result', ({ questionId, yourScore }: { questionId: string; isCorrect: boolean; correctAnswer: number | null; correctAnswerText?: string | null; yourScore: number }) => {
         if (!mounted) return;
         pulseScore(yourScoreScale);
-        setDs(prev => ({ ...prev, yourScore, showFeedback: true }));
+        setDs(prev => {
+          const answeredQuestionIds = new Set(prev.answeredQuestionIds);
+          answeredQuestionIds.add(questionId);
+          const yourSkippedIds = prev.yourSkippedIds.filter(id => id !== questionId);
+          return {
+            ...prev,
+            yourScore,
+            showFeedback: true,
+            answeredQuestionIds,
+            yourSkippedIds,
+            playerFinished: answeredQuestionIds.size >= prev.totalQuestions,
+          };
+        });
       });
 
       socket.on('opponent:scored', ({ opponentScore }: { opponentScore: number }) => {
@@ -209,10 +240,10 @@ export default function DuelScreen({ route, navigation }: Props) {
       });
 
       socket.on('opponent:progress', ({
-        currentQuestion, questionsAnswered,
-      }: { currentQuestion: number; questionsAnswered: number }) => {
+        questionsAnswered, questionsSkipped,
+      }: OpponentProgress) => {
         if (!mounted) return;
-        setDs(prev => ({ ...prev, opponentProgress: { currentQuestion, questionsAnswered } }));
+        setDs(prev => ({ ...prev, opponentProgress: { questionsAnswered, questionsSkipped } }));
       });
 
       socket.on('game:timer', ({ remaining }: { remaining: number }) => {
@@ -238,8 +269,12 @@ export default function DuelScreen({ route, navigation }: Props) {
         opponent: syncedOpponent,
         timeRemaining,
         currentQuestion,
+        currentQuestionId,
         questionNumber,
+        questionIds,
         totalQuestions,
+        yourSeenIds,
+        yourSkippedIds,
         opponentProgress,
         playerFinished,
       }: {
@@ -247,16 +282,40 @@ export default function DuelScreen({ route, navigation }: Props) {
         opponentScore: number;
         opponent?: OpponentInfo;
         timeRemaining: number;
-        currentQuestion: ClientQuestion | undefined;
+        currentQuestion: ClientQuestion | null | undefined;
+        currentQuestionId?: string;
         questionNumber: number;
+        questionIds?: string[];
         totalQuestions: number;
+        yourSeenIds?: string[];
+        yourSkippedIds?: string[];
         opponentProgress: OpponentProgress | null;
         playerFinished?: boolean;
       }) => {
         if (!mounted) return;
         if (syncedOpponent) applyOpponent(syncedOpponent);
+        const syncedSkippedIds = yourSkippedIds ?? [];
+        const syncedSeenIds = yourSeenIds ?? (currentQuestionId ? [currentQuestionId] : []);
+        const answeredQuestionIds = new Set(syncedSeenIds.filter(
+          id => id !== currentQuestionId && !syncedSkippedIds.includes(id),
+        ));
         if (playerFinished) {
-          setDs(prev => ({ ...prev, yourScore, opponentScore, timeRemaining, totalQuestions, opponentProgress, showFeedback: true, questionNumber: totalQuestions, ...(currentQuestion ? { currentQuestion } : {}) }));
+          setDs(prev => ({
+            ...prev,
+            yourScore,
+            opponentScore,
+            timeRemaining,
+            totalQuestions,
+            opponentProgress,
+            showFeedback: true,
+            questionNumber: totalQuestions,
+            questionIds: questionIds ?? prev.questionIds,
+            yourSeenIds: syncedSeenIds,
+            yourSkippedIds: syncedSkippedIds,
+            answeredQuestionIds,
+            playerFinished: true,
+            ...(currentQuestion ? { currentQuestion } : {}),
+          }));
           return;
         }
         if (!currentQuestion) return;
@@ -268,6 +327,11 @@ export default function DuelScreen({ route, navigation }: Props) {
           questionNumber,
           totalQuestions,
           opponentProgress,
+          questionIds: questionIds ?? prev.questionIds,
+          yourSeenIds: syncedSeenIds,
+          yourSkippedIds: syncedSkippedIds,
+          answeredQuestionIds,
+          playerFinished: false,
           selectedAnswer: null,
           typedAnswer: '',
           showFeedback: false,
@@ -347,6 +411,15 @@ export default function DuelScreen({ route, navigation }: Props) {
     });
   }
 
+  function handleSkip() {
+    if (!ds.currentQuestion || ds.showFeedback || allDone) return;
+    void playHaptic('answer_submit');
+    socketRef.current?.emit('question:skip', {
+      gameId,
+      questionId: ds.currentQuestion.id,
+    });
+  }
+
   function handleQuit() {
     const doQuit = () => socketRef.current?.emit('game:forfeit', { gameId });
     if (Platform.OS === 'web') {
@@ -359,15 +432,20 @@ export default function DuelScreen({ route, navigation }: Props) {
     }
   }
 
-  const allDone         = ds.showFeedback && ds.questionNumber === ds.totalQuestions;
+  const allDone         = ds.playerFinished || ds.answeredQuestionIds.size >= ds.totalQuestions;
 
   if (!ds.currentQuestion && !allDone) return null;
 
   const isTimerCritical = ds.timeRemaining <= 60;
-  const progressPct     = ds.totalQuestions > 0 ? (ds.questionNumber - 1) / ds.totalQuestions : 0;
+  const progressPct     = ds.totalQuestions > 0 ? ds.answeredQuestionIds.size / ds.totalQuestions : 0;
   const oppName         = opponent.displayName ?? 'Opp';
   const opponentDisplayName = splitDisplayCode(oppName);
-  const opponentDone    = ds.opponentProgress && ds.opponentProgress.questionsAnswered >= ds.totalQuestions;
+  const opponentDone    = ds.opponentProgress
+    ? ds.opponentProgress.questionsAnswered + ds.opponentProgress.questionsSkipped >= ds.totalQuestions
+    : false;
+  const opponentStatusText = ds.opponentProgress
+    ? formatOpponentProgress(opponentDisplayName.name, ds.opponentProgress, ds.totalQuestions)
+    : opponentDisplayName.name;
   const category        = ds.currentQuestion ? [ds.currentQuestion.category, ds.currentQuestion.subTopic].filter(Boolean).join(' · ') : '';
   const isTita          = ds.currentQuestion?.questionType === 'TITA';
 
@@ -403,9 +481,7 @@ export default function DuelScreen({ route, navigation }: Props) {
                 : <BlinkingDot color={theme.accent} animate={!reduceMotionEnabled} />
               }
               <AppText.Sans preset="small" color={theme.ink3} numberOfLines={1} style={{ flexShrink: 1 }}>
-                {opponentDone
-                  ? `${opponentDisplayName.name} · done`
-                  : `${opponentDisplayName.name} · on Q${ds.opponentProgress.currentQuestion}`}
+                {opponentStatusText}
               </AppText.Sans>
             </View>
           ) : (
@@ -540,7 +616,7 @@ export default function DuelScreen({ route, navigation }: Props) {
       </Animated.View>
       )}
 
-      {/* ── Footer: quit + submit ── */}
+      {/* ── Footer: quit + skip + submit ── */}
       <View style={[styles.footer, { borderTopColor: theme.line }]}>
         <Pressable
           onPress={handleQuit}
@@ -552,6 +628,15 @@ export default function DuelScreen({ route, navigation }: Props) {
         >
           <AppText.Sans preset="label" color={theme.ink3}>Quit</AppText.Sans>
         </Pressable>
+        <View style={styles.skipWrap}>
+          <Button
+            label="Skip"
+            variant="ghost"
+            onPress={handleSkip}
+            disabled={ds.showFeedback || allDone}
+            accessibilityLabel="Skip question"
+          />
+        </View>
         {!ds.showFeedback && (
           <View style={styles.submitWrap}>
             <Button label="Submit" onPress={submitAnswer} disabled={isTita ? ds.typedAnswer.trim().length === 0 : ds.selectedAnswer === null} />
@@ -692,5 +777,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
+  skipWrap: { minWidth: 96 },
   submitWrap: { flex: 1 },
 });
+
+function formatOpponentProgress(name: string, progress: OpponentProgress, totalQuestions: number) {
+  if (progress.questionsAnswered + progress.questionsSkipped >= totalQuestions) {
+    return `${name} · done`;
+  }
+  if (progress.questionsSkipped > 0) {
+    return `${name} · ${progress.questionsAnswered} ans · ${progress.questionsSkipped} skipped`;
+  }
+  return `${name} · ${progress.questionsAnswered} answered`;
+}

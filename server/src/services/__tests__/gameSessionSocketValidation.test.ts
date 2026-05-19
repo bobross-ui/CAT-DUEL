@@ -109,6 +109,8 @@ function activeGameState(overrides: Record<string, unknown> = {}) {
     player2Queue: [questionId],
     player1SeenIds: [questionId],
     player2SeenIds: [questionId],
+    player1SkippedIds: [],
+    player2SkippedIds: [],
     player1Progress: 0,
     player2Progress: 0,
     player1Score: 0,
@@ -233,6 +235,7 @@ describe('game socket payload validation', () => {
       },
       player1Queue: [q3, questionId],
       player1SeenIds: [questionId, q2, q3],
+      player1SkippedIds: [questionId],
       player1Answers: { [q2]: { selected: null, typed: '43', correct: true, timeMs: 1000 } },
       player1Progress: 1,
     })));
@@ -386,7 +389,7 @@ describe('game socket payload validation', () => {
 
     expect(opponentEmit).toHaveBeenCalledWith('opponent:progress', {
       questionsAnswered: 0,
-      questionsSkipped: 0,
+      questionsSkipped: 1,
     });
   });
 
@@ -402,7 +405,7 @@ describe('game socket payload validation', () => {
     expect(socket.emit).not.toHaveBeenCalled();
   });
 
-  it('reorders queue on question:jump moving current to tail and target to head', async () => {
+  it('reorders queue on question:jump placing current right behind target so answer returns to caller', async () => {
     // Scenario: player has skipped q1 and q2, currently on q3. Jumps back to q1.
     const q2 = '00000000-0000-4000-8000-000000000010';
     const q3 = '00000000-0000-4000-8000-000000000011';
@@ -431,12 +434,229 @@ describe('game socket payload validation', () => {
     await socketHandlers.get('question:jump')?.({ gameId, questionId });
 
     expect(multi.hset).toHaveBeenCalledWith(`game:${gameId}`, expect.objectContaining({
-      player1Queue: JSON.stringify([questionId, q2, q3]),
+      player1Queue: JSON.stringify([questionId, q3, q2]),
     }));
     expect(socket.emit).toHaveBeenCalledWith('game:question', expect.objectContaining({
       question: expect.objectContaining({ id: questionId }),
       questionNumber: 1,
       totalQuestions: 3,
+    }));
+  });
+
+  it('returns to a fresh pre-jump question after answering a jumped-to skipped question', async () => {
+    // Scenario: player skipped q1 and q2 (cycled past them), currently on fresh q3.
+    // They tap q1 in navigator and answer it. Expectation: next served question is
+    // q3 (where they were, fresh) — NOT q2 (the other skipped Q).
+    const q2 = '00000000-0000-4000-8000-000000000020';
+    const q3 = '00000000-0000-4000-8000-000000000021';
+    const baseState = activeGameState({
+      questionIds: [questionId, q2, q3],
+      questions: {
+        [questionId]: { id: questionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q1', options: null, passageId: null },
+        [q2]: { id: q2, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q2', options: null, passageId: null },
+        [q3]: { id: q3, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q3', options: null, passageId: null },
+      },
+      answerKeys: {
+        [questionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        [q2]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+        [q3]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '44' },
+      },
+      player1Queue: [q3, questionId, q2],
+      player2Queue: [q3, questionId, q2],
+      player1SeenIds: [questionId, q2, q3],
+      player2SeenIds: [questionId, q2, q3],
+      player1SkippedIds: [questionId, q2],
+    });
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock)
+      .mockResolvedValueOnce(serializeState(baseState))
+      .mockResolvedValueOnce(serializeState({
+        ...baseState,
+        player1Queue: [questionId, q3, q2],
+      }));
+    (redis.multi as jest.Mock).mockReturnValueOnce(createMultiFromMock()).mockReturnValueOnce(createMultiFromMock());
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('question:jump')?.({ gameId, questionId });
+    (socket.emit as jest.Mock).mockClear();
+    await socketHandlers.get('answer:submit')?.({ gameId, questionId, typedAnswer: '42' });
+
+    expect(socket.emit).toHaveBeenCalledWith('game:question', expect.objectContaining({
+      question: expect.objectContaining({ id: q3 }),
+      questionNumber: 3,
+      totalQuestions: 3,
+    }));
+  });
+
+  it('does NOT mark the fresh pre-jump question as skipped when jumping away', async () => {
+    // Bug regression: jumping to a skipped Q must not auto-mark the previous
+    // current (a fresh, never-skipped Q) as skipped.
+    const q2 = '00000000-0000-4000-8000-000000000030';
+    const q3 = '00000000-0000-4000-8000-000000000031';
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    const multi = createMultiFromMock();
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState({
+      questionIds: [questionId, q2, q3],
+      questions: {
+        [questionId]: { id: questionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q1', options: null, passageId: null },
+        [q2]: { id: q2, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q2', options: null, passageId: null },
+        [q3]: { id: q3, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q3', options: null, passageId: null },
+      },
+      answerKeys: {
+        [questionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        [q2]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+        [q3]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '44' },
+      },
+      player1Queue: [q3, questionId, q2],
+      player2Queue: [q3, questionId, q2],
+      player1SeenIds: [questionId, q2, q3],
+      player2SeenIds: [questionId, q2, q3],
+      player1SkippedIds: [questionId, q2],
+    })));
+    (redis.multi as jest.Mock).mockReturnValueOnce(multi);
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('question:jump')?.({ gameId, questionId });
+
+    // skippedIds field is NOT in the persist payload, and the emitted skippedIds
+    // contains only the originally-skipped Qs (q1, q2) — q3 is NOT added.
+    const hsetPayload = (multi.hset.mock.calls[0]?.[1] ?? {}) as Record<string, string>;
+    expect(hsetPayload).not.toHaveProperty('player1SkippedIds');
+    expect(socket.emit).toHaveBeenCalledWith('game:question', expect.objectContaining({
+      yourSkippedIds: [questionId, q2],
+    }));
+  });
+
+  it('rotates the cycle to start at target so answer advances to target\'s natural successor', async () => {
+    // Regression for user-reported bug: in cycle mode, jumping to an out-of-order
+    // skipped Q and answering it should leave the player at target's natural next
+    // in the cycle ring — NOT at the original current's old next.
+    // Scenario: queue [q3, q4, q8, q10, q2] all in skippedIds, current q3.
+    // Jump to q8, answer it. Expectation: next served is q10 (q8's successor in
+    // the original ring), NOT q4 (q3's original successor).
+    const q2 = '00000000-0000-4000-8000-000000000060';
+    const q3 = '00000000-0000-4000-8000-000000000061';
+    const q4 = '00000000-0000-4000-8000-000000000062';
+    const q8 = '00000000-0000-4000-8000-000000000063';
+    const q10 = '00000000-0000-4000-8000-000000000064';
+    const baseState = activeGameState({
+      questionIds: [q2, q3, q4, q8, q10],
+      questions: {
+        [q2]: { id: q2, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q2', options: null, passageId: null },
+        [q3]: { id: q3, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q3', options: null, passageId: null },
+        [q4]: { id: q4, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q4', options: null, passageId: null },
+        [q8]: { id: q8, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q8', options: null, passageId: null },
+        [q10]: { id: q10, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q10', options: null, passageId: null },
+      },
+      answerKeys: {
+        [q2]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '2' },
+        [q3]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '3' },
+        [q4]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '4' },
+        [q8]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '8' },
+        [q10]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '10' },
+      },
+      player1Queue: [q3, q4, q8, q10, q2],
+      player2Queue: [q3, q4, q8, q10, q2],
+      player1SeenIds: [q2, q3, q4, q8, q10],
+      player2SeenIds: [q2, q3, q4, q8, q10],
+      player1SkippedIds: [q2, q3, q4, q8, q10],
+    });
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock)
+      .mockResolvedValueOnce(serializeState(baseState))
+      .mockResolvedValueOnce(serializeState({
+        ...baseState,
+        player1Queue: [q8, q10, q2, q3, q4],
+      }));
+    (redis.multi as jest.Mock).mockReturnValueOnce(createMultiFromMock()).mockReturnValueOnce(createMultiFromMock());
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('question:jump')?.({ gameId, questionId: q8 });
+    (socket.emit as jest.Mock).mockClear();
+    await socketHandlers.get('answer:submit')?.({ gameId, questionId: q8, typedAnswer: '8' });
+
+    expect(socket.emit).toHaveBeenCalledWith('game:question', expect.objectContaining({
+      question: expect.objectContaining({ id: q10 }),
+    }));
+  });
+
+  it('continues cycling skipped queue when jumping in cycle mode (current was skipped)', async () => {
+    // Scenario: all questions seen+skipped. Player on q1 (a previously-skipped Q),
+    // cycling. They tap q2 in navigator (also skipped) and answer it.
+    // Expectation: next served is q3 (the natural next in cycle), NOT q1 — because
+    // q1 was an already-skipped Q and the user is in cycle mode.
+    const q2 = '00000000-0000-4000-8000-000000000040';
+    const q3 = '00000000-0000-4000-8000-000000000041';
+    const baseState = activeGameState({
+      questionIds: [questionId, q2, q3],
+      questions: {
+        [questionId]: { id: questionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q1', options: null, passageId: null },
+        [q2]: { id: q2, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q2', options: null, passageId: null },
+        [q3]: { id: q3, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q3', options: null, passageId: null },
+      },
+      answerKeys: {
+        [questionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        [q2]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+        [q3]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '44' },
+      },
+      player1Queue: [questionId, q2, q3],
+      player2Queue: [questionId, q2, q3],
+      player1SeenIds: [questionId, q2, q3],
+      player2SeenIds: [questionId, q2, q3],
+      player1SkippedIds: [questionId, q2, q3],
+    });
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock)
+      .mockResolvedValueOnce(serializeState(baseState))
+      .mockResolvedValueOnce(serializeState({
+        ...baseState,
+        player1Queue: [q2, q3, questionId],
+      }));
+    (redis.multi as jest.Mock).mockReturnValueOnce(createMultiFromMock()).mockReturnValueOnce(createMultiFromMock());
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('question:jump')?.({ gameId, questionId: q2 });
+    (socket.emit as jest.Mock).mockClear();
+    await socketHandlers.get('answer:submit')?.({ gameId, questionId: q2, typedAnswer: '43' });
+
+    expect(socket.emit).toHaveBeenCalledWith('game:question', expect.objectContaining({
+      question: expect.objectContaining({ id: q3 }),
+    }));
+  });
+
+  it('removes the answered question from skippedIds and emits the new list', async () => {
+    const q2 = '00000000-0000-4000-8000-000000000050';
+    const multi = createMultiFromMock();
+    (redis.type as jest.Mock).mockResolvedValue('hash');
+    (redis.hgetall as jest.Mock).mockResolvedValue(serializeState(activeGameState({
+      questionIds: [questionId, q2],
+      questions: {
+        [questionId]: { id: questionId, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q1', options: null, passageId: null },
+        [q2]: { id: q2, category: 'QUANT', questionType: 'TITA', subTopic: null, subType: null, difficulty: 1, text: 'Q2', options: null, passageId: null },
+      },
+      answerKeys: {
+        [questionId]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '42' },
+        [q2]: { questionType: 'TITA', correctAnswer: null, correctAnswerText: '43' },
+      },
+      // Player previously skipped q1 (now cycled back to it via answering q2 first
+      // — but for this test we just place q1 at head with q1 in skippedIds).
+      player1Queue: [questionId, q2],
+      player2Queue: [questionId, q2],
+      player1SeenIds: [questionId, q2],
+      player2SeenIds: [questionId, q2],
+      player1SkippedIds: [questionId],
+    })));
+    (redis.multi as jest.Mock).mockReturnValueOnce(multi);
+    const { socket, socketHandlers } = createHarness();
+
+    await socketHandlers.get('answer:submit')?.({ gameId, questionId, typedAnswer: '42' });
+
+    expect(multi.hset).toHaveBeenCalledWith(`game:${gameId}`, expect.objectContaining({
+      player1SkippedIds: JSON.stringify([]),
+    }));
+    expect(socket.emit).toHaveBeenCalledWith('game:question', expect.objectContaining({
+      question: expect.objectContaining({ id: q2 }),
+      yourSkippedIds: [],
     }));
   });
 
