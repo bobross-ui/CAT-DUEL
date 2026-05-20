@@ -4,15 +4,8 @@ import { redis } from '../config/redis';
 import { logger } from '../lib/logger';
 
 const MAX_CONCURRENT_SOCKETS = 3;
-const SOCKET_CONNECTION_TTL_SECONDS = 20 * 60;
-
-const socketConnectionLimiter = new RateLimiterRedis({
-  storeClient: redis,
-  keyPrefix: 'rate:socket:connections',
-  points: MAX_CONCURRENT_SOCKETS,
-  duration: SOCKET_CONNECTION_TTL_SECONDS,
-  rejectIfRedisNotReady: true,
-});
+// 5-min TTL: self-heals after crashes/restarts without blocking users for 20+ minutes
+const SOCKET_CONNECTION_TTL_SECONDS = 5 * 60;
 
 const socketEventLimiters = {
   'queue:join': new RateLimiterRedis({
@@ -69,17 +62,19 @@ const socketEventLimiters = {
 type SocketLimitedEvent = keyof typeof socketEventLimiters;
 
 export async function registerSocketConnection(userId: string, socket: Socket): Promise<boolean> {
-  try {
-    await socketConnectionLimiter.consume(userId);
-  } catch (err) {
-    if (err instanceof RateLimiterRes) {
-      return false;
-    }
-    throw err;
+  const key = `socket:conn:${userId}`;
+
+  await redis.sadd(key, socket.id);
+  await redis.expire(key, SOCKET_CONNECTION_TTL_SECONDS);
+  const count = await redis.scard(key);
+
+  if (count > MAX_CONCURRENT_SOCKETS) {
+    await redis.srem(key, socket.id);
+    return false;
   }
 
   socket.on('disconnect', () => {
-    void socketConnectionLimiter.reward(userId).catch((err) =>
+    void redis.srem(key, socket.id).catch((err) =>
       logger.error({ err, userId }, 'socketRateLimit: connection cleanup failed'),
     );
   });
